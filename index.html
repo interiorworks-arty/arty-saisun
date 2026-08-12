@@ -31,6 +31,29 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .calc-item{padding:11px 0;border-top:1px solid var(--line)}.calc-item:first-child{border-top:0}.calc-title{display:flex;justify-content:space-between;gap:10px;font-weight:800}.calc-sub{font-size:13px;color:#756e68;margin-top:5px;line-height:1.65}.grand{font-size:26px;font-weight:900;margin-top:8px}
 .menu{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:100;display:none;align-items:flex-end}.menu.show{display:flex}.sheet{background:white;width:100%;border-radius:18px 18px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}
 .choice-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.choice{border:0;border-radius:11px;padding:13px 8px;background:#eeeae7;font-weight:800}.sheet input{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px;margin:10px 0;font-size:16px}.sheet-actions{display:flex;gap:8px}.sheet-actions button{flex:1;border:0;border-radius:11px;padding:12px;font-weight:800}.primary2{background:var(--accent);color:#fff}.cancel{background:#eeeae7}.delete-section{border:0;background:transparent;color:#aaa29c;font-size:18px;padding:0}
+
+.measure-input{caret-color:transparent}
+.keypad{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(74px + env(safe-area-inset-bottom));
+  z-index:90;width:min(420px,calc(100% - 24px));
+  background:rgba(255,255,255,.98);
+  border:1px solid var(--line);border-radius:16px;
+  padding:10px;box-shadow:0 8px 30px rgba(0,0,0,.16);
+  display:none;
+}
+.keypad.show{display:block}
+.keypad-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.keypad button{
+  border:0;border-radius:11px;background:#eeeae6;color:var(--ink);
+  min-height:46px;font-size:20px;font-weight:800;
+}
+.keypad button.key-enter{grid-row:span 2;background:var(--accent);color:#fff}
+.keypad button.key-wide{grid-column:span 2}
+.keypad .key-label{
+  font-size:11px;color:#8b837d;text-align:center;margin:0 0 7px;
+}
+
 </style>
 </head>
 <body>
@@ -48,11 +71,117 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 </div>
 </section>
 </main>
+
+<div id="measureKeypad" class="keypad" aria-hidden="true">
+  <div class="key-label">寸法入力</div>
+  <div class="keypad-grid">
+    <button type="button" data-key="7">7</button>
+    <button type="button" data-key="8">8</button>
+    <button type="button" data-key="9">9</button>
+    <button type="button" data-key="back">⌫</button>
+
+    <button type="button" data-key="4">4</button>
+    <button type="button" data-key="5">5</button>
+    <button type="button" data-key="6">6</button>
+    <button type="button" data-key="-">−</button>
+
+    <button type="button" data-key="1">1</button>
+    <button type="button" data-key="2">2</button>
+    <button type="button" data-key="3">3</button>
+    <button type="button" class="key-enter" data-key="enter">Enter</button>
+
+    <button type="button" class="key-wide" data-key="0">0</button>
+    <button type="button" data-key="*">＊</button>
+  </div>
+</div>
+
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 <div id="sectionSheet" class="menu"><div class="sheet"><h3>区分を追加</h3><div id="sectionChoices" class="choice-grid"></div><input id="customSection" placeholder="その他の区分を入力"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
 <script>
 const KEY="gencho-v02-data",CATS=["天","壁","梁","下り天","AW","腰上","腰下"],$=s=>document.querySelector(s);
 let state=(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{siteName:"",rooms:[]}}catch{return{siteName:"",rooms:[]}}})(),activeRoom=state.rooms[0]?.id||null,calcMode="room";
+let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null;
+
+function showMeasureKeypad(inp,model,sec,list,row){
+  activeMeasureInput=inp;
+  activeMeasureModel=model;
+  activeMeasureSection=sec;
+  activeMeasureList=list;
+  activeMeasureRow=row;
+  const kp=$("#measureKeypad");
+  if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false")}
+}
+function hideMeasureKeypad(){
+  const kp=$("#measureKeypad");
+  if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}
+}
+function syncActiveMeasure(){
+  if(!activeMeasureInput||!activeMeasureModel)return;
+  activeMeasureModel.value=activeMeasureInput.value
+    .replace(/[＊]/g,"*")
+    .replace(/[×xX]/g,"-")
+    .replace(/[^\d.*-]/g,"");
+  activeMeasureInput.value=activeMeasureModel.value;
+  save(); live();
+}
+function moveToNextMeasure(){
+  if(!activeMeasureSection||!activeMeasureModel||!activeMeasureList)return;
+  if(!activeMeasureModel.value.trim())return;
+
+  let currentIndex=activeMeasureSection.measures.findIndex(x=>x.id===activeMeasureModel.id);
+  let next=activeMeasureSection.measures[currentIndex+1];
+
+  if(!next){
+    next=blank();
+    activeMeasureSection.measures.push(next);
+    save();
+    let nextRow=addMeasureRowGlobal(activeMeasureSection,next,currentIndex+1,activeMeasureList);
+    activeMeasureList.appendChild(nextRow);
+  }
+
+  const inputs=activeMeasureList.querySelectorAll(".measure-input");
+  const nextInput=inputs[currentIndex+1];
+  const nextRow=nextInput?.closest(".measure-row");
+  if(nextInput && nextRow){
+    nextInput.focus({preventScroll:true});
+    const nextModel=activeMeasureSection.measures[currentIndex+1];
+    showMeasureKeypad(nextInput,nextModel,activeMeasureSection,activeMeasureList,nextRow);
+  }
+}
+function keypadPress(key){
+  if(!activeMeasureInput||!activeMeasureModel)return;
+  if(key==="enter"){moveToNextMeasure();return}
+  if(key==="back"){
+    if(activeMeasureInput.value.length){
+      activeMeasureInput.value=activeMeasureInput.value.slice(0,-1);
+      syncActiveMeasure();
+    }else if(activeMeasureSection && activeMeasureSection.measures.length>1){
+      let currentIndex=activeMeasureSection.measures.findIndex(x=>x.id===activeMeasureModel.id);
+      let prevIndex=Math.max(0,currentIndex-1);
+      activeMeasureSection.measures=activeMeasureSection.measures.filter(x=>x.id!==activeMeasureModel.id);
+      activeMeasureRow?.remove();
+      save();live();
+      const inputs=activeMeasureList.querySelectorAll(".measure-input");
+      const prevInput=inputs[prevIndex];
+      const prevRow=prevInput?.closest(".measure-row");
+      if(prevInput && prevRow){
+        prevInput.focus({preventScroll:true});
+        showMeasureKeypad(prevInput,activeMeasureSection.measures[prevIndex],activeMeasureSection,activeMeasureList,prevRow);
+      }
+    }
+    return
+  }
+  if(key==="-"){
+    const v=activeMeasureInput.value;
+    if(!v.includes("-") && v.length) activeMeasureInput.value=v+"-";
+  }else if(key==="*"){
+    if(activeMeasureInput.value && !activeMeasureInput.value.endsWith("*")) activeMeasureInput.value+="*";
+  }else{
+    activeMeasureInput.value+=key;
+  }
+  syncActiveMeasure();
+}
+
 const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random(),blank=()=>({id:uid(),value:""}),newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]}),newRoom=name=>({id:uid(),name,sections:[]});
 function save(){state.siteName=$("#siteName").value.trim();localStorage.setItem(KEY,JSON.stringify(state))}
 function room(){return state.rooms.find(r=>r.id===activeRoom)}
@@ -68,6 +197,23 @@ let card=document.createElement("div");card.className="room-card";card.innerHTML
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>$("#sectionSheet").classList.add("show");
 area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+
+function addMeasureRowGlobal(sec,m,i,list){
+  let row=document.createElement("div"),c=calc(m.value,sec.repeat);
+  row.className="measure-row";
+  row.innerHTML=`<input class="measure-input" type="text" inputmode="none" enterkeyhint="next" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  let inp=row.querySelector("input");
+  inp.addEventListener("focus",()=>showMeasureKeypad(inp,m,sec,list,row));
+  inp.addEventListener("click",()=>showMeasureKeypad(inp,m,sec,list,row));
+  inp.oninput=()=>{
+    m.value=inp.value.replace(/[＊]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
+    inp.value=m.value;save();live()
+  };
+  inp.onkeydown=e=>{
+    if(e.key==="Enter"){e.preventDefault();showMeasureKeypad(inp,m,sec,list,row);moveToNextMeasure()}
+  };
+  return row;
+}
 function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category">${esc(sec.name)}</div><input class="placeholder-input product" placeholder="品番" value="${esc(sec.product)}"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><input class="placeholder-input repeat" inputmode="decimal" placeholder="リピート" value="${esc(sec.repeat)}"></div><button class="delete-section">×</button></div><div class="measure-list"></div><div class="section-totals"><span>なし <strong class="sn"></strong></span><span>あり <strong class="sw"></strong></span></div>`;
 let prod=d.querySelector(".product"),rep=d.querySelector(".repeat");prod.oninput=()=>{sec.product=prod.value;save();live()};rep.oninput=()=>{sec.repeat=rep.value.replace(/[^\d.]/g,"");rep.value=sec.repeat;save();live()};
 d.querySelector(".delete-section").onclick=()=>{if(confirm(sec.name+"を削除しますか？")){r.sections=r.sections.filter(x=>x.id!==sec.id);save();render()}};
@@ -75,8 +221,10 @@ let list=d.querySelector(".measure-list");
 function addMeasureRow(m,i){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
-  row.innerHTML=`<input class="measure-input" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  row.innerHTML=`<input class="measure-input" type="text" inputmode="none" enterkeyhint="next" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector("input");
+  inp.addEventListener("focus",()=>showMeasureKeypad(inp,m,sec,list,row));
+  inp.addEventListener("click",()=>showMeasureKeypad(inp,m,sec,list,row));
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;
@@ -129,6 +277,21 @@ $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidd
 $("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
 $("#newSite").onclick=()=>{if(confirm("現在の現場を消して新規作成しますか？")){state={siteName:"",rooms:[]};activeRoom=null;save();render()}};
 if(!state.rooms.length){let r=newRoom("洋室");r.sections=[newSec("天"),newSec("壁")];state.rooms=[r];activeRoom=r.id;save()}
+
+$("#measureKeypad").querySelectorAll("button[data-key]").forEach(btn=>{
+  btn.addEventListener("pointerdown",e=>{
+    e.preventDefault();
+    keypadPress(btn.dataset.key);
+  });
+});
+document.addEventListener("pointerdown",e=>{
+  const kp=$("#measureKeypad");
+  if(!kp)return;
+  if(kp.contains(e.target) || e.target.classList?.contains("measure-input"))return;
+  if(e.target.closest?.(".bottom"))return;
+  hideMeasureKeypad();
+});
+
 render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 </script>
 </body></html>
