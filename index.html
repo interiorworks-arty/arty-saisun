@@ -71,7 +71,52 @@ area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent
 function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category">${esc(sec.name)}</div><input class="placeholder-input product" placeholder="品番" value="${esc(sec.product)}"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><input class="placeholder-input repeat" inputmode="decimal" placeholder="リピート" value="${esc(sec.repeat)}"></div><button class="delete-section">×</button></div><div class="measure-list"></div><div class="section-totals"><span>なし <strong class="sn"></strong></span><span>あり <strong class="sw"></strong></span></div>`;
 let prod=d.querySelector(".product"),rep=d.querySelector(".repeat");prod.oninput=()=>{sec.product=prod.value;save();live()};rep.oninput=()=>{sec.repeat=rep.value.replace(/[^\d.]/g,"");rep.value=sec.repeat;save();live()};
 d.querySelector(".delete-section").onclick=()=>{if(confirm(sec.name+"を削除しますか？")){r.sections=r.sections.filter(x=>x.id!==sec.id);save();render()}};
-let list=d.querySelector(".measure-list");sec.measures.forEach((m,i)=>{let row=document.createElement("div"),c=calc(m.value,sec.repeat);row.className="measure-row";row.innerHTML=`<input class="measure-input" type="text" inputmode="text" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;let inp=row.querySelector("input");inp.oninput=()=>{m.value=inp.value.replace(/[＊]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");inp.value=m.value;save();live()};inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();if(!m.value.trim())return;ensure(sec);save();render();setTimeout(()=>{let sections=document.querySelectorAll(".section"),si=r.sections.findIndex(x=>x.id===sec.id),inputs=sections[si]?.querySelectorAll(".measure-input");inputs?.[Math.min(i+1,inputs.length-1)]?.focus()},0)}else if(e.key==="Backspace"&&!m.value&&sec.measures.length>1){e.preventDefault();sec.measures=sec.measures.filter(x=>x.id!==m.id);ensure(sec);save();render()}};list.appendChild(row)});
+let list=d.querySelector(".measure-list");
+function addMeasureRow(m,i){
+  let row=document.createElement("div"),c=calc(m.value,sec.repeat);
+  row.className="measure-row";
+  row.innerHTML=`<input class="measure-input" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  let inp=row.querySelector("input");
+  inp.oninput=()=>{
+    m.value=inp.value.replace(/[＊]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
+    inp.value=m.value;
+    save();
+    live()
+  };
+  inp.onkeydown=e=>{
+    if(e.key==="Enter"){
+      e.preventDefault();
+      if(!m.value.trim())return;
+
+      let currentIndex=sec.measures.findIndex(x=>x.id===m.id);
+      let next=sec.measures[currentIndex+1];
+
+      if(!next){
+        next=blank();
+        sec.measures.push(next);
+        save();
+        let nextRow=addMeasureRow(next,currentIndex+1);
+        list.appendChild(nextRow);
+        requestAnimationFrame(()=>nextRow.querySelector(".measure-input").focus({preventScroll:true}));
+      }else{
+        let inputs=list.querySelectorAll(".measure-input");
+        inputs[currentIndex+1]?.focus({preventScroll:true});
+      }
+    }else if(e.key==="Backspace"&&!m.value&&sec.measures.length>1){
+      e.preventDefault();
+      let currentIndex=sec.measures.findIndex(x=>x.id===m.id);
+      let prevIndex=Math.max(0,currentIndex-1);
+      sec.measures=sec.measures.filter(x=>x.id!==m.id);
+      row.remove();
+      save();
+      live();
+      let inputs=list.querySelectorAll(".measure-input");
+      inputs[prevIndex]?.focus({preventScroll:true});
+    }
+  };
+  return row;
+}
+sec.measures.forEach((m,i)=>list.appendChild(addMeasureRow(m,i)));
 let t=secTotals(sec);d.querySelector(".sn").textContent=fmt(t.none);d.querySelector(".sw").textContent=fmt(t.withR);return d}
 function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,s.repeat);row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 function buildCalc(){let html="";if(calcMode==="room"){state.rooms.forEach(r=>{let rt=roomTotals(r);html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;r.sections.forEach(s=>{let t=secTotals(s);if(!t.none&&!t.withR)return;html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${s.product?"　"+esc(s.product):""}${s.repeat?"　↕︎"+esc(s.repeat):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;let ds=s.measures.map(m=>{let c=calc(m.value,s.repeat);if(!c)return"";let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`}).filter(Boolean);if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;html+="</div>"});html+="</div>"})}else{let g={};state.rooms.forEach(r=>r.sections.forEach(s=>{let k=s.product.trim()||"品番未入力",t=secTotals(s);if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`)}));Object.entries(g).forEach(([p,x])=>html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`)}
