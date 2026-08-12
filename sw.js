@@ -1,1 +1,44 @@
-const C='gencho-v02-20260812c';const A=['./','./index.html','./manifest.webmanifest','./icon.svg'];self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(A))).then(()=>self.skipWaiting()));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));
+const CACHE="gencho-v02-20260812e";
+const ASSETS=["./manifest.webmanifest","./icon.svg"];
+
+self.addEventListener("install",event=>{
+  event.waitUntil(
+    caches.open(CACHE).then(cache=>cache.addAll(ASSETS))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener("activate",event=>{
+  event.waitUntil(
+    caches.keys().then(keys=>Promise.all(
+      keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))
+    )).then(()=>self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch",event=>{
+  const req=event.request;
+
+  // HTML/navigation: always try newest network version first.
+  if(req.mode==="navigate"){
+    event.respondWith(
+      fetch(req,{cache:"no-store"})
+        .then(res=>{
+          const copy=res.clone();
+          caches.open(CACHE).then(cache=>cache.put("./index.html",copy));
+          return res;
+        })
+        .catch(()=>caches.match("./index.html").then(r=>r||caches.match("./")))
+    );
+    return;
+  }
+
+  // Other static assets: cache-first, network fallback.
+  event.respondWith(
+    caches.match(req).then(cached=>cached||fetch(req).then(res=>{
+      const copy=res.clone();
+      caches.open(CACHE).then(cache=>cache.put(req,copy));
+      return res;
+    }))
+  );
+});
