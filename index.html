@@ -21,7 +21,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .section{padding:14px 0;border-top:1px solid var(--line)}.section:first-of-type{border-top:0}
 .section-head{display:grid;grid-template-columns:48px 1.35fr 1fr 24px;gap:7px;align-items:center}.category{font-weight:800;font-size:17px}
 .placeholder-input{width:100%;font-size:14px;padding:7px 0}.placeholder-input::placeholder{color:#b2aaa4}.repeat-wrap{display:flex;align-items:center;gap:2px}.repeat-prefix{color:#938b84}
-.measure-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;min-height:36px}.measure-input{width:100%;font-size:20px;font-weight:650;padding:5px 1px}.measure-input::placeholder{color:#c4bdb7;font-weight:400}
+.measure-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;min-height:36px}.measure-input{width:100%;font-size:20px;font-weight:650;padding:5px 1px;border:0;background:transparent;text-align:left;color:var(--ink);min-height:34px}.measure-input.empty{color:#c4bdb7;font-weight:400}
 .line-result{font-size:12px;color:#8b837d;white-space:nowrap}.section-totals{display:flex;gap:16px;margin-top:8px;font-size:12px;color:#766f69}.section-totals strong{font-size:14px;color:var(--ink)}
 .add-section{width:100%;border:0;background:#efebe8;color:#514a45;border-radius:12px;padding:12px;font-weight:700;margin-top:8px}
 .totals{background:#efebe8;border-radius:14px;padding:13px;margin-top:15px;display:grid;grid-template-columns:1fr 1fr;gap:10px}.total-box span{display:block;font-size:11px;color:#766f69}.total-box strong{display:block;font-size:22px;margin-top:2px}
@@ -32,7 +32,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .menu{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:100;display:none;align-items:flex-end}.menu.show{display:flex}.sheet{background:white;width:100%;border-radius:18px 18px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}
 .choice-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.choice{border:0;border-radius:11px;padding:13px 8px;background:#eeeae7;font-weight:800}.sheet input{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px;margin:10px 0;font-size:16px}.sheet-actions{display:flex;gap:8px}.sheet-actions button{flex:1;border:0;border-radius:11px;padding:12px;font-weight:800}.primary2{background:var(--accent);color:#fff}.cancel{background:#eeeae7}.delete-section{border:0;background:transparent;color:#aaa29c;font-size:18px;padding:0}
 
-.measure-input{caret-color:transparent}
+
 .keypad{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(74px + env(safe-area-inset-bottom));
@@ -56,7 +56,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.2e">
+<body data-build="v0.2f">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><button id="newSite" class="small-btn">新規</button></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -122,6 +122,8 @@ function syncActiveMeasure(){
     .replace(/[×xX]/g,"-")
     .replace(/[^\d.*-]/g,"");
   activeMeasureInput.value=activeMeasureModel.value;
+  activeMeasureInput.textContent=activeMeasureModel.value || activeMeasureInput.dataset.placeholder || "";
+  activeMeasureInput.classList.toggle("empty",!activeMeasureModel.value);
   save(); live();
 }
 function moveToNextMeasure(){
@@ -200,8 +202,9 @@ area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent
 function addMeasureRowGlobal(sec,m,i,list){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
-  row.innerHTML=`<input class="measure-input" type="text" readonly inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
-  let inp=row.querySelector("input");
+  const ph=i===0?"238-8":"";
+  row.innerHTML=`<button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}">${esc(m.value||ph)}</button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  let inp=row.querySelector(".measure-input");
   inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
   inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
   inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
@@ -221,8 +224,9 @@ let list=d.querySelector(".measure-list");
 function addMeasureRow(m,i){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
-  row.innerHTML=`<input class="measure-input" type="text" readonly inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
-  let inp=row.querySelector("input");
+  const ph=i===0?"238-8":"";
+  row.innerHTML=`<button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}">${esc(m.value||ph)}</button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  let inp=row.querySelector(".measure-input");
   inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
   inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
   inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
