@@ -143,7 +143,6 @@ function moveToNextMeasure(){
   const nextInput=inputs[currentIndex+1];
   const nextRow=nextInput?.closest(".measure-row");
   if(nextInput && nextRow){
-    nextInput.focus({preventScroll:true});
     const nextModel=activeMeasureSection.measures[currentIndex+1];
     showMeasureKeypad(nextInput,nextModel,activeMeasureSection,activeMeasureList,nextRow);
   }
@@ -201,10 +200,11 @@ area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent
 function addMeasureRowGlobal(sec,m,i,list){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
-  row.innerHTML=`<input class="measure-input" type="text" inputmode="none" enterkeyhint="next" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  row.innerHTML=`<input class="measure-input" type="text" readonly inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector("input");
-  inp.addEventListener("focus",()=>showMeasureKeypad(inp,m,sec,list,row));
-  inp.addEventListener("click",()=>showMeasureKeypad(inp,m,sec,list,row));
+  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
+  inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
+  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;save();live()
@@ -221,10 +221,11 @@ let list=d.querySelector(".measure-list");
 function addMeasureRow(m,i){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
-  row.innerHTML=`<input class="measure-input" type="text" inputmode="none" enterkeyhint="next" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  row.innerHTML=`<input class="measure-input" type="text" readonly inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${i===0?"238-8":""}" value="${esc(m.value)}"><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector("input");
-  inp.addEventListener("focus",()=>showMeasureKeypad(inp,m,sec,list,row));
-  inp.addEventListener("click",()=>showMeasureKeypad(inp,m,sec,list,row));
+  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
+  inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
+  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;
@@ -245,7 +246,7 @@ function addMeasureRow(m,i){
         save();
         let nextRow=addMeasureRow(next,currentIndex+1);
         list.appendChild(nextRow);
-        requestAnimationFrame(()=>nextRow.querySelector(".measure-input").focus({preventScroll:true}));
+        requestAnimationFrame(()=>{const ni=nextRow.querySelector(".measure-input");showMeasureKeypad(ni,next,sec,list,nextRow)});
       }else{
         let inputs=list.querySelectorAll(".measure-input");
         inputs[currentIndex+1]?.focus({preventScroll:true});
