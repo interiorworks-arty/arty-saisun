@@ -1,1 +1,16 @@
-{"name":"ARTY 採寸","short_name":"採寸","start_url":"./","display":"standalone","background_color":"#f4f1ed","theme_color":"#8f8176","icons":[{"src":"icon-192.svg","sizes":"192x192","type":"image/svg+xml"},{"src":"icon-512.svg","sizes":"512x512","type":"image/svg+xml"}]}
+{
+  "name": "現調",
+  "short_name": "現調",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f3f0",
+  "theme_color": "#f5f3f0",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
