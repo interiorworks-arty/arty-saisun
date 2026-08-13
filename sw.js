@@ -1,4 +1,4 @@
-const CACHE="gencho-v03-20260813a";
+const CACHE="gencho-v03-20260813b";
 const ASSETS=["./manifest.webmanifest","./icon.svg"];
 
 self.addEventListener("install",event=>{
