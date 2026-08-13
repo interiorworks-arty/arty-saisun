@@ -64,7 +64,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.3">
+<body data-build="v0.3.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><button id="newSite" class="small-btn">新規</button></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -120,9 +120,15 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 <div id="sectionSheet" class="menu"><div class="sheet"><h3>区分を追加</h3><div id="sectionChoices" class="choice-grid"></div><input id="customSection" placeholder="その他の区分を入力"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
 <script>
-const KEY="gencho-v02-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下"],$=s=>document.querySelector(s);
+const KEY="gencho-v03-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下"],$=s=>document.querySelector(s);
 let state=(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{siteName:"",rooms:[]}}catch{return{siteName:"",rooms:[]}}})(),activeRoom=state.rooms[0]?.id||null,calcMode="room";
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,keypadMode="measure";
+
+const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random();
+const blank=()=>({id:uid(),value:""});
+const newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]});
+const newRoom=name=>({id:uid(),name,sections:[]});
+
 
 function showMeasureKeypad(inp,model,sec,list,row){
   keypadMode="measure";
