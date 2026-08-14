@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.4.5">
+<body data-build="v0.4.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -687,6 +687,47 @@ function sectionMetaText(sec){
   if(sec.measures.some(m=>String(m.value||"").includes("*")))bits.push("1柄伸ばしあり");
   return bits.join("　");
 }
+function drawRepeatIcon(ctx,x,y,size=16,color="#665f59"){
+  const midX=x+size/2;
+  const topY=y;
+  const bottomY=y+size;
+  const head=4;
+  ctx.save();
+  ctx.strokeStyle=color;
+  ctx.fillStyle=color;
+  ctx.lineWidth=2;
+  ctx.lineCap='round';
+  ctx.lineJoin='round';
+  ctx.beginPath();
+  ctx.moveTo(midX,topY+2);
+  ctx.lineTo(midX,bottomY-2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(midX,topY);
+  ctx.lineTo(midX-head,topY+head);
+  ctx.lineTo(midX+head,topY+head);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(midX,bottomY);
+  ctx.lineTo(midX-head,bottomY-head);
+  ctx.lineTo(midX+head,bottomY-head);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+function drawRepeatSubtotalLine(ctx,labelX,valueX,baseline,label,value){
+  const color='#665f59';
+  drawRepeatIcon(ctx,labelX,baseline-14,14,color);
+  ctx.save();
+  ctx.fillStyle=color;
+  ctx.font='700 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.textBaseline='alphabetic';
+  ctx.fillText(label,labelX+20,baseline);
+  const valueW=ctx.measureText(value).width;
+  ctx.fillText(value,valueX-valueW,baseline);
+  ctx.restore();
+}
 function buildRoomImageCanvas(r,siteObj=state){
   const siteName=(siteObj?.siteName||"現場名未入力").trim()||"現場名未入力";
   const usefulSections=r.sections.filter(sec=>sec.measures.some(m=>String(m.value||"").trim()));
@@ -701,7 +742,7 @@ function buildRoomImageCanvas(r,siteObj=state){
     const measureCount=sec.measures.filter(m=>String(m.value||"").trim()).length;
     height += 40; // header line
     height += measureCount*measureH;
-    height += 64; // subtotal stacked lines
+    height += 70; // subtotal stacked lines
     height += sectionGap;
   });
   height += 140;
@@ -751,15 +792,12 @@ function buildRoomImageCanvas(r,siteObj=state){
     ctx.fillStyle='#272522'; ctx.font='800 38px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     measures.forEach(m=>{ctx.fillText(displayMeasureText(m.value),cardX+cardPad+10,y); y+=measureH;});
 
-    ctx.fillStyle='#665f59'; ctx.font='700 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    const topLabel=`↕️なし ${fmt(subtotal.none)}`;
-    const bottomLabel=`↕️あり ${fmt(subtotal.withR)}`;
     const rightX=cardX+cardW-cardPad;
-    const topW=ctx.measureText(topLabel).width;
-    const bottomW=ctx.measureText(bottomLabel).width;
-    ctx.fillText(topLabel,rightX-topW,y-10);
-    ctx.fillText(bottomLabel,rightX-bottomW,y+18);
-    y+=54;
+    const labelX=rightX-168;
+    const valueX=rightX;
+    drawRepeatSubtotalLine(ctx,labelX,valueX,y-12,'なし',fmt(subtotal.none));
+    drawRepeatSubtotalLine(ctx,labelX,valueX,y+20,'あり',fmt(subtotal.withR));
+    y+=58;
 
     ctx.strokeStyle='#eee6e1'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cardX+cardPad,y); ctx.lineTo(cardX+cardW-cardPad,y); ctx.stroke();
     y+=sectionGap;
