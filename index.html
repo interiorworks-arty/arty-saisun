@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.4.3">
+<body data-build="v0.4.4">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -701,7 +701,7 @@ function buildRoomImageCanvas(r,siteObj=state){
     const measureCount=sec.measures.filter(m=>String(m.value||"").trim()).length;
     height += 40; // header line
     height += measureCount*measureH;
-    height += 44; // subtotal line
+    height += 64; // subtotal stacked lines
     height += sectionGap;
   });
   height += 140;
@@ -752,12 +752,14 @@ function buildRoomImageCanvas(r,siteObj=state){
     measures.forEach(m=>{ctx.fillText(displayMeasureText(m.value),cardX+cardPad+10,y); y+=measureH;});
 
     ctx.fillStyle='#665f59'; ctx.font='700 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    const leftLabel=`小計 なし ${fmt(subtotal.none)}`;
-    const rightLabel=`あり ${fmt(subtotal.withR)}`;
-    ctx.fillText(leftLabel,cardX+cardPad+10,y);
-    const rightW=ctx.measureText(rightLabel).width;
-    ctx.fillText(rightLabel,cardX+cardW-cardPad-rightW,y);
-    y+=42;
+    const topLabel=`小計 なし ${fmt(subtotal.none)}`;
+    const bottomLabel=`あり ${fmt(subtotal.withR)}`;
+    const rightX=cardX+cardW-cardPad;
+    const topW=ctx.measureText(topLabel).width;
+    const bottomW=ctx.measureText(bottomLabel).width;
+    ctx.fillText(topLabel,rightX-topW,y-10);
+    ctx.fillText(bottomLabel,rightX-bottomW,y+18);
+    y+=54;
 
     ctx.strokeStyle='#eee6e1'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cardX+cardPad,y); ctx.lineTo(cardX+cardW-cardPad,y); ctx.stroke();
     y+=sectionGap;
