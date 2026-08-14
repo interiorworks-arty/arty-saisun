@@ -33,7 +33,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .calc-view{display:none}.calc-view.active{display:block}.edit-view.hidden{display:none}.calc-tabs{display:flex;gap:8px;margin-bottom:12px}.calc-tabs button{flex:1;border:0;border-radius:10px;padding:10px;background:#ece8e5;font-weight:800}.calc-tabs button.active{background:var(--accent);color:white}
 .calc-item{padding:11px 0;border-top:1px solid var(--line)}.calc-item:first-child{border-top:0}.calc-title{display:flex;justify-content:space-between;gap:10px;font-weight:800}.calc-sub{font-size:13px;color:#756e68;margin-top:5px;line-height:1.65}.grand{font-size:26px;font-weight:900;margin-top:8px}
 .menu{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:100;display:none;align-items:flex-end}.menu.show{display:flex}.sheet{background:white;width:100%;border-radius:18px 18px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}
-.choice-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.choice{border:0;border-radius:11px;padding:13px 8px;background:#eeeae7;font-weight:800}.sheet input{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px;margin:10px 0;font-size:16px}.sheet-actions{display:flex;gap:8px}.sheet-actions button{flex:1;border:0;border-radius:11px;padding:12px;font-weight:800}.primary2{background:var(--accent);color:#fff}.cancel{background:#eeeae7}.delete-section{border:0;background:transparent;color:#aaa29c;font-size:18px;padding:0}
+.choice-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.room-choice-grid{grid-template-columns:repeat(4,1fr)}.choice{border:0;border-radius:11px;padding:13px 8px;background:#eeeae7;font-weight:800}.sheet input{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px;margin:10px 0;font-size:16px}.sheet-actions{display:flex;gap:8px}.sheet-actions button{flex:1;border:0;border-radius:11px;padding:12px;font-weight:800}.primary2{background:var(--accent);color:#fff}.cancel{background:#eeeae7}.delete-section{border:0;background:transparent;color:#aaa29c;font-size:18px;padding:0}
 
 
 .keypad{
@@ -157,7 +157,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 <div id="roomSheet" class="menu">
  <div class="sheet">
    <h3>部屋を追加</h3>
-   <div id="roomChoices" class="choice-grid"></div>
+   <div id="roomChoices" class="choice-grid room-choice-grid"></div>
    <input id="customRoom" placeholder="その他の部屋名を入力">
    <div class="sheet-actions">
      <button id="closeRoom" class="cancel">キャンセル</button>
@@ -168,7 +168,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 <div id="sectionSheet" class="menu"><div class="sheet"><h3>区分を追加</h3><div id="sectionChoices" class="choice-grid"></div><input id="customSection" placeholder="その他の区分を入力"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
 <script>
-const KEY="gencho-v03-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下"],$=s=>document.querySelector(s);
+const KEY="gencho-v03-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
 let state=(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{siteName:"",rooms:[]}}catch{return{siteName:"",rooms:[]}}})(),activeRoom=state.rooms[0]?.id||null,calcMode="room";
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,keypadMode="measure";
 
