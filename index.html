@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f5f3f0">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>現調</title>
 <style>
 :root{--bg:#f5f3f0;--paper:#fff;--ink:#272522;--muted:#aaa39d;--line:#ddd7d2;--accent:#665f59;--soft:#eeeae6}
@@ -125,14 +128,14 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     <button type="button" data-key="4">4</button>
     <button type="button" data-key="5">5</button>
     <button type="button" data-key="6">6</button>
-    <button type="button" data-key="*">※</button>
+    <button type="button" style="visibility:hidden"> </button>
 
     <button type="button" data-key="7">7</button>
     <button type="button" data-key="8">8</button>
     <button type="button" data-key="9">9</button>
     <button type="button" class="key-enter" data-key="enter">次へ</button>
 
-    <button type="button" style="visibility:hidden"> </button>
+    <button type="button" data-key="*">※</button>
     <button type="button" data-key="0">0</button>
     <button type="button" data-key="-">−</button>
   </div>

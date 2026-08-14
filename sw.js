@@ -1,5 +1,5 @@
-const CACHE="gencho-v03-20260814-productkbd";
-const ASSETS=["./manifest.webmanifest","./icon.svg"];
+const CACHE="gencho-v03-20260814-keypad-star-move";
+const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
   event.waitUntil(
