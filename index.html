@@ -39,20 +39,44 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   z-index:90;width:min(420px,calc(100% - 24px));
   background:rgba(255,255,255,.98);
   border:1px solid var(--line);border-radius:16px;
-  padding:10px;box-shadow:0 8px 30px rgba(0,0,0,.16);
+  padding:8px 10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.16);
   display:none;
+  touch-action:none;
+  --key-h:46px;
+  --key-font:20px;
 }
 .keypad.show{display:block}
+.keypad-head{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  height:30px;margin:-2px 0 6px;cursor:grab;touch-action:none;user-select:none;
+}
+.keypad-head:active{cursor:grabbing}
+.keypad-grip{
+  position:absolute;left:50%;top:2px;transform:translateX(-50%);
+  width:52px;height:5px;border-radius:999px;background:#c7c0ba;
+}
+.keypad .key-label{
+  font-size:11px;color:#8b837d;text-align:center;margin-top:11px;pointer-events:none;
+}
 .keypad-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
 .keypad button{
   border:0;border-radius:11px;background:#eeeae6;color:var(--ink);
-  min-height:46px;font-size:20px;font-weight:800;
+  min-height:var(--key-h);font-size:var(--key-font);font-weight:800;
+  touch-action:manipulation;
 }
 .keypad button.key-enter{grid-row:span 2;background:var(--accent);color:#fff}
 .keypad button.key-wide{grid-column:span 2}
-.keypad .key-label{
-  font-size:11px;color:#8b837d;text-align:center;margin:0 0 7px;
+.keypad-resize{
+  position:absolute;right:2px;bottom:2px;width:28px;height:28px;
+  touch-action:none;cursor:nwse-resize;
 }
+.keypad-resize:before,.keypad-resize:after{
+  content:"";position:absolute;right:6px;bottom:6px;border-radius:2px;
+  border-right:2px solid #aaa19a;border-bottom:2px solid #aaa19a;
+}
+.keypad-resize:before{width:13px;height:13px}
+.keypad-resize:after{width:7px;height:7px;right:10px;bottom:10px}
+
 
 
 .measure-row.active-row{background:#f0ece8;border-radius:10px;padding:2px 6px;margin-left:-6px;margin-right:-6px}
@@ -64,8 +88,8 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.3.3">
-<header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="exportSitePdf" class="small-btn img">現場PDF</button><button id="newSite" class="small-btn">新規</button></div></div></header>
+<body data-build="v0.3.2a">
+<header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><button id="newSite" class="small-btn">新規</button></div></header>
 <main>
 <section id="editView" class="edit-view">
 <div class="site"><input id="siteName" placeholder="現場名"></div>
@@ -82,7 +106,10 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 
 <div id="measureKeypad" class="keypad" aria-hidden="true">
-  <div class="key-label" id="keypadLabel">寸法入力</div>
+  <div class="keypad-head" id="keypadDragHandle" aria-label="テンキーを移動">
+    <div class="keypad-grip"></div>
+    <div class="key-label" id="keypadLabel">寸法入力</div>
+  </div>
   <div class="keypad-grid">
     <button type="button" data-key="1">1</button>
     <button type="button" data-key="2">2</button>
@@ -103,6 +130,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     <button type="button" data-key="0">0</button>
     <button type="button" data-key="-">−</button>
   </div>
+  <div class="keypad-resize" id="keypadResizeHandle" aria-label="テンキーのサイズ変更"></div>
 </div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 
@@ -124,6 +152,52 @@ const KEY="gencho-v03-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ
 let state=(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{siteName:"",rooms:[]}}catch{return{siteName:"",rooms:[]}}})(),activeRoom=state.rooms[0]?.id||null,calcMode="room";
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,keypadMode="measure";
 
+const KEYPAD_PREF_KEY="gencho-keypad-layout-v1";
+let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
+
+function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
+function applyKeypadLayout(){
+  const kp=$("#measureKeypad"); if(!kp)return;
+  if(keypadLayout){
+    const maxW=Math.max(270,window.innerWidth-16);
+    const w=clamp(+keypadLayout.width||420,270,Math.min(540,maxW));
+    kp.style.width=w+"px";
+    kp.style.transform="none";
+    kp.style.bottom="auto";
+    const keyH=clamp(Math.round(46*(w/420)),40,60);
+    const keyFont=clamp(Math.round(20*(w/420)),17,25);
+    kp.style.setProperty("--key-h",keyH+"px");
+    kp.style.setProperty("--key-font",keyFont+"px");
+    requestAnimationFrame(()=>{
+      const rect=kp.getBoundingClientRect();
+      const left=clamp(+keypadLayout.left||8,8,Math.max(8,window.innerWidth-rect.width-8));
+      const top=clamp(+keypadLayout.top||80,8,Math.max(8,window.innerHeight-rect.height-8));
+      kp.style.left=left+"px";kp.style.top=top+"px";
+    });
+  }
+}
+function saveKeypadLayout(){
+  const kp=$("#measureKeypad"); if(!kp)return;
+  const rect=kp.getBoundingClientRect();
+  keypadLayout={left:rect.left,top:rect.top,width:rect.width};
+  localStorage.setItem(KEYPAD_PREF_KEY,JSON.stringify(keypadLayout));
+}
+function setKeypadFreePosition(){
+  const kp=$("#measureKeypad"); if(!kp)return null;
+  const rect=kp.getBoundingClientRect();
+  kp.style.transform="none";kp.style.bottom="auto";
+  kp.style.left=rect.left+"px";kp.style.top=rect.top+"px";
+  return rect;
+}
+function keepKeypadOnScreen(){
+  const kp=$("#measureKeypad"); if(!kp||!kp.classList.contains("show"))return;
+  const rect=kp.getBoundingClientRect();
+  kp.style.transform="none";kp.style.bottom="auto";
+  kp.style.left=clamp(rect.left,8,Math.max(8,window.innerWidth-rect.width-8))+"px";
+  kp.style.top=clamp(rect.top,8,Math.max(8,window.innerHeight-rect.height-8))+"px";
+}
+
+
 const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random();
 const blank=()=>({id:uid(),value:""});
 const newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]});
@@ -141,14 +215,14 @@ function showMeasureKeypad(inp,model,sec,list,row){
   activeMeasureList=list;
   activeMeasureRow=row; row?.classList.add("active-row"); inp?.classList.add("active-input");
   $("#keypadLabel").textContent="寸法入力"; const kp=$("#measureKeypad");
-  if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false")}
+  if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
 function showRepeatKeypad(btn,sec){
   keypadMode="repeat";
   activeRepeatButton=btn;activeRepeatSection=sec;
   $("#keypadLabel").textContent="リピート入力";
   const kp=$("#measureKeypad");
-  if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false")}
+  if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
 function hideMeasureKeypad(){
   const kp=$("#measureKeypad");
@@ -232,10 +306,9 @@ function secTotals(sec){let none=0,withR=0;sec.measures.forEach(m=>{let c=calc(m
 function roomTotals(r){let none=0,withR=0;r.sections.forEach(s=>{let t=secTotals(s);none+=t.none;withR+=t.withR});return{none,withR}}
 function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=>{let b=document.createElement("button");b.className="tab"+(r.id===activeRoom?" active":"");b.textContent=r.name;b.onclick=()=>{activeRoom=r.id;render()};w.appendChild(b)});let a=document.createElement("button");a.className="add-tab";a.textContent="+";a.onclick=()=>$("#roomSheet").classList.add("show");w.appendChild(a)}
 function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';return}
-let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img" data-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
+let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn" data-r>部屋名編集</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
 card.querySelector("[data-save]").onclick=()=>saveCurrentRoomImage();
-card.querySelector("[data-pdf]").onclick=()=>exportCurrentRoomPdf();
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>$("#sectionSheet").classList.add("show");
 area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 
@@ -440,82 +513,6 @@ async function saveCurrentRoomImage(){
     alert('画像保存に失敗しました');
   }
 }
-
-function exportHtmlEscape(s){
-  return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))
-}
-function roomExportSectionHtml(sec){
-  const subtotal=secTotals(sec);
-  const measures=sec.measures.filter(m=>String(m.value||'').trim());
-  const meta=sectionMetaText(sec);
-  return `
-    <section class="pdf-section">
-      <div class="pdf-sec-head">
-        <div class="pdf-sec-name">${exportHtmlEscape(sec.name)}</div>
-        <div class="pdf-sec-subtotal">小計 ${fmt(subtotal.withR)}</div>
-      </div>
-      ${meta?`<div class="pdf-sec-meta">${exportHtmlEscape(meta)}</div>`:''}
-      <div class="pdf-measures">${measures.map(m=>`<div class="pdf-measure">${exportHtmlEscape(displayMeasureText(m.value))}</div>`).join('')}</div>
-    </section>`;
-}
-function buildRoomExportHtml(r){
-  const usefulSections=r.sections.filter(sec=>sec.measures.some(m=>String(m.value||'').trim()));
-  const total=roomTotals(r);
-  const siteName=(state.siteName||'現場名未入力').trim()||'現場名未入力';
-  return `
-  <article class="pdf-page">
-    <div class="pdf-site">${exportHtmlEscape(siteName)}</div>
-    <div class="pdf-room">${exportHtmlEscape(r.name)}</div>
-    ${usefulSections.map(roomExportSectionHtml).join('')}
-    <div class="pdf-total">
-      <div class="pdf-total-title">部屋合計</div>
-      <div class="pdf-total-row"><span>リピートなし ${fmt(total.none)}</span><span>リピートあり ${fmt(total.withR)}</span></div>
-    </div>
-  </article>`;
-}
-function buildExportDocumentHtml(pages,title){
-  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${exportHtmlEscape(title)}</title><style>
-    @page{size:A4;margin:12mm}
-    *{box-sizing:border-box}
-    body{margin:0;background:#f5f3f0;color:#272522;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
-    .wrap{padding:18px}
-    .pdf-page{background:#fff;border:1px solid #ddd7d2;border-radius:18px;padding:22px 24px;margin:0 auto 16px;max-width:780px;break-after:page;page-break-after:always}
-    .pdf-page:last-child{break-after:auto;page-break-after:auto}
-    .pdf-site{font-size:13px;color:#8f8882;margin-bottom:8px;word-break:break-word}
-    .pdf-room{font-size:26px;font-weight:800;border-bottom:2px solid #ddd7d2;padding-bottom:10px;margin-bottom:16px}
-    .pdf-section{padding:10px 0 14px;border-bottom:1px solid #eee6e1}
-    .pdf-section:last-of-type{border-bottom:0}
-    .pdf-sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:2px}
-    .pdf-sec-name{font-size:20px;font-weight:800}
-    .pdf-sec-subtotal{font-size:15px;font-weight:700;color:#665f59;white-space:nowrap}
-    .pdf-sec-meta{font-size:13px;color:#7b736d;margin-bottom:6px;word-break:break-word}
-    .pdf-measure{font-size:18px;line-height:1.7;padding-left:8px}
-    .pdf-total{margin-top:18px;background:#efebe8;border-radius:14px;padding:14px 16px}
-    .pdf-total-title{font-size:13px;color:#766f69;margin-bottom:6px}
-    .pdf-total-row{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:16px;font-weight:800}
-    @media print{body{background:#fff}.wrap{padding:0}.pdf-page{margin:0 auto;border:0;border-radius:0;max-width:none;box-shadow:none}}
-  </style></head><body><div class="wrap">${pages}</div><script>window.onload=()=>setTimeout(()=>window.print(),150);<\/script></body></html>`;
-}
-function openPrintDocument(docHtml,title){
-  const w=window.open('', '_blank');
-  if(!w){ alert('ポップアップを許可してください'); return; }
-  w.document.open();
-  w.document.write(docHtml);
-  w.document.close();
-}
-function exportCurrentRoomPdf(){
-  const r=room();
-  if(!r){alert('PDF出力する部屋がありません');return}
-  if(!r.sections.some(sec=>sec.measures.some(m=>String(m.value||'').trim()))){alert('PDF出力する採寸データがありません');return}
-  const title=`${state.siteName||'現調'}_${r.name}`;
-  openPrintDocument(buildExportDocumentHtml(buildRoomExportHtml(r),title),title);
-}
-function exportSitePdf(){
-  const rooms=state.rooms.filter(r=>r.sections.some(sec=>sec.measures.some(m=>String(m.value||'').trim())));
-  if(!rooms.length){alert('PDF出力する現場データがありません');return}
-  const title=`${state.siteName||'現調'}_現調`;
-  openPrintDocument(buildExportDocumentHtml(rooms.map(buildRoomExportHtml).join(''),title),title);
-}
 function render(){ $("#siteName").value=state.siteName||"";renderTabs();renderRoom();buildCalc()}
 
 ROOM_NAMES.forEach(name=>{
@@ -541,7 +538,6 @@ $("#siteName").oninput=save;$("#editBtn").onclick=()=>{$("#calcView").classList.
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
 $("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
 $("#newSite").onclick=()=>{if(confirm("現在の現場を消して新規作成しますか？")){state={siteName:"",rooms:[]};activeRoom=null;save();render()}};
-$("#exportSitePdf").onclick=()=>exportSitePdf();
 
 
 $("#measureKeypad").querySelectorAll("button[data-key]").forEach(btn=>{
@@ -557,6 +553,56 @@ document.addEventListener("pointerdown",e=>{
   if(e.target.closest?.(".bottom"))return;
   hideMeasureKeypad();
 });
+
+
+(()=>{
+  const kp=$("#measureKeypad"),drag=$("#keypadDragHandle"),resize=$("#keypadResizeHandle");
+  if(!kp||!drag||!resize)return;
+
+  drag.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse"&&e.button!==0)return;
+    e.preventDefault();e.stopPropagation();
+    const start=setKeypadFreePosition(); if(!start)return;
+    const sx=e.clientX,sy=e.clientY,sl=start.left,st=start.top;
+    drag.setPointerCapture?.(e.pointerId);
+    const move=ev=>{
+      const left=clamp(sl+(ev.clientX-sx),8,Math.max(8,window.innerWidth-kp.offsetWidth-8));
+      const top=clamp(st+(ev.clientY-sy),8,Math.max(8,window.innerHeight-kp.offsetHeight-8));
+      kp.style.left=left+"px";kp.style.top=top+"px";
+    };
+    const up=ev=>{
+      drag.releasePointerCapture?.(e.pointerId);
+      drag.removeEventListener("pointermove",move);drag.removeEventListener("pointerup",up);drag.removeEventListener("pointercancel",up);
+      saveKeypadLayout();
+    };
+    drag.addEventListener("pointermove",move);drag.addEventListener("pointerup",up);drag.addEventListener("pointercancel",up);
+  });
+
+  resize.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse"&&e.button!==0)return;
+    e.preventDefault();e.stopPropagation();
+    const start=setKeypadFreePosition(); if(!start)return;
+    const sx=e.clientX,sw=start.width,sl=start.left,st=start.top;
+    resize.setPointerCapture?.(e.pointerId);
+    const move=ev=>{
+      const maxW=Math.min(540,window.innerWidth-sl-8);
+      const w=clamp(sw+(ev.clientX-sx),270,Math.max(270,maxW));
+      kp.style.width=w+"px";
+      const ratio=w/420;
+      kp.style.setProperty("--key-h",clamp(Math.round(46*ratio),40,60)+"px");
+      kp.style.setProperty("--key-font",clamp(Math.round(20*ratio),17,25)+"px");
+      kp.style.left=sl+"px";kp.style.top=clamp(st,8,Math.max(8,window.innerHeight-kp.offsetHeight-8))+"px";
+    };
+    const up=ev=>{
+      resize.releasePointerCapture?.(e.pointerId);
+      resize.removeEventListener("pointermove",move);resize.removeEventListener("pointerup",up);resize.removeEventListener("pointercancel",up);
+      saveKeypadLayout();
+    };
+    resize.addEventListener("pointermove",move);resize.addEventListener("pointerup",up);resize.addEventListener("pointercancel",up);
+  });
+
+  window.addEventListener("resize",()=>{keepKeypadOnScreen();if(keypadLayout)saveKeypadLayout()});
+})();
 
 render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 </script>
