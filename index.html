@@ -121,6 +121,16 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .saved-product-wrap.manage .saved-product-drag,.saved-product-wrap.manage .saved-product-delete{display:block}
 .saved-product-wrap.drag-target{outline:2px solid #91877f;border-radius:10px}
 
+
+.choice-edit{display:none;position:absolute;right:29px;top:50%;transform:translateY(-50%);z-index:2;border:0;background:transparent;color:#8f8780;font-size:15px;padding:8px 5px}
+.choice-wrap.manage .choice-edit,.choice-wrap.manage .choice-delete{display:block}
+.choice-wrap.manage .choice{padding-left:31px;padding-right:54px}
+.saved-product-edit{display:none;position:absolute;right:31px;top:50%;transform:translateY(-50%);z-index:2;border:0;background:transparent;color:#8f8780;font-size:15px;padding:9px 7px}
+.saved-product-wrap.manage .saved-product-edit{display:block}
+.saved-product-wrap.manage .saved-product{padding-left:38px;padding-right:66px}
+.manage-footer{display:flex;justify-content:flex-end;margin-top:8px}
+.reset-master{border:0;background:transparent;color:#9a6f6f;padding:7px 4px;font-size:11px}
+
 </style>
 </head>
 <body data-build="v0.3.2b">
@@ -192,7 +202,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
  </div>
 </div>
 
-<div id="sectionSheet" class="menu"><div class="sheet"><div class="sheet-title-row"><h3>区分を追加</h3><button id="manageSections" class="sheet-manage-btn">並び替え・削除</button></div><div id="sectionChoices" class="choice-grid"></div><input id="customSection" placeholder="その他の区分を入力"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
+<div id="sectionSheet" class="menu"><div class="sheet"><div class="sheet-title-row"><h3>区分を追加</h3><button id="manageSections" class="sheet-manage-btn">並び替え・削除</button></div><div id="sectionChoices" class="choice-grid"></div><div class="manage-footer"><button id="resetSections" class="reset-master">区分候補を初期状態に戻す</button></div><input id="customSection" placeholder="その他の区分を入力"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
 <div id="productMasterSheet" class="menu">
   <div class="sheet">
     <div class="sheet-title-row"><h3>登録品番</h3><button id="manageProducts" class="sheet-manage-btn">並び替え・削除</button></div>
@@ -206,20 +216,21 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 const KEY="gencho-v03-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
 let state=(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{siteName:"",rooms:[]}}catch{return{siteName:"",rooms:[]}}})(),activeRoom=state.rooms[0]?.id||null,calcMode="room";
 
-const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1";
+const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
 const loadList=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}};
 const saveList=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY);
 
-function normalizedOrder(base,custom,stored){
-  const all=[...base,...custom.filter(x=>!base.includes(x))];
+let deletedRooms=loadList(ROOM_DELETED_KEY),deletedSections=loadList(SECTION_DELETED_KEY);
+function normalizedOrder(base,custom,stored,deleted=[]){
+  const all=[...base.filter(x=>!deleted.includes(x)),...custom.filter(x=>!base.includes(x)||deleted.includes(x))];
   const seen=new Set(),out=[];
   (Array.isArray(stored)?stored:[]).forEach(x=>{if(all.includes(x)&&!seen.has(x)){seen.add(x);out.push(x)}});
   all.forEach(x=>{if(!seen.has(x)){seen.add(x);out.push(x)}});
   return out;
 }
-let roomOrder=normalizedOrder(ROOM_NAMES,savedRooms,loadList(ROOM_ORDER_KEY));
-let sectionOrder=normalizedOrder(CATS,savedSections,loadList(SECTION_ORDER_KEY));
+let roomOrder=normalizedOrder(ROOM_NAMES,savedRooms,loadList(ROOM_ORDER_KEY),deletedRooms);
+let sectionOrder=normalizedOrder(CATS,savedSections,loadList(SECTION_ORDER_KEY),deletedSections);
 let manageRooms=false,manageSections=false,manageProducts=false;
 function saveRoomOrder(){saveList(ROOM_ORDER_KEY,roomOrder)}
 function saveSectionOrder(){saveList(SECTION_ORDER_KEY,sectionOrder)}
@@ -682,6 +693,15 @@ async function saveCurrentRoomImage(){
 
 let productMasterTargetSection=null;
 
+
+function editSavedProduct(item){
+  const p=prompt("品番を編集",item.product);if(p===null)return;
+  const product=p.trim();if(!product)return;
+  const r=prompt("リピートを編集（なしは空欄）",item.repeat||"");if(r===null)return;
+  const repeat=r.trim();
+  if(savedProducts.some(x=>x!==item&&x.product.toLowerCase()===product.toLowerCase())){alert("同じ品番がすでに登録されています");return}
+  item.product=product;item.repeat=repeat;saveList(PRODUCT_MASTER_KEY,savedProducts);renderProductMaster();
+}
 function renderProductMaster(){
   const box=$("#savedProducts");box.innerHTML="";
   if(!savedProducts.length){box.innerHTML='<div style="color:#8b837d;padding:10px 0">まだ登録品番はありません</div>'}
@@ -692,12 +712,13 @@ function renderProductMaster(){
     b.innerHTML=`<strong>${esc(item.product)}</strong><span>${item.repeat?`↕ ${esc(item.repeat)}`:"リピートなし"}</span>`;
     if(!manageProducts)b.onclick=()=>{if(productMasterTargetSection){productMasterTargetSection.product=item.product;productMasterTargetSection.repeat=item.repeat||"";save()}$("#productMasterSheet").classList.remove("show");render()};
     const drag=document.createElement("button");drag.className="saved-product-drag";drag.type="button";drag.textContent="≡";
+    const edit=document.createElement("button");edit.className="saved-product-edit";edit.type="button";edit.textContent="✎";edit.onclick=e=>{e.preventDefault();e.stopPropagation();editSavedProduct(item)};
     const del=document.createElement("button");del.className="saved-product-delete";del.type="button";del.textContent="×";
-    del.onclick=e=>{e.preventDefault();e.stopPropagation();if(confirm(`「${item.product}」を登録品番から削除しますか？`)){savedProducts=savedProducts.filter(x=>x.product!==item.product);saveList(PRODUCT_MASTER_KEY,savedProducts);renderProductMaster()}};
-    w.append(b,drag,del);box.appendChild(w);
+    del.onclick=e=>{e.preventDefault();e.stopPropagation();if(confirm(`「${item.product}」を登録品番から削除しますか？`)){savedProducts=savedProducts.filter(x=>x!==item);saveList(PRODUCT_MASTER_KEY,savedProducts);renderProductMaster()}};
+    w.append(b,drag,edit,del);box.appendChild(w);
     if(manageProducts)bindChoiceDrag(drag,w,()=>savedProducts,()=>saveList(PRODUCT_MASTER_KEY,savedProducts),renderProductMaster,x=>x.product,key);
   });
-  $("#manageProducts").textContent=manageProducts?"完了":"並び替え・削除";
+  $("#manageProducts").textContent=manageProducts?"完了":"並び替え・編集・削除";
 }
 function openProductMaster(sec){
   hideProductKeypad();hideMeasureKeypad();productMasterTargetSection=sec;manageProducts=false;renderProductMaster();$("#productMasterSheet").classList.add("show");
@@ -709,25 +730,51 @@ function render(){ $("#siteName").value=state.siteName||"";renderTabs();renderRo
 
 
 
+
+function renameRoomChoice(oldName){
+  const n=prompt("部屋名を編集",oldName);if(!n)return;
+  const name=n.trim();if(!name||name===oldName)return;
+  if(roomOrder.includes(name)){alert("同じ部屋名がすでにあります");return}
+  const wasDefault=ROOM_NAMES.includes(oldName)&&!deletedRooms.includes(oldName);
+  if(wasDefault){
+    deletedRooms.push(oldName);saveList(ROOM_DELETED_KEY,deletedRooms);
+    if(!savedRooms.includes(name))savedRooms.push(name);
+  }else{
+    const idx=savedRooms.indexOf(oldName);
+    if(idx>=0)savedRooms[idx]=name;else savedRooms.push(name);
+  }
+  saveList(ROOM_MASTER_KEY,savedRooms);
+  const oi=roomOrder.indexOf(oldName);if(oi>=0)roomOrder[oi]=name;
+  saveRoomOrder();renderRoomChoices();
+}
+function deleteRoomChoice(name){
+  if(!confirm(`「${name}」を候補一覧から削除しますか？\n入力済みの現場データは消えません。`))return;
+  if(ROOM_NAMES.includes(name)&&!deletedRooms.includes(name)){
+    deletedRooms.push(name);saveList(ROOM_DELETED_KEY,deletedRooms);
+  }
+  savedRooms=savedRooms.filter(x=>x!==name);saveList(ROOM_MASTER_KEY,savedRooms);
+  roomOrder=roomOrder.filter(x=>x!==name);saveRoomOrder();renderRoomChoices();
+}
 function renderRoomChoices(){
-  roomOrder=normalizedOrder(ROOM_NAMES,savedRooms,roomOrder);saveRoomOrder();
+  roomOrder=normalizedOrder(ROOM_NAMES,savedRooms,roomOrder,deletedRooms);saveRoomOrder();
   const box=$("#roomChoices");box.innerHTML="";
   roomOrder.forEach(name=>{
-    const isCustom=savedRooms.includes(name)&&!ROOM_NAMES.includes(name);
-    const w=document.createElement("div");w.className="choice-wrap"+(manageRooms?" manage":"")+(isCustom?" custom":"");w.dataset.orderKey=name;
+    const w=document.createElement("div");w.className="choice-wrap"+(manageRooms?" manage":"");w.dataset.orderKey=name;
     const b=document.createElement("button");b.className="choice";b.textContent=name;
     if(!manageRooms)b.onclick=()=>{let r=newRoom(name);state.rooms.push(r);activeRoom=r.id;save();$("#roomSheet").classList.remove("show");render()};
     const drag=document.createElement("button");drag.className="choice-drag";drag.textContent="≡";drag.type="button";
-    const del=document.createElement("button");del.className="choice-delete";del.textContent="×";del.type="button";
-    if(isCustom)del.onclick=e=>{e.preventDefault();e.stopPropagation();if(confirm(`「${name}」を登録候補から削除しますか？`)){savedRooms=savedRooms.filter(x=>x!==name);saveList(ROOM_MASTER_KEY,savedRooms);roomOrder=roomOrder.filter(x=>x!==name);saveRoomOrder();renderRoomChoices()}};
-    w.append(b,drag,del);box.appendChild(w);
+    const edit=document.createElement("button");edit.className="choice-edit";edit.textContent="✎";edit.type="button";edit.onclick=e=>{e.preventDefault();e.stopPropagation();renameRoomChoice(name)};
+    const del=document.createElement("button");del.className="choice-delete";del.textContent="×";del.type="button";del.onclick=e=>{e.preventDefault();e.stopPropagation();deleteRoomChoice(name)};
+    w.append(b,drag,edit,del);box.appendChild(w);
     if(manageRooms)bindChoiceDrag(drag,w,()=>roomOrder,saveRoomOrder,renderRoomChoices,x=>x,name);
   });
   $("#customRoom").disabled=manageRooms;$("#addCustomRoom").disabled=manageRooms;
-  $("#manageRooms").textContent=manageRooms?"完了":"並び替え・削除";
+  $("#manageRooms").textContent=manageRooms?"完了":"並び替え・編集・削除";
+  $("#resetRooms").style.display=manageRooms?"block":"none";
 }
 renderRoomChoices();
 $("#manageRooms").onclick=()=>{manageRooms=!manageRooms;renderRoomChoices()};
+$("#resetRooms").onclick=()=>{if(confirm("部屋候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){savedRooms=[];deletedRooms=[];roomOrder=[...ROOM_NAMES];saveList(ROOM_MASTER_KEY,savedRooms);saveList(ROOM_DELETED_KEY,deletedRooms);saveRoomOrder();renderRoomChoices()}};
 $("#closeRoom").onclick=()=>$("#roomSheet").classList.remove("show");
 $("#addCustomRoom").onclick=()=>{
   let n=$("#customRoom").value.trim();
@@ -740,25 +787,51 @@ $("#addCustomRoom").onclick=()=>{
 
 
 
+
+function renameSectionChoice(oldName){
+  const n=prompt("区分名を編集",oldName);if(!n)return;
+  const name=n.trim();if(!name||name===oldName)return;
+  if(sectionOrder.includes(name)){alert("同じ区分名がすでにあります");return}
+  const wasDefault=CATS.includes(oldName)&&!deletedSections.includes(oldName);
+  if(wasDefault){
+    deletedSections.push(oldName);saveList(SECTION_DELETED_KEY,deletedSections);
+    if(!savedSections.includes(name))savedSections.push(name);
+  }else{
+    const idx=savedSections.indexOf(oldName);
+    if(idx>=0)savedSections[idx]=name;else savedSections.push(name);
+  }
+  saveList(SECTION_MASTER_KEY,savedSections);
+  const oi=sectionOrder.indexOf(oldName);if(oi>=0)sectionOrder[oi]=name;
+  saveSectionOrder();renderSectionChoices();
+}
+function deleteSectionChoice(name){
+  if(!confirm(`「${name}」を候補一覧から削除しますか？\n入力済みの現場データは消えません。`))return;
+  if(CATS.includes(name)&&!deletedSections.includes(name)){
+    deletedSections.push(name);saveList(SECTION_DELETED_KEY,deletedSections);
+  }
+  savedSections=savedSections.filter(x=>x!==name);saveList(SECTION_MASTER_KEY,savedSections);
+  sectionOrder=sectionOrder.filter(x=>x!==name);saveSectionOrder();renderSectionChoices();
+}
 function renderSectionChoices(){
-  sectionOrder=normalizedOrder(CATS,savedSections,sectionOrder);saveSectionOrder();
+  sectionOrder=normalizedOrder(CATS,savedSections,sectionOrder,deletedSections);saveSectionOrder();
   const box=$("#sectionChoices");box.innerHTML="";
   sectionOrder.forEach(name=>{
-    const isCustom=savedSections.includes(name)&&!CATS.includes(name);
-    const w=document.createElement("div");w.className="choice-wrap"+(manageSections?" manage":"")+(isCustom?" custom":"");w.dataset.orderKey=name;
+    const w=document.createElement("div");w.className="choice-wrap"+(manageSections?" manage":"");w.dataset.orderKey=name;
     const b=document.createElement("button");b.className="choice";b.textContent=name;
     if(!manageSections)b.onclick=()=>{let r=room();if(r){r.sections.push(newSec(name));save();$("#sectionSheet").classList.remove("show");render()}};
     const drag=document.createElement("button");drag.className="choice-drag";drag.textContent="≡";drag.type="button";
-    const del=document.createElement("button");del.className="choice-delete";del.textContent="×";del.type="button";
-    if(isCustom)del.onclick=e=>{e.preventDefault();e.stopPropagation();if(confirm(`「${name}」を登録候補から削除しますか？`)){savedSections=savedSections.filter(x=>x!==name);saveList(SECTION_MASTER_KEY,savedSections);sectionOrder=sectionOrder.filter(x=>x!==name);saveSectionOrder();renderSectionChoices()}};
-    w.append(b,drag,del);box.appendChild(w);
+    const edit=document.createElement("button");edit.className="choice-edit";edit.textContent="✎";edit.type="button";edit.onclick=e=>{e.preventDefault();e.stopPropagation();renameSectionChoice(name)};
+    const del=document.createElement("button");del.className="choice-delete";del.textContent="×";del.type="button";del.onclick=e=>{e.preventDefault();e.stopPropagation();deleteSectionChoice(name)};
+    w.append(b,drag,edit,del);box.appendChild(w);
     if(manageSections)bindChoiceDrag(drag,w,()=>sectionOrder,saveSectionOrder,renderSectionChoices,x=>x,name);
   });
   $("#customSection").disabled=manageSections;$("#addCustomSection").disabled=manageSections;
-  $("#manageSections").textContent=manageSections?"完了":"並び替え・削除";
+  $("#manageSections").textContent=manageSections?"完了":"並び替え・編集・削除";
+  $("#resetSections").style.display=manageSections?"block":"none";
 }
 renderSectionChoices();
 $("#manageSections").onclick=()=>{manageSections=!manageSections;renderSectionChoices()};
+$("#resetSections").onclick=()=>{if(confirm("区分候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){savedSections=[];deletedSections=[];sectionOrder=[...CATS];saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();renderSectionChoices()}};
 $("#closeSection").onclick=()=>$("#sectionSheet").classList.remove("show");$("#addCustomSection").onclick=()=>{let n=$("#customSection").value.trim(),r=room();if(n&&r){addUniqueText(SECTION_MASTER_KEY,savedSections,n);if(!sectionOrder.includes(n)){sectionOrder.push(n);saveSectionOrder()}renderSectionChoices();r.sections.push(newSec(n));$("#customSection").value="";save();$("#sectionSheet").classList.remove("show");render()}};
 $("#siteName").oninput=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
