@@ -1,4 +1,4 @@
-const CACHE="gencho-v042-20260814-pdfshare";
+const CACHE="gencho-v043-20260814-pdflayout";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

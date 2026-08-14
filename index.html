@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.4.2">
+<body data-build="v0.4.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -690,7 +690,7 @@ function sectionMetaText(sec){
 function buildRoomImageCanvas(r,siteObj=state){
   const siteName=(siteObj?.siteName||"現場名未入力").trim()||"現場名未入力";
   const usefulSections=r.sections.filter(sec=>sec.measures.some(m=>String(m.value||"").trim()));
-  const width=1240,pad=56,cardPad=44,lineH=38,measureH=42,sectionGap=28;
+  const width=1240,pad=56,cardPad=44,measureH=50,sectionGap=28;
   const canvas=document.createElement("canvas");
   const ctx=canvas.getContext("2d");
   const contentWidth=width-pad*2-cardPad*2;
@@ -699,11 +699,9 @@ function buildRoomImageCanvas(r,siteObj=state){
   let height=pad*2 + 44 + siteLines.length*40 + 24 + 58;
   usefulSections.forEach(sec=>{
     const measureCount=sec.measures.filter(m=>String(m.value||"").trim()).length;
-    const meta=sectionMetaText(sec);
-    height += 36;
-    if(meta) height += 30;
+    height += 40; // header line
     height += measureCount*measureH;
-    height += 40;
+    height += 44; // subtotal line
     height += sectionGap;
   });
   height += 140;
@@ -734,21 +732,33 @@ function buildRoomImageCanvas(r,siteObj=state){
   usefulSections.forEach(sec=>{
     const subtotal=secTotals(sec);
     const measures=sec.measures.filter(m=>String(m.value||"").trim());
-    ctx.fillStyle='#272522'; ctx.font='800 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    ctx.fillText(sec.name,cardX+cardPad,y);
-    y+=36;
-    const meta=sectionMetaText(sec);
-    if(meta){
-      ctx.fillStyle='#7b736d'; ctx.font='500 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(meta,cardX+cardPad,y); y+=30;
+    let x=cardX+cardPad;
+    ctx.fillStyle='#272522'; ctx.font='700 28px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText(sec.name,x,y);
+    x += ctx.measureText(sec.name).width + 24;
+    if(sec.product&&sec.product.trim()){
+      ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      const productText=sec.product.trim();
+      ctx.fillText(productText,x,y);
+      x += ctx.measureText(productText).width + 24;
     }
-    ctx.fillStyle='#272522'; ctx.font='500 28px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    if(sec.repeat){
+      ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`↕${sec.repeat}`,x,y);
+    }
+    y += 38;
+
+    ctx.fillStyle='#272522'; ctx.font='800 38px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     measures.forEach(m=>{ctx.fillText(displayMeasureText(m.value),cardX+cardPad+10,y); y+=measureH;});
-    ctx.fillStyle='#665f59'; ctx.font='700 24px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    const label=`小計 ${fmt(subtotal.withR)}`;
-    const w=ctx.measureText(label).width;
-    ctx.fillText(label,cardX+cardW-cardPad-w,y);
-    y+=40;
+
+    ctx.fillStyle='#665f59'; ctx.font='700 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    const leftLabel=`小計 なし ${fmt(subtotal.none)}`;
+    const rightLabel=`あり ${fmt(subtotal.withR)}`;
+    ctx.fillText(leftLabel,cardX+cardPad+10,y);
+    const rightW=ctx.measureText(rightLabel).width;
+    ctx.fillText(rightLabel,cardX+cardW-cardPad-rightW,y);
+    y+=42;
+
     ctx.strokeStyle='#eee6e1'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cardX+cardPad,y); ctx.lineTo(cardX+cardW-cardPad,y); ctx.stroke();
     y+=sectionGap;
   });
