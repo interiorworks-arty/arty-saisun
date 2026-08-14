@@ -1,4 +1,4 @@
-const CACHE="gencho-v03-20260814-keypad";
+const CACHE="gencho-v03-20260814-productkbd";
 const ASSETS=["./manifest.webmanifest","./icon.svg"];
 
 self.addEventListener("install",event=>{

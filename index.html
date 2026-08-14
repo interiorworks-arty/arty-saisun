@@ -20,7 +20,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .room-title{display:flex;justify-content:space-between;align-items:center;gap:10px}.room-title h2{margin:0;font-size:20px}.room-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.small-btn{border:0;background:transparent;color:#8b8179;padding:8px}.small-btn.img{background:#efebe8;color:#514a45;border-radius:10px;padding:8px 10px;font-weight:700}
 .section{padding:14px 0;border-top:1px solid var(--line)}.section:first-of-type{border-top:0}
 .section-head{display:grid;grid-template-columns:48px 1.35fr 1fr 24px;gap:7px;align-items:center}.category{font-weight:800;font-size:17px}
-.placeholder-input{width:100%;font-size:14px;padding:7px 0}.placeholder-input::placeholder{color:#b2aaa4}.repeat-wrap{display:flex;align-items:center;gap:2px}.repeat-prefix{color:#938b84}
+.placeholder-input{width:100%;font-size:14px;padding:7px 0}.placeholder-input::placeholder{color:#b2aaa4}.product-button{width:100%;font-size:14px;padding:7px 0;border:0;border-bottom:1px solid transparent;background:transparent;color:var(--ink);text-align:left;min-height:34px}.product-button.empty{color:#b2aaa4}.product-button.active-input{border-bottom-color:#91877f}.repeat-wrap{display:flex;align-items:center;gap:2px}.repeat-prefix{color:#938b84}
 .measure-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;min-height:36px}.measure-input{width:100%;font-size:20px;font-weight:650;padding:5px 1px;border:0;background:transparent;text-align:left;color:var(--ink);min-height:34px}.measure-input.empty{color:#c4bdb7;font-weight:400}
 .line-result{font-size:12px;color:#8b837d;white-space:nowrap}.section-totals{display:flex;gap:16px;margin-top:8px;font-size:12px;color:#766f69}.section-totals strong{font-size:14px;color:var(--ink)}
 .add-section{width:100%;border:0;background:#efebe8;color:#514a45;border-radius:12px;padding:12px;font-weight:700;margin-top:8px}
@@ -86,9 +86,15 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .repeat-button{width:100%;border:0;background:transparent;text-align:left;padding:7px 0;font-size:14px;color:var(--ink)}
 .repeat-button.empty{color:#b2aaa4}
 
+
+.product-keypad{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom));z-index:95;width:min(680px,calc(100% - 24px));background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:16px;padding:8px 10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:none;touch-action:none;--pk-h:42px;--pk-font:18px}
+.product-keypad.show{display:block}.product-keypad-head{position:relative;display:flex;align-items:center;justify-content:center;height:30px;margin:-2px 0 6px;cursor:grab;touch-action:none;user-select:none}.product-keypad-head:active{cursor:grabbing}.product-keypad-grip{position:absolute;left:50%;top:2px;transform:translateX(-50%);width:52px;height:5px;border-radius:999px;background:#c7c0ba}.product-keypad-label{font-size:11px;color:#8b837d;text-align:center;margin-top:11px;pointer-events:none}
+.product-key-row{display:flex;gap:6px;margin-top:6px}.product-key-row.offset1{padding-left:4%}.product-key-row.offset2{padding-left:9%}.product-keypad button{flex:1;border:0;border-radius:10px;background:#eeeae6;color:var(--ink);min-width:0;min-height:var(--pk-h);font-size:var(--pk-font);font-weight:800;touch-action:manipulation;padding:0 4px}.product-keypad button.key-shift.active{background:var(--accent);color:#fff}.product-keypad button.key-done{background:var(--accent);color:#fff;flex:1.45}.product-keypad button.key-back{flex:1.25}
+.product-keypad-resize{position:absolute;right:2px;bottom:2px;width:28px;height:28px;touch-action:none;cursor:nwse-resize}.product-keypad-resize:before,.product-keypad-resize:after{content:"";position:absolute;right:6px;bottom:6px;border-radius:2px;border-right:2px solid #aaa19a;border-bottom:2px solid #aaa19a}.product-keypad-resize:before{width:13px;height:13px}.product-keypad-resize:after{width:7px;height:7px;right:10px;bottom:10px}
+
 </style>
 </head>
-<body data-build="v0.3.2a">
+<body data-build="v0.3.2b">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><button id="newSite" class="small-btn">新規</button></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -132,6 +138,17 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   </div>
   <div class="keypad-resize" id="keypadResizeHandle" aria-label="テンキーのサイズ変更"></div>
 </div>
+<div id="productKeypad" class="product-keypad" aria-hidden="true">
+  <div class="product-keypad-head" id="productKeypadDragHandle"><div class="product-keypad-grip"></div><div class="product-keypad-label">品番入力</div></div>
+  <div class="product-key-row">
+    <button data-pkey="1">1</button><button data-pkey="2">2</button><button data-pkey="3">3</button><button data-pkey="4">4</button><button data-pkey="5">5</button><button data-pkey="6">6</button><button data-pkey="7">7</button><button data-pkey="8">8</button><button data-pkey="9">9</button><button data-pkey="0">0</button><button data-pkey="-">-</button><button class="key-back" data-pkey="back">×</button>
+  </div>
+  <div class="product-key-row" id="productRowQwerty"></div>
+  <div class="product-key-row offset1" id="productRowHome"></div>
+  <div class="product-key-row offset2" id="productRowBottom"></div>
+  <div class="product-key-row"><button class="key-shift active" id="productShift" data-pkey="shift">⇧</button><button class="key-done" data-pkey="done">完了</button></div>
+  <div class="product-keypad-resize" id="productKeypadResizeHandle"></div>
+</div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 
 <div id="roomSheet" class="menu">
@@ -154,6 +171,19 @@ let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,ac
 
 const KEYPAD_PREF_KEY="gencho-keypad-layout-v1";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
+
+const PRODUCT_KEYPAD_PREF_KEY="gencho-product-keypad-layout-v1";
+let productKeypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(PRODUCT_KEYPAD_PREF_KEY))||null}catch{return null}})();
+let activeProductButton=null,activeProductSection=null,productUpper=true;
+function applyProductKeypadLayout(){const kp=$("#productKeypad");if(!kp)return;if(productKeypadLayout){const maxW=Math.max(380,window.innerWidth-16),w=clamp(+productKeypadLayout.width||680,380,Math.min(860,maxW));kp.style.width=w+"px";kp.style.transform="none";kp.style.bottom="auto";kp.style.setProperty("--pk-h",clamp(Math.round(42*(w/680)),36,58)+"px");kp.style.setProperty("--pk-font",clamp(Math.round(18*(w/680)),15,25)+"px");requestAnimationFrame(()=>{const r=kp.getBoundingClientRect();kp.style.left=clamp(+productKeypadLayout.left||8,8,Math.max(8,window.innerWidth-r.width-8))+"px";kp.style.top=clamp(+productKeypadLayout.top||80,8,Math.max(8,window.innerHeight-r.height-8))+"px"})}}
+function saveProductKeypadLayout(){const kp=$("#productKeypad");if(!kp)return;const r=kp.getBoundingClientRect();productKeypadLayout={left:r.left,top:r.top,width:r.width};localStorage.setItem(PRODUCT_KEYPAD_PREF_KEY,JSON.stringify(productKeypadLayout))}
+function setProductKeypadFreePosition(){const kp=$("#productKeypad");if(!kp)return null;const r=kp.getBoundingClientRect();kp.style.transform="none";kp.style.bottom="auto";kp.style.left=r.left+"px";kp.style.top=r.top+"px";return r}
+function renderProductLetters(){[["productRowQwerty","QWERTYUIOP"],["productRowHome","ASDFGHJKL"],["productRowBottom","ZXCVBNM"]].forEach(([id,letters])=>{const row=document.getElementById(id);row.innerHTML="";[...letters].forEach(ch=>{const b=document.createElement("button");b.type="button";const shown=productUpper?ch:ch.toLowerCase();b.textContent=shown;b.dataset.pkey=shown;row.appendChild(b)})});$("#productShift")?.classList.toggle("active",productUpper)}
+function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);save();live()}
+function showProductKeypad(btn,sec){hideMeasureKeypad();activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+function hideProductKeypad(){const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input")}
+function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
+
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
 function applyKeypadLayout(){
@@ -204,7 +234,7 @@ const newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]});
 const newRoom=name=>({id:uid(),name,sections:[]});
 
 
-function showMeasureKeypad(inp,model,sec,list,row){
+function showMeasureKeypad(inp,model,sec,list,row){hideProductKeypad();
   keypadMode="measure";
   activeRepeatButton=null;activeRepeatSection=null;
   document.querySelectorAll(".measure-row.active-row").forEach(el=>el.classList.remove("active-row"));
@@ -217,7 +247,7 @@ function showMeasureKeypad(inp,model,sec,list,row){
   $("#keypadLabel").textContent="寸法入力"; const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
-function showRepeatKeypad(btn,sec){
+function showRepeatKeypad(btn,sec){hideProductKeypad();
   keypadMode="repeat";
   activeRepeatButton=btn;activeRepeatSection=sec;
   $("#keypadLabel").textContent="リピート入力";
@@ -330,8 +360,8 @@ function addMeasureRowGlobal(sec,m,i,list){
   };
   return row;
 }
-function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category">${esc(sec.name)}</div><input class="placeholder-input product" placeholder="品番" value="${esc(sec.product)}"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><button type="button" class="repeat-button repeat${sec.repeat?"":" empty"}">${sec.repeat?esc(sec.repeat):"リピート"}</button></div><button class="delete-section">×</button></div><div class="measure-list"></div><div class="section-totals"><span>なし <strong class="sn"></strong></span><span>あり <strong class="sw"></strong></span></div>`;
-let prod=d.querySelector(".product"),rep=d.querySelector(".repeat");prod.oninput=()=>{sec.product=prod.value;save();live()};rep.onclick=()=>showRepeatKeypad(rep,sec);
+function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category">${esc(sec.name)}</div><button type="button" class="product-button product${sec.product?"":" empty"}">${esc(sec.product||"品番")}</button><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><button type="button" class="repeat-button repeat${sec.repeat?"":" empty"}">${sec.repeat?esc(sec.repeat):"リピート"}</button></div><button class="delete-section">×</button></div><div class="measure-list"></div><div class="section-totals"><span>なし <strong class="sn"></strong></span><span>あり <strong class="sw"></strong></span></div>`;
+let prod=d.querySelector(".product"),rep=d.querySelector(".repeat");prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,sec)};prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,sec)};rep.onclick=()=>showRepeatKeypad(rep,sec);
 d.querySelector(".delete-section").onclick=()=>{if(confirm(sec.name+"を削除しますか？")){r.sections=r.sections.filter(x=>x.id!==sec.id);save();render()}};
 let list=d.querySelector(".measure-list");
 function addMeasureRow(m,i){
@@ -603,6 +633,16 @@ document.addEventListener("pointerdown",e=>{
 
   window.addEventListener("resize",()=>{keepKeypadOnScreen();if(keypadLayout)saveKeypadLayout()});
 })();
+
+
+renderProductLetters();
+$("#productKeypad").addEventListener("pointerdown",e=>{const btn=e.target.closest?.("button[data-pkey]");if(!btn)return;e.preventDefault();e.stopPropagation();productKeyPress(btn.dataset.pkey)});
+(()=>{
+ const kp=$("#productKeypad"),drag=$("#productKeypadDragHandle"),resize=$("#productKeypadResizeHandle");if(!kp||!drag||!resize)return;
+ drag.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();const st=setProductKeypadFreePosition();if(!st)return;const sx=e.clientX,sy=e.clientY,sl=st.left,top=st.top;drag.setPointerCapture?.(e.pointerId);const mv=ev=>{kp.style.left=clamp(sl+ev.clientX-sx,8,Math.max(8,window.innerWidth-kp.offsetWidth-8))+"px";kp.style.top=clamp(top+ev.clientY-sy,8,Math.max(8,window.innerHeight-kp.offsetHeight-8))+"px"};const up=()=>{drag.removeEventListener("pointermove",mv);drag.removeEventListener("pointerup",up);drag.removeEventListener("pointercancel",up);saveProductKeypadLayout()};drag.addEventListener("pointermove",mv);drag.addEventListener("pointerup",up);drag.addEventListener("pointercancel",up)});
+ resize.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();const st=setProductKeypadFreePosition();if(!st)return;const sx=e.clientX,sw=st.width,sl=st.left,top=st.top;resize.setPointerCapture?.(e.pointerId);const mv=ev=>{const maxW=Math.min(860,window.innerWidth-sl-8),w=clamp(sw+ev.clientX-sx,380,Math.max(380,maxW));kp.style.width=w+"px";kp.style.setProperty("--pk-h",clamp(Math.round(42*(w/680)),36,58)+"px");kp.style.setProperty("--pk-font",clamp(Math.round(18*(w/680)),15,25)+"px");kp.style.left=sl+"px";kp.style.top=clamp(top,8,Math.max(8,window.innerHeight-kp.offsetHeight-8))+"px"};const up=()=>{resize.removeEventListener("pointermove",mv);resize.removeEventListener("pointerup",up);resize.removeEventListener("pointercancel",up);saveProductKeypadLayout()};resize.addEventListener("pointermove",mv);resize.addEventListener("pointerup",up);resize.addEventListener("pointercancel",up)});
+})();
+document.addEventListener("pointerdown",e=>{const pk=$("#productKeypad");if(!pk||!pk.classList.contains("show"))return;if(pk.contains(e.target)||e.target.classList?.contains("product-button"))return;hideProductKeypad()});
 
 render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 </script>
