@@ -1,4 +1,4 @@
-const CACHE="gencho-v03-20260814-grid4-stairs";
+const CACHE="gencho-v03-20260814-masters-sort";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
