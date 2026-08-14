@@ -154,10 +154,13 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .site-status-badge{font-size:10px;border-radius:999px;padding:4px 7px;background:#eeeae7;color:#766f69;white-space:nowrap}
 .site-status-badge.done{background:#e5e5e5;color:#676767}
 
+
+.pdf-action{background:#e7e2de!important;color:#514a45!important}
+
 </style>
 </head>
-<body data-build="v0.4.1">
-<header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
+<body data-build="v0.4.2">
+<header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
 <div class="site"><input id="siteName" placeholder="現場名"></div>
@@ -545,9 +548,10 @@ function secTotals(sec){let none=0,withR=0;sec.measures.forEach(m=>{let c=calc(m
 function roomTotals(r){let none=0,withR=0;r.sections.forEach(s=>{let t=secTotals(s);none+=t.none;withR+=t.withR});return{none,withR}}
 function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=>{let b=document.createElement("button");b.className="tab"+(r.id===activeRoom?" active":"");b.textContent=r.name;b.onclick=()=>{activeRoom=r.id;render()};w.appendChild(b)});let a=document.createElement("button");a.className="add-tab";a.textContent="+";a.onclick=()=>$("#roomSheet").classList.add("show");w.appendChild(a)}
 function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';return}
-let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn" data-r>部屋名編集</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
+let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img pdf-action" data-room-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
 card.querySelector("[data-save]").onclick=()=>saveCurrentRoomImage();
+card.querySelector("[data-room-pdf]").onclick=()=>shareRoomPdf(r,state);
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>$("#sectionSheet").classList.add("show");
 area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 
@@ -683,8 +687,8 @@ function sectionMetaText(sec){
   if(sec.measures.some(m=>String(m.value||"").includes("*")))bits.push("1柄伸ばしあり");
   return bits.join("　");
 }
-function buildRoomImageCanvas(r){
-  const siteName=(state.siteName||"現場名未入力").trim()||"現場名未入力";
+function buildRoomImageCanvas(r,siteObj=state){
+  const siteName=(siteObj?.siteName||"現場名未入力").trim()||"現場名未入力";
   const usefulSections=r.sections.filter(sec=>sec.measures.some(m=>String(m.value||"").trim()));
   const width=1240,pad=56,cardPad=44,lineH=38,measureH=42,sectionGap=28;
   const canvas=document.createElement("canvas");
@@ -768,6 +772,108 @@ async function canvasToPngFile(canvas,fileName){
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   return new File([blob],fileName,{type:'image/png'});
 }
+
+async function canvasToJpegInfo(canvas){
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.94));
+  return {bytes:new Uint8Array(await blob.arrayBuffer()),width:canvas.width,height:canvas.height};
+}
+function concatUint8(parts){
+  const len=parts.reduce((n,p)=>n+p.length,0),out=new Uint8Array(len);
+  let off=0;for(const p of parts){out.set(p,off);off+=p.length}return out;
+}
+function makePdfFromJpegs(images){
+  const enc=new TextEncoder(),chunks=[],offsets=[0];
+  let length=0;
+  const pushText=s=>{const b=enc.encode(s);chunks.push(b);length+=b.length};
+  const pushBytes=b=>{chunks.push(b);length+=b.length};
+  const objStart=n=>{offsets[n]=length;pushText(`${n} 0 obj\n`)};
+  const objEnd=()=>pushText(`endobj\n`);
+
+  const pageW=595.28,pageH=841.89,margin=18;
+  const pageObjs=images.map((_,i)=>3+i*3);
+  const objCount=2+images.length*3;
+
+  pushText("%PDF-1.4\n%PDFGEN\n");
+  objStart(1);pushText("<< /Type /Catalog /Pages 2 0 R >>\n");objEnd();
+  objStart(2);pushText(`<< /Type /Pages /Count ${images.length} /Kids [${pageObjs.map(n=>`${n} 0 R`).join(" ")}] >>\n`);objEnd();
+
+  images.forEach((im,i)=>{
+    const pageObj=3+i*3,imageObj=pageObj+1,contentObj=pageObj+2;
+    const maxW=pageW-margin*2,maxH=pageH-margin*2;
+    const scale=Math.min(maxW/im.width,maxH/im.height);
+    const drawW=im.width*scale,drawH=im.height*scale;
+    const x=(pageW-drawW)/2,y=(pageH-drawH)/2;
+    const content=`q\n${drawW.toFixed(3)} 0 0 ${drawH.toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} cm\n/Im0 Do\nQ\n`;
+    const cb=enc.encode(content);
+
+    objStart(pageObj);
+    pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${imageObj} 0 R >> >> /Contents ${contentObj} 0 R >>\n`);
+    objEnd();
+
+    objStart(imageObj);
+    pushText(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`);
+    pushBytes(im.bytes);pushText("\nendstream\n");objEnd();
+
+    objStart(contentObj);
+    pushText(`<< /Length ${cb.length} >>\nstream\n`);
+    pushBytes(cb);pushText("endstream\n");objEnd();
+  });
+
+  const xref=length;
+  pushText(`xref\n0 ${objCount+1}\n`);
+  pushText("0000000000 65535 f \n");
+  for(let n=1;n<=objCount;n++)pushText(`${String(offsets[n]).padStart(10,"0")} 00000 n \n`);
+  pushText(`trailer\n<< /Size ${objCount+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob([concatUint8(chunks)],{type:"application/pdf"});
+}
+async function buildRoomsPdfFile(siteObj,rooms,fileName){
+  const useful=rooms.filter(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim())));
+  if(!useful.length)throw new Error("NO_DATA");
+  const images=[];
+  for(const r of useful){
+    const canvas=buildRoomImageCanvas(r,siteObj);
+    images.push(await canvasToJpegInfo(canvas));
+  }
+  const blob=makePdfFromJpegs(images);
+  return new File([blob],fileName,{type:"application/pdf"});
+}
+async function shareOrDownloadFile(file,title){
+  try{
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title});
+      return true;
+    }
+  }catch(e){
+    if(e?.name==="AbortError")return false;
+    console.error(e);
+  }
+  const url=URL.createObjectURL(file),a=document.createElement("a");
+  a.href=url;a.download=file.name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  return true;
+}
+async function shareRoomPdf(r,siteObj=state){
+  try{
+    const fn=`${sanitizeFilename(siteObj.siteName||"現調")}_${sanitizeFilename(r.name)}.pdf`;
+    const file=await buildRoomsPdfFile(siteObj,[r],fn);
+    await shareOrDownloadFile(file,`${siteObj.siteName||"現調"} ${r.name}`);
+  }catch(e){
+    console.error(e);
+    alert(e?.message==="NO_DATA"?"PDFにする採寸データがありません":"PDF作成に失敗しました");
+  }
+}
+async function shareSitePdf(siteObj=state){
+  try{
+    save();
+    const fn=`${sanitizeFilename(siteObj.siteName||"現調")}_現調.pdf`;
+    const file=await buildRoomsPdfFile(siteObj,siteObj.rooms||[],fn);
+    await shareOrDownloadFile(file,`${siteObj.siteName||"現調"} 現調PDF`);
+  }catch(e){
+    console.error(e);
+    alert(e?.message==="NO_DATA"?"PDFにする採寸データがありません":"PDF作成に失敗しました");
+  }
+}
+
 async function saveCurrentRoomImage(){
   const r=room();
   if(!r){alert('保存する部屋がありません');return}
@@ -843,8 +949,9 @@ function renderSiteList(){
   list.forEach(s=>{
     const item=document.createElement("div");item.className="site-item";
     const rooms=(s.rooms||[]).length;
-    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name">${esc(s.siteName||"現場名未入力")}</div><div class="site-item-meta">部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
+    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name">${esc(s.siteName||"現場名未入力")}</div><div class="site-item-meta">部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="site-pdf">PDF共有</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
     item.querySelector(".open-site").onclick=()=>switchSite(s.id);
+    item.querySelector(".site-pdf").onclick=()=>shareSitePdf(s);
     item.querySelector(".toggle-status").onclick=()=>{s.status=(s.status||"active")==="done"?"active":"done";s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));renderSiteList()};
     item.querySelector(".rename-site").onclick=()=>{const n=prompt("現場名を変更",s.siteName||"");if(n!==null){s.siteName=n.trim();s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));if(s.id===state.id)render();renderSiteList()}};
     item.querySelector(".delete-site").onclick=()=>{
@@ -1022,6 +1129,7 @@ $("#newSite").onclick=()=>{
   if(n===null)return;
   createNewSite(n.trim());
 };
+$("#currentSitePdf").onclick=()=>shareSitePdf(state);
 $("#siteListBtn").onclick=openSiteManager;
 $("#closeSiteManager").onclick=()=>$("#siteManager").classList.remove("show");
 $("#createSiteFromList").onclick=()=>{
