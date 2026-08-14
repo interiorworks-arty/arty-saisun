@@ -131,10 +131,33 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .manage-footer{display:flex;justify-content:flex-end;margin-top:8px}
 .reset-master{border:0;background:transparent;color:#9a6f6f;padding:7px 4px;font-size:11px}
 
+
+.site-list-btn{border:0;background:#eeeae7;color:#514a45;border-radius:10px;padding:8px 10px;font-weight:800}
+.site-manager-sheet{max-height:min(78vh,720px);overflow:hidden;display:flex;flex-direction:column}
+.site-manager-top{display:flex;gap:8px;align-items:center;margin:8px 0 10px}
+.site-manager-top input{flex:1;background:#f4f1ee;border:0;border-radius:10px;padding:10px 11px;font-size:14px}
+.site-manager-top button{border:0;border-radius:10px;padding:10px 12px;font-weight:800;background:var(--accent);color:#fff;white-space:nowrap}
+.site-filter{display:flex;gap:7px;margin-bottom:8px}
+.site-filter button{flex:1;border:0;border-radius:9px;padding:8px;background:#eeeae7;color:#514a45;font-weight:700}
+.site-filter button.active{background:var(--accent);color:#fff}
+.site-list{overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px 0 8px}
+.site-item{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 11px}
+.site-item-main{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.site-item-name{font-weight:800;font-size:15px;word-break:break-word}
+.site-item-meta{font-size:11px;color:#8b837d;margin-top:3px}
+.site-item-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.site-item-actions button{border:0;border-radius:8px;padding:7px 9px;background:#eeeae7;color:#514a45;font-size:12px;font-weight:700}
+.site-item-actions button.open-site{background:var(--accent);color:#fff}
+.site-item-actions button.danger{color:#9c6262}
+.site-backup-actions{display:flex;gap:8px;margin-top:8px}
+.site-backup-actions button{flex:1;border:0;border-radius:10px;padding:9px;background:#eeeae7;color:#514a45;font-size:12px;font-weight:800}
+.site-status-badge{font-size:10px;border-radius:999px;padding:4px 7px;background:#eeeae7;color:#766f69;white-space:nowrap}
+.site-status-badge.done{background:#e5e5e5;color:#676767}
+
 </style>
 </head>
 <body data-build="v0.3.2b">
-<header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><button id="newSite" class="small-btn">新規</button></div></header>
+<header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
 <div class="site"><input id="siteName" placeholder="現場名"></div>
@@ -190,6 +213,27 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 </div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 
+
+<div id="siteManager" class="menu">
+  <div class="sheet site-manager-sheet">
+    <div class="sheet-title-row"><h3>現場一覧</h3><button id="closeSiteManager" class="sheet-manage-btn">閉じる</button></div>
+    <div class="site-manager-top">
+      <input id="siteSearch" placeholder="現場名で検索">
+      <button id="createSiteFromList">＋ 新規現場</button>
+    </div>
+    <div class="site-filter">
+      <button id="filterActive" class="active">進行中</button>
+      <button id="filterDone">完了</button>
+      <button id="filterAll">すべて</button>
+    </div>
+    <div id="siteList" class="site-list"></div>
+    <div class="site-backup-actions">
+      <button id="exportBackup">バックアップ書き出し</button>
+      <button id="importBackup">バックアップ読込</button>
+      <input id="backupFileInput" type="file" accept="application/json,.json" style="display:none">
+    </div>
+  </div>
+</div>
 <div id="roomSheet" class="menu">
  <div class="sheet">
    <div class="sheet-title-row"><h3>部屋を追加</h3><button id="manageRooms" class="sheet-manage-btn">並び替え・削除</button></div>
@@ -213,8 +257,35 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   </div>
 </div>
 <script>
-const KEY="gencho-v03-data",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
-let state=(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{siteName:"",rooms:[]}}catch{return{siteName:"",rooms:[]}}})(),activeRoom=state.rooms[0]?.id||null,calcMode="room";
+const KEY="gencho-v03-data",SITES_KEY="gencho-sites-v1",CURRENT_SITE_KEY="gencho-current-site-v1",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
+
+function makeSite(name=""){
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,rooms:[],status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+}
+function loadSites(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SITES_KEY));
+    if(Array.isArray(s)&&s.length)return s;
+  }catch{}
+  let legacy=null;
+  try{legacy=JSON.parse(localStorage.getItem(KEY))}catch{}
+  if(legacy&&(legacy.siteName||legacy.rooms?.length)){
+    const migrated={...legacy,id:legacy.id||("site-"+Date.now()+"-migrated"),status:legacy.status||"active",createdAt:legacy.createdAt||Date.now(),updatedAt:Date.now()};
+    localStorage.setItem(SITES_KEY,JSON.stringify([migrated]));
+    localStorage.setItem(CURRENT_SITE_KEY,migrated.id);
+    return [migrated];
+  }
+  const first=makeSite("");
+  localStorage.setItem(SITES_KEY,JSON.stringify([first]));
+  localStorage.setItem(CURRENT_SITE_KEY,first.id);
+  return [first];
+}
+let sites=loadSites();
+let currentSiteId=localStorage.getItem(CURRENT_SITE_KEY)||sites[0].id;
+let state=sites.find(s=>s.id===currentSiteId)||sites[0];
+currentSiteId=state.id;localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
+let activeRoom=state.rooms[0]?.id||null,calcMode="room",siteFilter="active";
+
 
 const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
 const loadList=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}};
@@ -436,7 +507,35 @@ function keypadPress(key){
   }
   syncActiveMeasure();
 }
-function save(){state.siteName=$("#siteName").value.trim();localStorage.setItem(KEY,JSON.stringify(state))}
+
+function persistSites(){
+  state.updatedAt=Date.now();
+  const idx=sites.findIndex(s=>s.id===state.id);
+  if(idx>=0)sites[idx]=state;else sites.push(state);
+  localStorage.setItem(SITES_KEY,JSON.stringify(sites));
+  localStorage.setItem(CURRENT_SITE_KEY,state.id);
+  localStorage.setItem(KEY,JSON.stringify(state));
+}
+function save(){
+  const inp=$("#siteName");
+  if(inp)state.siteName=inp.value.trim();
+  persistSites();
+}
+function switchSite(id){
+  save();
+  const next=sites.find(s=>s.id===id);if(!next)return;
+  state=next;currentSiteId=next.id;activeRoom=state.rooms[0]?.id||null;
+  localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
+  $("#siteManager").classList.remove("show");
+  $("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary");
+  render();
+}
+function createNewSite(name=""){
+  save();
+  const s=makeSite(name);sites.push(s);state=s;currentSiteId=s.id;activeRoom=null;
+  persistSites();render();return s;
+}
+
 function room(){return state.rooms.find(r=>r.id===activeRoom)}
 function parse(v){let s=String(v||"").trim().replace(/\s/g,"").replace(/[＊※*]/g,"*").replace(/[×xX]/g,"-"),star=s.endsWith("*");if(star)s=s.slice(0,-1);let m=s.match(/^(\d+(?:\.\d+)?)-(\d+)$/);if(!m)return null;let len=+m[1],qty=+m[2];return len>0&&qty>0?{len,qty,star}:null}
 function calc(v,rep){let p=parse(v);if(!p)return null;let r=+rep||0,noneCm=p.len*p.qty,each=p.len;if(r>0)each=p.star?p.len+r:Math.ceil(p.len/r)*r;return {...p,r,each,noneM:noneCm/100,withM:each*p.qty/100}}
@@ -726,6 +825,87 @@ function openProductMaster(sec){
 $("#manageProducts").onclick=()=>{manageProducts=!manageProducts;renderProductMaster()};
 $("#closeProductMaster").onclick=()=>$("#productMasterSheet").classList.remove("show");
 
+
+function fmtDate(ts){
+  if(!ts)return "";
+  const d=new Date(ts);
+  return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+function siteHasData(s){return !!(s.siteName||s.rooms?.some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))))}
+function renderSiteList(){
+  const box=$("#siteList");if(!box)return;
+  const q=($("#siteSearch")?.value||"").trim().toLowerCase();
+  let list=[...sites].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(siteFilter!=="all")list=list.filter(s=>(s.status||"active")===siteFilter);
+  if(q)list=list.filter(s=>(s.siteName||"現場名未入力").toLowerCase().includes(q));
+  box.innerHTML="";
+  if(!list.length){box.innerHTML='<div style="color:#8b837d;padding:14px 2px">該当する現場はありません</div>';return}
+  list.forEach(s=>{
+    const item=document.createElement("div");item.className="site-item";
+    const rooms=(s.rooms||[]).length;
+    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name">${esc(s.siteName||"現場名未入力")}</div><div class="site-item-meta">部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
+    item.querySelector(".open-site").onclick=()=>switchSite(s.id);
+    item.querySelector(".toggle-status").onclick=()=>{s.status=(s.status||"active")==="done"?"active":"done";s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));renderSiteList()};
+    item.querySelector(".rename-site").onclick=()=>{const n=prompt("現場名を変更",s.siteName||"");if(n!==null){s.siteName=n.trim();s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));if(s.id===state.id)render();renderSiteList()}};
+    item.querySelector(".delete-site").onclick=()=>{
+      if(sites.length<=1){alert("現場は1件以上残してください");return}
+      if(!confirm(`「${s.siteName||"現場名未入力"}」を削除しますか？\nこの現場の採寸データも削除されます。`))return;
+      sites=sites.filter(x=>x.id!==s.id);
+      if(state.id===s.id){state=sites[0];currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;localStorage.setItem(CURRENT_SITE_KEY,state.id);render()}
+      localStorage.setItem(SITES_KEY,JSON.stringify(sites));renderSiteList();
+    };
+    box.appendChild(item);
+  });
+}
+function openSiteManager(){hideMeasureKeypad();hideProductKeypad();save();renderSiteList();$("#siteManager").classList.add("show")}
+function setSiteFilter(f){
+  siteFilter=f;
+  $("#filterActive").classList.toggle("active",f==="active");
+  $("#filterDone").classList.toggle("active",f==="done");
+  $("#filterAll").classList.toggle("active",f==="all");
+  renderSiteList();
+}
+function buildBackupObject(){
+  save();
+  return {
+    app:"現調",version:"0.4.0",exportedAt:new Date().toISOString(),
+    sites,
+    currentSiteId:state.id,
+    masters:{
+      savedRooms,deletedRooms,roomOrder,
+      savedSections,deletedSections,sectionOrder,
+      savedProducts
+    }
+  };
+}
+async function exportBackup(){
+  const data=JSON.stringify(buildBackupObject(),null,2);
+  const name=`現調バックアップ_${new Date().toISOString().slice(0,10)}.json`;
+  const file=new File([data],name,{type:"application/json"});
+  try{
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"現調バックアップ"});return}
+  }catch(e){if(e?.name==="AbortError")return}
+  const url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function importBackupData(obj){
+  if(!obj||!Array.isArray(obj.sites)||!obj.sites.length)throw new Error("invalid backup");
+  sites=obj.sites;
+  const m=obj.masters||{};
+  savedRooms=Array.isArray(m.savedRooms)?m.savedRooms:[];
+  deletedRooms=Array.isArray(m.deletedRooms)?m.deletedRooms:[];
+  roomOrder=Array.isArray(m.roomOrder)?m.roomOrder:[...ROOM_NAMES];
+  savedSections=Array.isArray(m.savedSections)?m.savedSections:[];
+  deletedSections=Array.isArray(m.deletedSections)?m.deletedSections:[];
+  sectionOrder=Array.isArray(m.sectionOrder)?m.sectionOrder:[...CATS];
+  savedProducts=Array.isArray(m.savedProducts)?m.savedProducts:[];
+  saveList(ROOM_MASTER_KEY,savedRooms);saveList(ROOM_DELETED_KEY,deletedRooms);saveRoomOrder();
+  saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();
+  saveList(PRODUCT_MASTER_KEY,savedProducts);
+  state=sites.find(s=>s.id===obj.currentSiteId)||sites[0];currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;
+  localStorage.setItem(SITES_KEY,JSON.stringify(sites));localStorage.setItem(CURRENT_SITE_KEY,state.id);localStorage.setItem(KEY,JSON.stringify(state));
+  renderRoomChoices();renderSectionChoices();render();renderSiteList();
+}
+
 function render(){ $("#siteName").value=state.siteName||"";renderTabs();renderRoom();buildCalc()}
 
 
@@ -836,7 +1016,35 @@ $("#closeSection").onclick=()=>$("#sectionSheet").classList.remove("show");$("#a
 $("#siteName").oninput=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
 $("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
-$("#newSite").onclick=()=>{if(confirm("現在の現場を消して新規作成しますか？")){state={siteName:"",rooms:[]};activeRoom=null;save();render()}};
+
+$("#newSite").onclick=()=>{
+  const n=prompt("新しい現場名（後から変更できます）","");
+  if(n===null)return;
+  createNewSite(n.trim());
+};
+$("#siteListBtn").onclick=openSiteManager;
+$("#closeSiteManager").onclick=()=>$("#siteManager").classList.remove("show");
+$("#createSiteFromList").onclick=()=>{
+  const n=prompt("新しい現場名（後から変更できます）","");
+  if(n===null)return;
+  createNewSite(n.trim());$("#siteManager").classList.remove("show");
+};
+$("#siteSearch").oninput=renderSiteList;
+$("#filterActive").onclick=()=>setSiteFilter("active");
+$("#filterDone").onclick=()=>setSiteFilter("done");
+$("#filterAll").onclick=()=>setSiteFilter("all");
+$("#exportBackup").onclick=exportBackup;
+$("#importBackup").onclick=()=>$("#backupFileInput").click();
+$("#backupFileInput").onchange=async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{
+    const obj=JSON.parse(await file.text());
+    if(!confirm("バックアップを読み込むと、現在の現場一覧・登録候補をバックアップ内容で置き換えます。続けますか？")){e.target.value="";return}
+    importBackupData(obj);alert("バックアップを読み込みました");
+  }catch(err){console.error(err);alert("このバックアップは読み込めませんでした")}
+  e.target.value="";
+};
+
 
 
 $("#measureKeypad").querySelectorAll("button[data-key]").forEach(btn=>{
