@@ -200,13 +200,20 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .finish-page-toolbar{display:flex;gap:8px;margin-bottom:12px}
 .finish-page-toolbar button{flex:1;border:0;border-radius:12px;padding:11px;background:#e8e2de;color:#514a45;font-weight:900}
 .finish-page-room-delete{border:0;background:transparent;color:#a49b95;font-size:12px;font-weight:800}
+.finish-page-room-tools{display:flex;gap:6px;align-items:center}
+.finish-page-room-drag,.finish-page-room-edit{border:0;background:#eee9e5;color:#625a54;border-radius:8px;padding:6px 8px;font-size:12px;font-weight:800;touch-action:none}
+.finish-page-room.drop-target{outline:2px solid #a89d95;outline-offset:2px}
+.finish-product-button{width:100%;border:1px solid #ddd6d1;border-radius:10px;background:#fff;padding:9px 10px;font-size:15px;color:var(--ink);text-align:left;min-height:40px}
+.finish-unit-button{width:100%;border:1px solid #ddd6d1;border-radius:10px;background:#fff;padding:9px 10px;font-size:15px;color:var(--ink);text-align:left;min-height:40px}
+.unit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+
 
 @media(max-width:560px){.work-page-tabs{grid-template-columns:repeat(2,1fr)}}
 
 
 </style>
 </head>
-<body data-build="v0.8.2">
+<body data-build="v0.9.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -323,6 +330,15 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     </div>
   </div>
 </div>
+<div id="unitSheet" class="menu">
+  <div class="sheet">
+    <div class="sheet-title-row"><h3>単位を選択</h3><button id="manageUnits" class="sheet-manage-btn">並び替え・編集・削除</button></div>
+    <div id="unitChoices" class="unit-grid"></div>
+    <div class="manage-footer"><button id="resetUnits" class="reset-master">単位候補を初期状態に戻す</button></div>
+    <input id="customUnit" placeholder="単位を登録">
+    <div class="sheet-actions"><button id="closeUnitSheet" class="cancel">キャンセル</button><button id="addCustomUnit" class="primary2">登録</button></div>
+  </div>
+</div>
 <div id="productMasterSheet" class="menu">
   <div class="sheet">
     <div class="sheet-title-row"><h3>登録品番</h3><button id="manageProducts" class="sheet-manage-btn">並び替え・削除</button></div>
@@ -363,10 +379,16 @@ currentSiteId=state.id;localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
 let activeRoom=state.rooms[0]?.id||null,calcMode="room",siteFilter="active";
 
 
-const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",RECENT_PRODUCT_KEY="gencho-recent-products-v1",FINISH_PRODUCT_MASTER_KEY="gencho-finish-product-master-v1",FINISH_RECENT_PRODUCT_KEY="gencho-finish-recent-product-v1",FINISH_ITEM_MASTER_KEY="gencho-finish-item-master-v1",FINISH_RECENT_ITEM_KEY="gencho-finish-recent-item-v1",FINISH_TYPE_MASTER_KEY="gencho-finish-type-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
+const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",RECENT_PRODUCT_KEY="gencho-recent-products-v1",FINISH_PRODUCT_MASTER_KEY="gencho-finish-product-master-v1",FINISH_RECENT_PRODUCT_KEY="gencho-finish-recent-product-v1",FINISH_ITEM_MASTER_KEY="gencho-finish-item-master-v1",FINISH_RECENT_ITEM_KEY="gencho-finish-recent-item-v1",FINISH_TYPE_MASTER_KEY="gencho-finish-type-master-v1",UNIT_MASTER_KEY="gencho-unit-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
 const loadList=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}};
 const saveList=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY),recentProducts=loadList(RECENT_PRODUCT_KEY),finishSavedProducts=loadList(FINISH_PRODUCT_MASTER_KEY),finishRecentProducts=loadList(FINISH_RECENT_PRODUCT_KEY),finishSavedItems=loadList(FINISH_ITEM_MASTER_KEY),finishRecentItems=loadList(FINISH_RECENT_ITEM_KEY);
+const DEFAULT_UNITS=["m","㎡","枚","ケース","本","個"];
+let unitChoices=loadList(UNIT_MASTER_KEY);
+if(!Array.isArray(unitChoices)||!unitChoices.length)unitChoices=[...DEFAULT_UNITS];
+let manageUnits=false,unitTargetItem=null;
+function saveUnitChoices(){saveList(UNIT_MASTER_KEY,unitChoices)}
+
 const DEFAULT_FINISH_CHOICES=[
   {id:"finish-cf",label:"CF",kind:"CF",page:"floor",isDefault:true},
   {id:"finish-floor-tile",label:"フロアタイル",kind:"フロアタイル",page:"floor",isDefault:true},
@@ -401,7 +423,7 @@ function normalizedOrder(base,custom,stored,deleted=[]){
 }
 let roomOrder=normalizedOrder(ROOM_NAMES,savedRooms,loadList(ROOM_ORDER_KEY),deletedRooms);
 let sectionOrder=normalizedOrder(CATS,savedSections,loadList(SECTION_ORDER_KEY),deletedSections);
-let manageRooms=false,manageSections=false,manageProducts=false,editingSectionId=null;
+let manageRooms=false,manageSections=false,manageProducts=false,editingSectionId=null,roomSheetMode="wall",finishRoomPageTarget="floor";
 function saveRoomOrder(){saveList(ROOM_ORDER_KEY,roomOrder)}
 function saveSectionOrder(){saveList(SECTION_ORDER_KEY,sectionOrder)}
 function reorderArray(arr,from,to){
@@ -512,11 +534,17 @@ function collectUsedProducts(){
   (state?.rooms||[]).forEach(r=>(r.sections||[]).forEach(sec=>{
     if(sec!==activeProductSection)add(sec.product);
   }));
+  (state?.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).forEach(item=>{
+    if(item!==activeProductSection)add(item.product);
+  }));
 
   // 過去の現場で使った品番も候補にする（更新が新しい現場を優先）
   [...(sites||[])].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(site=>{
     (site.rooms||[]).forEach(r=>(r.sections||[]).forEach(sec=>{
       if(sec!==activeProductSection)add(sec.product);
+    }));
+    (site.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).forEach(item=>{
+      if(item!==activeProductSection)add(item.product);
     }));
   });
   return out;
@@ -555,7 +583,7 @@ function renderRecentProductCandidates(){
     box.appendChild(b);
   });
 }
-function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
+function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
 function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
 function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
@@ -905,7 +933,7 @@ function bindRoomTabDrag(handle,wrap,r){
     handle.addEventListener("pointermove",move);handle.addEventListener("pointerup",up);handle.addEventListener("pointercancel",up);
   });
 }
-function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=>{let wrap=document.createElement("div");wrap.className="room-tab-wrap"+(r.id===activeRoom?" active":"");wrap.dataset.roomId=r.id;let drag=document.createElement("button");drag.type="button";drag.className="room-tab-drag";drag.textContent="≡";drag.setAttribute("aria-label",r.name+"を並び替え");let b=document.createElement("button");b.className="tab"+(r.id===activeRoom?" active":"");b.textContent=r.name;b.onclick=()=>{activeRoom=r.id;render()};wrap.append(drag,b);bindRoomTabDrag(drag,wrap,r);w.appendChild(wrap)});let a=document.createElement("button");a.className="add-tab";a.textContent="+";a.onclick=()=>$("#roomSheet").classList.add("show");w.appendChild(a)}
+function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=>{let wrap=document.createElement("div");wrap.className="room-tab-wrap"+(r.id===activeRoom?" active":"");wrap.dataset.roomId=r.id;let drag=document.createElement("button");drag.type="button";drag.className="room-tab-drag";drag.textContent="≡";drag.setAttribute("aria-label",r.name+"を並び替え");let b=document.createElement("button");b.className="tab"+(r.id===activeRoom?" active":"");b.textContent=r.name;b.onclick=()=>{activeRoom=r.id;render()};wrap.append(drag,b);bindRoomTabDrag(drag,wrap,r);w.appendChild(wrap)});let a=document.createElement("button");a.className="add-tab";a.textContent="+";a.onclick=()=>openSharedRoomSheet("wall");w.appendChild(a)}
 
 function finishField(label,inputHtml){
   return `<div class="finish-field"><label>${label}</label>${inputHtml}</div>`;
@@ -951,23 +979,23 @@ function renderFinishMaterial(r,item){
     fields=finishField("施工数量（㎡）",finishNumberButton(item.area,"area","数量"));
   }else{
     fields=finishField("数量",finishNumberButton(item.qty,"qty","数量"))
-      +finishField("単位",`<select class="finish-unit-select unit">${["m","㎡","ケース","枚","本","個"].map(u=>`<option value="${u}"${item.unit===u?" selected":""}>${u}</option>`).join("")}</select>`);
+      +finishField("単位",`<button type="button" class="finish-unit-button unit">${esc(item.unit||"単位")}</button>`);
   }
 
   const hasRollOrders=kind==="CF"||kind==="リアテック"||kind==="ダイノック";
 
   d.innerHTML=`<div class="finish-card-head"><div class="finish-type">${esc(item.type)}</div><button class="finish-delete">×</button></div>
     ${kind==="その他床材"?`<div class="finish-product-row"><input class="finish-name-input" value="${esc(item.itemName||"")}" placeholder="項目（例：リフォーム框）"><button class="finish-register register-item">項目登録</button></div><div class="finish-suggestions item-suggestions"></div>`:""}
-    <div class="finish-product-row"><input class="finish-product-input" value="${esc(item.product||"")}" placeholder="品番"><button class="finish-register register-product">品番登録</button></div>
+    <div class="finish-product-row"><button type="button" class="finish-product-button product-button${item.product?"":" empty"}">${esc(item.product||"品番")}</button><button class="finish-register register-product"${item.product?"":" disabled"}>品番登録</button></div>
     <div class="finish-suggestions product-suggestions"></div>
     <div class="finish-fields">${fields}</div>
     ${hasRollOrders?`<div class="finish-order-block"><div class="finish-order-label">発注寸法（m × 本数）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 発注寸法を追加</button><div class="finish-order-total">発注合計：<span></span></div></div>`:""}`;
 
   d.querySelector(".finish-delete").onclick=()=>{if(confirm(`${item.type}を削除しますか？`)){r.finishMaterials=r.finishMaterials.filter(x=>x.id!==item.id);save();render()}};
 
-  const prod=d.querySelector(".finish-product-input");
-  prod.oninput=()=>{item.product=prod.value;save();renderFinishSuggestions(d.querySelector(".product-suggestions"),item,"product")};
-  prod.onblur=()=>rememberFinishProduct(item.type,item.product);
+  const prod=d.querySelector(".finish-product-button");
+  prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,item)};
+  prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,item)};
   d.querySelector(".register-product").onclick=()=>{if(registerFinishProduct(item.type,item.product)){alert("品番を登録しました");render()}};
   renderFinishSuggestions(d.querySelector(".product-suggestions"),item,"product");
 
@@ -993,7 +1021,7 @@ function renderFinishMaterial(r,item){
   num(".case-meters","caseMeters","1ケースm",()=>{const x=d.querySelector(".base-case-result");if(x)x.textContent=finishBaseCases(item)||"—"});
 
   const mode=d.querySelector(".mode");if(mode)mode.onchange=()=>{item.saleMode=mode.value;save();render()};
-  const unit=d.querySelector(".unit");if(unit)unit.onchange=()=>{item.unit=unit.value;save()};
+  const unit=d.querySelector(".unit");if(unit)unit.onclick=()=>openUnitSheet(item);
 
   if(hasRollOrders){
     const list=d.querySelector(".finish-order-list"),total=d.querySelector(".finish-order-total span");
@@ -1040,16 +1068,7 @@ function finishRoomCandidates(){
   return out;
 }
 function addFinishRoomForPage(page){
-  ensureFinishRooms(state);
-  const choices=finishRoomCandidates();
-  let msg="部屋名を入力";
-  if(choices.length)msg+="\n\n候補例："+choices.slice(0,8).join(" / ");
-  const n=prompt(msg,"");
-  if(n===null)return;
-  const name=n.trim();if(!name)return;
-  let fr=state.finishRooms.find(r=>r.name===name);
-  if(!fr){fr=newFinishRoom(name);state.finishRooms.push(fr)}
-  save();renderFinishPage();
+  openSharedRoomSheet("finish",page);
 }
 function openFinishSheetForRoom(roomId,page){
   finishTargetRoomId=roomId;
@@ -1061,6 +1080,22 @@ function openFinishSheetForRoom(roomId,page){
   if(input)input.placeholder=workPageLabel(page)+"の項目を登録";
   renderFinishChoices();
   $("#finishSheet").classList.add("show");
+}
+function bindFinishRoomDrag(handle,card,r,page){
+  handle.onpointerdown=e=>{
+    e.preventDefault();e.stopPropagation();handle.setPointerCapture?.(e.pointerId);
+    let targetId=null,target=null;
+    const move=ev=>{
+      document.querySelectorAll(".finish-page-room.drop-target").forEach(x=>x.classList.remove("drop-target"));
+      const el=document.elementFromPoint(ev.clientX,ev.clientY)?.closest?.(".finish-page-room");
+      if(el&&el!==card&&el.dataset.finishRoomId){targetId=el.dataset.finishRoomId;target=el;el.classList.add("drop-target")}
+    };
+    const up=()=>{
+      target?.classList.remove("drop-target");handle.removeEventListener("pointermove",move);handle.removeEventListener("pointerup",up);handle.removeEventListener("pointercancel",up);
+      if(targetId){const from=state.finishRooms.findIndex(x=>x.id===r.id),to=state.finishRooms.findIndex(x=>x.id===targetId);if(from>=0&&to>=0&&from!==to){const [x]=state.finishRooms.splice(from,1);state.finishRooms.splice(to,0,x);save();renderFinishPage()}}
+    };
+    handle.addEventListener("pointermove",move);handle.addEventListener("pointerup",up);handle.addEventListener("pointercancel",up);
+  };
 }
 function renderFinishPage(){
   const area=$("#finishPageArea");if(!area)return;
@@ -1091,11 +1126,13 @@ function renderFinishPage(){
   shown.forEach(r=>{
     const items=(r.finishMaterials||[]).filter(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
     const card=document.createElement("div");card.className="finish-page-room";
-    card.innerHTML=`<div class="finish-page-room-head"><h2>${esc(r.name)}</h2><button type="button" class="finish-page-room-delete">部屋を削除</button></div><div class="finish-page-list"></div><button type="button" class="finish-page-add">＋ ${esc(workPageLabel(page))}を追加</button>`;
+    card.dataset.finishRoomId=r.id;card.innerHTML=`<div class="finish-page-room-head"><h2>${esc(r.name)}</h2><div class="finish-page-room-tools"><button type="button" class="finish-page-room-drag">≡</button><button type="button" class="finish-page-room-edit">名前編集</button><button type="button" class="finish-page-room-delete">削除</button></div></div><div class="finish-page-list"></div><button type="button" class="finish-page-add">＋ ${esc(workPageLabel(page))}を追加</button>`;
     const list=card.querySelector(".finish-page-list");
     if(!items.length)list.innerHTML=`<div class="finish-page-empty">${esc(workPageLabel(page))}の材料を選択してください</div>`;
     items.forEach(item=>list.appendChild(renderFinishMaterial(r,item)));
     card.querySelector(".finish-page-add").onclick=()=>openFinishSheetForRoom(r.id,page);
+    card.querySelector(".finish-page-room-edit").onclick=()=>{const n=prompt("部屋名を変更",r.name);if(n&&n.trim()){r.name=n.trim();save();renderFinishPage()}};
+    bindFinishRoomDrag(card.querySelector(".finish-page-room-drag"),card,r,page);
     card.querySelector(".finish-page-room-delete").onclick=()=>{
       if(!confirm(`「${r.name}」を仕上げ材ページから削除しますか？`))return;
       state.finishRooms=state.finishRooms.filter(x=>x.id!==r.id);
@@ -1724,6 +1761,34 @@ function editSavedProduct(item){
   if(savedProducts.some(x=>x!==item&&x.product.toLowerCase()===product.toLowerCase())){alert("同じ品番がすでに登録されています");return}
   item.product=product;item.repeat=repeat;saveList(PRODUCT_MASTER_KEY,savedProducts);renderProductMaster();
 }
+function renameUnitChoice(oldName){
+  const n=prompt("単位を編集",oldName);if(n===null)return;const v=n.trim();if(!v||v===oldName)return;
+  if(unitChoices.includes(v)){alert("同じ単位がすでにあります");return}
+  const i=unitChoices.indexOf(oldName);if(i>=0)unitChoices[i]=v;
+  (sites||[]).forEach(s=>(s.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).forEach(x=>{if(x.unit===oldName)x.unit=v})));
+  saveUnitChoices();save();renderUnitChoices();
+}
+function deleteUnitChoice(name){
+  if(!confirm(`「${name}」を単位候補から削除しますか？\n入力済みのデータは消えません。`))return;
+  unitChoices=unitChoices.filter(x=>x!==name);saveUnitChoices();renderUnitChoices();
+}
+function renderUnitChoices(){
+  const box=$("#unitChoices");if(!box)return;box.innerHTML="";
+  unitChoices.forEach(name=>{
+    const w=document.createElement("div");w.className="choice-wrap"+(manageUnits?" manage":"");w.dataset.orderKey=name;
+    const b=document.createElement("button");b.type="button";b.className="choice";b.textContent=name;
+    if(!manageUnits)b.onclick=()=>{if(unitTargetItem){unitTargetItem.unit=name;save()}$("#unitSheet").classList.remove("show");unitTargetItem=null;render()};
+    const drag=document.createElement("button");drag.className="choice-drag";drag.type="button";drag.textContent="≡";
+    const edit=document.createElement("button");edit.className="choice-edit";edit.type="button";edit.textContent="✎";edit.onclick=e=>{e.stopPropagation();renameUnitChoice(name)};
+    const del=document.createElement("button");del.className="choice-delete";del.type="button";del.textContent="×";del.onclick=e=>{e.stopPropagation();deleteUnitChoice(name)};
+    w.append(b,drag,edit,del);box.appendChild(w);
+    if(manageUnits)bindChoiceDrag(drag,w,()=>unitChoices,saveUnitChoices,renderUnitChoices,x=>x,name);
+  });
+  $("#customUnit").disabled=manageUnits;$("#addCustomUnit").disabled=manageUnits;
+  $("#manageUnits").textContent=manageUnits?"完了":"並び替え・編集・削除";
+  $("#resetUnits").style.display=manageUnits?"block":"none";
+}
+function openUnitSheet(item){unitTargetItem=item;manageUnits=false;renderUnitChoices();$("#unitSheet").classList.add("show")}
 function renderProductMaster(){
   const box=$("#savedProducts");box.innerHTML="";
   if(!savedProducts.length){box.innerHTML='<div style="color:#8b837d;padding:10px 0">まだ登録品番はありません</div>'}
@@ -1745,6 +1810,10 @@ function renderProductMaster(){
 function openProductMaster(sec){
   hideProductKeypad();hideMeasureKeypad();productMasterTargetSection=sec;manageProducts=false;renderProductMaster();$("#productMasterSheet").classList.add("show");
 }
+$("#manageUnits").onclick=()=>{manageUnits=!manageUnits;renderUnitChoices()};
+$("#resetUnits").onclick=()=>{if(confirm("単位候補を初期状態に戻しますか？")){unitChoices=[...DEFAULT_UNITS];saveUnitChoices();renderUnitChoices()}};
+$("#addCustomUnit").onclick=()=>{const n=$("#customUnit").value.trim();if(n&&!unitChoices.includes(n)){unitChoices.push(n);saveUnitChoices();$("#customUnit").value="";renderUnitChoices()}};
+$("#closeUnitSheet").onclick=()=>{$("#unitSheet").classList.remove("show");unitTargetItem=null;manageUnits=false};
 $("#manageProducts").onclick=()=>{manageProducts=!manageProducts;renderProductMaster()};
 $("#closeProductMaster").onclick=()=>$("#productMasterSheet").classList.remove("show");
 
@@ -1802,14 +1871,14 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"0.8.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"0.9.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
       savedRooms,deletedRooms,roomOrder,
       savedSections,deletedSections,sectionOrder,
       savedProducts,recentProducts,
-      finishSavedProducts,finishRecentProducts,finishSavedItems,finishRecentItems,finishChoices
+      finishSavedProducts,finishRecentProducts,finishSavedItems,finishRecentItems,finishChoices,unitChoices
     }
   };
 }
@@ -1839,6 +1908,7 @@ function importBackupData(obj){
   finishSavedItems=Array.isArray(m.finishSavedItems)?m.finishSavedItems:[];
   finishRecentItems=Array.isArray(m.finishRecentItems)?m.finishRecentItems:[];
   finishChoices=(Array.isArray(m.finishChoices)&&m.finishChoices.length?m.finishChoices:DEFAULT_FINISH_CHOICES).map(x=>normalizeFinishChoice({...x}));
+  unitChoices=Array.isArray(m.unitChoices)&&m.unitChoices.length?m.unitChoices:[...DEFAULT_UNITS];saveUnitChoices();
   saveFinishChoices();
   saveList(FINISH_PRODUCT_MASTER_KEY,finishSavedProducts);saveList(FINISH_RECENT_PRODUCT_KEY,finishRecentProducts);
   saveList(FINISH_ITEM_MASTER_KEY,finishSavedItems);saveList(FINISH_RECENT_ITEM_KEY,finishRecentItems);
@@ -1879,13 +1949,29 @@ function deleteRoomChoice(name){
   savedRooms=savedRooms.filter(x=>x!==name);saveList(ROOM_MASTER_KEY,savedRooms);
   roomOrder=roomOrder.filter(x=>x!==name);saveRoomOrder();renderRoomChoices();
 }
+function addRoomFromSharedChoice(name){
+  const n=String(name||"").trim();if(!n)return;
+  if(roomSheetMode==="finish"){
+    ensureFinishRooms(state);
+    let fr=state.finishRooms.find(r=>r.name===n);
+    if(!fr){fr=newFinishRoom(n);state.finishRooms.push(fr)}
+    save();$("#roomSheet").classList.remove("show");renderFinishPage();return;
+  }
+  let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;save();$("#roomSheet").classList.remove("show");render();
+}
+function openSharedRoomSheet(mode="wall",page="floor"){
+  roomSheetMode=mode;finishRoomPageTarget=page;manageRooms=false;
+  const title=$("#roomSheet h3");if(title)title.textContent=mode==="finish"?workPageLabel(page)+"の部屋を追加":"部屋を追加";
+  $("#customRoom").value="";
+  renderRoomChoices();$("#roomSheet").classList.add("show");
+}
 function renderRoomChoices(){
   roomOrder=normalizedOrder(ROOM_NAMES,savedRooms,roomOrder,deletedRooms);saveRoomOrder();
   const box=$("#roomChoices");box.innerHTML="";
   roomOrder.forEach(name=>{
     const w=document.createElement("div");w.className="choice-wrap"+(manageRooms?" manage":"");w.dataset.orderKey=name;
     const b=document.createElement("button");b.className="choice";b.textContent=name;
-    if(!manageRooms)b.onclick=()=>{let r=newRoom(name);state.rooms.push(r);activeRoom=r.id;save();$("#roomSheet").classList.remove("show");render()};
+    if(!manageRooms)b.onclick=()=>addRoomFromSharedChoice(name);
     const drag=document.createElement("button");drag.className="choice-drag";drag.textContent="≡";drag.type="button";
     const edit=document.createElement("button");edit.className="choice-edit";edit.textContent="✎";edit.type="button";edit.onclick=e=>{e.preventDefault();e.stopPropagation();renameRoomChoice(name)};
     const del=document.createElement("button");del.className="choice-delete";del.textContent="×";del.type="button";del.onclick=e=>{e.preventDefault();e.stopPropagation();deleteRoomChoice(name)};
@@ -1975,8 +2061,7 @@ $("#addCustomRoom").onclick=()=>{
   let n=$("#customRoom").value.trim();
   if(n){
     addUniqueText(ROOM_MASTER_KEY,savedRooms,n);if(!roomOrder.includes(n)){roomOrder.push(n);saveRoomOrder()}renderRoomChoices();
-    let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;
-    $("#customRoom").value="";save();$("#roomSheet").classList.remove("show");render();
+    $("#customRoom").value="";addRoomFromSharedChoice(n);
   }
 };
 
