@@ -187,16 +187,39 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 
 .pdf-action{background:#e7e2de!important;color:#514a45!important}
+.work-page-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 12px}
+.work-page-tabs button{border:0;border-radius:10px;padding:10px 5px;background:#ece8e5;color:#5f5751;font-size:12px;font-weight:900;white-space:nowrap}
+.work-page-tabs button.active{background:var(--accent);color:#fff}
+.work-page{display:none}.work-page.active{display:block}
+.finish-page-room{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px}
+.finish-page-room-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.finish-page-room-head h2{font-size:20px;margin:0}
+.finish-page-add{width:100%;border:0;background:#e8e2de;color:#514a45;border-radius:12px;padding:11px;font-weight:800;margin-top:9px}
+.finish-page-empty{color:#948c86;font-size:12px;padding:7px 2px}
+.finish-page-no-rooms{background:#fff;border-radius:16px;padding:18px;color:#827a74}
+@media(max-width:560px){.work-page-tabs{grid-template-columns:repeat(2,1fr)}}
+
 
 </style>
 </head>
-<body data-build="v0.7.3">
+<body data-build="v0.8.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
 <div class="site"><input id="siteName" placeholder="現場名"></div>
-<div id="roomTabs" class="tabs"></div>
-<div id="roomArea"></div>
+<div class="work-page-tabs">
+  <button type="button" data-work-page="wall" class="active">クロス</button>
+  <button type="button" data-work-page="floor">床</button>
+  <button type="button" data-work-page="sheet">シート</button>
+  <button type="button" data-work-page="other">その他仕上げ材</button>
+</div>
+<div id="wallWorkPage" class="work-page active">
+  <div id="roomTabs" class="tabs"></div>
+  <div id="roomArea"></div>
+</div>
+<div id="finishWorkPage" class="work-page">
+  <div id="finishPageArea"></div>
+</div>
 </section>
 <section id="calcView" class="calc-view">
 <div class="calc-card">
@@ -341,18 +364,26 @@ const loadList=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch{retu
 const saveList=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY),recentProducts=loadList(RECENT_PRODUCT_KEY),finishSavedProducts=loadList(FINISH_PRODUCT_MASTER_KEY),finishRecentProducts=loadList(FINISH_RECENT_PRODUCT_KEY),finishSavedItems=loadList(FINISH_ITEM_MASTER_KEY),finishRecentItems=loadList(FINISH_RECENT_ITEM_KEY);
 const DEFAULT_FINISH_CHOICES=[
-  {id:"finish-cf",label:"CF",kind:"CF",isDefault:true},
-  {id:"finish-floor-tile",label:"フロアタイル",kind:"フロアタイル",isDefault:true},
-  {id:"finish-base",label:"ソフト巾木",kind:"ソフト巾木",isDefault:true},
-  {id:"finish-reartec",label:"リアテック",kind:"リアテック",isDefault:true},
-  {id:"finish-dynoc",label:"ダイノック",kind:"ダイノック",isDefault:true},
-  {id:"finish-other-floor",label:"その他床材",kind:"その他床材",isDefault:true}
+  {id:"finish-cf",label:"CF",kind:"CF",page:"floor",isDefault:true},
+  {id:"finish-floor-tile",label:"フロアタイル",kind:"フロアタイル",page:"floor",isDefault:true},
+  {id:"finish-base",label:"ソフト巾木",kind:"ソフト巾木",page:"floor",isDefault:true},
+  {id:"finish-reartec",label:"リアテック",kind:"リアテック",page:"sheet",isDefault:true},
+  {id:"finish-dynoc",label:"ダイノック",kind:"ダイノック",page:"sheet",isDefault:true},
+  {id:"finish-other-floor",label:"その他床材",kind:"その他床材",page:"other",isDefault:true}
 ];
+function finishPageFromKind(kind){
+  if(["CF","フロアタイル","ソフト巾木"].includes(kind))return "floor";
+  if(["リアテック","ダイノック"].includes(kind))return "sheet";
+  return "other";
+}
+function normalizeFinishChoice(x){
+  return {...x,page:x.page||finishPageFromKind(x.kind||x.label)};
+}
 function loadFinishChoices(){
   const v=loadList(FINISH_TYPE_MASTER_KEY);
-  return Array.isArray(v)&&v.length?v:DEFAULT_FINISH_CHOICES.map(x=>({...x}));
+  return (Array.isArray(v)&&v.length?v:DEFAULT_FINISH_CHOICES).map(x=>normalizeFinishChoice({...x}));
 }
-let finishChoices=loadFinishChoices(),manageFinishes=false;
+let finishChoices=loadFinishChoices(),manageFinishes=false,activeWorkPage="wall",activeFinishPage="floor",finishTargetRoomId=null;
 function saveFinishChoices(){saveList(FINISH_TYPE_MASTER_KEY,finishChoices)}
 
 
@@ -521,7 +552,8 @@ function renderRecentProductCandidates(){
   });
 }
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
-function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;document.querySelectorAll("[data-work-page]").forEach(btn=>btn.onclick=()=>setWorkPage(btn.dataset.workPage));
+renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
 function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
 
@@ -573,12 +605,12 @@ const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random()
 const blank=()=>({id:uid(),value:""});
 const newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]});
 const FINISH_TYPES=["CF","フロアタイル","ソフト巾木","リアテック","ダイノック","その他床材"];
-const newFinishMaterial=(type,kind=type)=>({id:uid(),type,kind,product:"",area:"",orderQty:"",saleMode:"case",caseSqm:"",pieces:"",qty:"",unit:"m",itemName:"",orderCuts:[],caseMeters:""});
+const newFinishMaterial=(type,kind=type,page=finishPageFromKind(kind))=>({id:uid(),type,kind,page,product:"",area:"",orderQty:"",saleMode:"case",caseSqm:"",pieces:"",qty:"",unit:"m",itemName:"",orderCuts:[],caseMeters:""});
 const newRoom=name=>({id:uid(),name,sections:[],finishMaterials:[],memo:""});
 function ensureRoomExtras(r){
   if(!r)return;
   if(!Array.isArray(r.finishMaterials))r.finishMaterials=[];
-  r.finishMaterials.forEach(x=>{if(!x.kind)x.kind=FINISH_TYPES.includes(x.type)?x.type:"その他床材";if(!Array.isArray(x.orderCuts))x.orderCuts=[];if(x.caseMeters==null)x.caseMeters=""});
+  r.finishMaterials.forEach(x=>{if(!x.kind)x.kind=FINISH_TYPES.includes(x.type)?x.type:"その他床材";if(!x.page)x.page=finishPageFromKind(x.kind);if(!Array.isArray(x.orderCuts))x.orderCuts=[];if(x.caseMeters==null)x.caseMeters=""});
   if(typeof r.memo!=="string")r.memo="";
 }
 function finishFmtNumber(n){
@@ -823,7 +855,7 @@ function save(){
 function switchSite(id){
   save();
   const next=sites.find(s=>s.id===id);if(!next)return;
-  state=next;currentSiteId=next.id;activeRoom=state.rooms[0]?.id||null;
+  state=next;currentSiteId=next.id;activeRoom=state.rooms[0]?.id||null;activeWorkPage="wall";
   localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
   $("#siteManager").classList.remove("show");
   $("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary");
@@ -831,7 +863,7 @@ function switchSite(id){
 }
 function createNewSite(name=""){
   save();
-  const s=makeSite(name);sites.push(s);state=s;currentSiteId=s.id;activeRoom=null;
+  const s=makeSite(name);sites.push(s);state=s;currentSiteId=s.id;activeRoom=null;activeWorkPage="wall";
   persistSites();render();return s;
 }
 
@@ -974,8 +1006,53 @@ function renderFinishArea(card,r){
   card.querySelector(".add-finish").onclick=()=>$("#finishSheet").classList.add("show");
 }
 
+
+function workPageLabel(page){
+  return page==="floor"?"床":page==="sheet"?"シート":"その他仕上げ材";
+}
+function openFinishSheetForRoom(roomId,page){
+  finishTargetRoomId=roomId;
+  activeFinishPage=page;
+  manageFinishes=false;
+  const title=$("#finishSheet h3");
+  if(title)title.textContent=workPageLabel(page)+"を追加";
+  const input=$("#customFinish");
+  if(input)input.placeholder=workPageLabel(page)+"の項目を登録";
+  renderFinishChoices();
+  $("#finishSheet").classList.add("show");
+}
+function renderFinishPage(){
+  const area=$("#finishPageArea");if(!area)return;
+  area.innerHTML="";
+  const page=activeWorkPage;
+  if(!["floor","sheet","other"].includes(page))return;
+  if(!state.rooms.length){
+    area.innerHTML='<div class="finish-page-no-rooms">クロスページの「＋」から部屋を追加してください</div>';
+    return;
+  }
+  state.rooms.forEach(r=>{
+    ensureRoomExtras(r);
+    const items=r.finishMaterials.filter(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
+    const card=document.createElement("div");card.className="finish-page-room";
+    card.innerHTML=`<div class="finish-page-room-head"><h2>${esc(r.name)}</h2></div><div class="finish-page-list"></div><button type="button" class="finish-page-add">＋ ${esc(workPageLabel(page))}を追加</button>`;
+    const list=card.querySelector(".finish-page-list");
+    if(!items.length)list.innerHTML=`<div class="finish-page-empty">${esc(workPageLabel(page))}の情報はまだありません</div>`;
+    items.forEach(item=>list.appendChild(renderFinishMaterial(r,item)));
+    card.querySelector(".finish-page-add").onclick=()=>openFinishSheetForRoom(r.id,page);
+    area.appendChild(card);
+  });
+}
+function setWorkPage(page){
+  activeWorkPage=page;
+  document.querySelectorAll("[data-work-page]").forEach(b=>b.classList.toggle("active",b.dataset.workPage===page));
+  $("#wallWorkPage").classList.toggle("active",page==="wall");
+  $("#finishWorkPage").classList.toggle("active",page!=="wall");
+  hideMeasureKeypad();hideProductKeypad();
+  if(page==="wall"){renderTabs();renderRoom()}else renderFinishPage();
+}
+
 function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';return}
-let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img pdf-action" data-room-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button><button class="small-btn" data-delete-room>この部屋を削除</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div><div class="finish-area"><div class="finish-area-head"><div class="finish-area-title">仕上げ材</div></div><div class="finish-list"></div><button class="add-finish">＋ 仕上げ材を追加</button></div>`;
+let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img pdf-action" data-room-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button><button class="small-btn" data-delete-room>この部屋を削除</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
 
 card.querySelector("[data-delete-room]").onclick=()=>{
@@ -994,7 +1071,7 @@ card.querySelector("[data-delete-room]").onclick=()=>{
 card.querySelector("[data-save]").onclick=()=>saveCurrentRoomImage();
 card.querySelector("[data-room-pdf]").onclick=()=>shareRoomPdf(r,state);
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>openSectionSheetForAdd();
-area.appendChild(card);renderFinishArea(card,r);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 
 
 function bindMeasureDrag(handle,row,sec,m){
@@ -1663,7 +1740,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"0.7.3",exportedAt:new Date().toISOString(),
+    app:"現調",version:"0.8.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -1699,7 +1776,7 @@ function importBackupData(obj){
   finishRecentProducts=Array.isArray(m.finishRecentProducts)?m.finishRecentProducts:[];
   finishSavedItems=Array.isArray(m.finishSavedItems)?m.finishSavedItems:[];
   finishRecentItems=Array.isArray(m.finishRecentItems)?m.finishRecentItems:[];
-  finishChoices=Array.isArray(m.finishChoices)&&m.finishChoices.length?m.finishChoices:DEFAULT_FINISH_CHOICES.map(x=>({...x}));
+  finishChoices=(Array.isArray(m.finishChoices)&&m.finishChoices.length?m.finishChoices:DEFAULT_FINISH_CHOICES).map(x=>normalizeFinishChoice({...x}));
   saveFinishChoices();
   saveList(FINISH_PRODUCT_MASTER_KEY,finishSavedProducts);saveList(FINISH_RECENT_PRODUCT_KEY,finishRecentProducts);
   saveList(FINISH_ITEM_MASTER_KEY,finishSavedItems);saveList(FINISH_RECENT_ITEM_KEY,finishRecentItems);
@@ -1711,7 +1788,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){(state.rooms||[]).forEach(ensureRoomExtras);$("#siteName").value=state.siteName||"";renderTabs();renderRoom();buildCalc()}
+function render(){(state.rooms||[]).forEach(ensureRoomExtras);$("#siteName").value=state.siteName||"";if(activeWorkPage==="wall"){renderTabs();renderRoom()}else{renderFinishPage()}buildCalc()}
 
 
 
@@ -1770,12 +1847,12 @@ function deleteFinishChoice(choice){
 function addFinishChoice(name){
   const n=String(name||"").trim();if(!n)return false;
   if(finishChoices.some(x=>x.label.toLowerCase()===n.toLowerCase())){alert("同じ仕上げ材名がすでにあります");return false}
-  finishChoices.push({id:"finish-custom-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),label:n,kind:"その他床材",isDefault:false});
+  finishChoices.push({id:"finish-custom-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),label:n,kind:"その他床材",page:activeFinishPage,isDefault:false});
   saveFinishChoices();return true;
 }
 function renderFinishChoices(){
   const box=$("#finishChoices");if(!box)return;box.innerHTML="";
-  finishChoices.forEach(choice=>{
+  finishChoices.filter(choice=>(choice.page||finishPageFromKind(choice.kind||choice.label))===activeFinishPage).forEach(choice=>{
     const w=document.createElement("div");
     w.className="choice-wrap"+(manageFinishes?" manage":"");
     w.dataset.orderKey=choice.id;
@@ -1785,11 +1862,12 @@ function renderFinishChoices(){
     if(!manageFinishes){
       const pick=e=>{
         e.preventDefault();e.stopPropagation();
-        const r=room();if(!r)return;
+        const r=state.rooms.find(x=>x.id===finishTargetRoomId)||room();if(!r)return;
         ensureRoomExtras(r);
-        r.finishMaterials.push(newFinishMaterial(choice.label,choice.kind));
+        r.finishMaterials.push(newFinishMaterial(choice.label,choice.kind,choice.page||activeFinishPage));
         save();
         $("#finishSheet").classList.remove("show");
+        finishTargetRoomId=null;
         render();
       };
       b.addEventListener("pointerup",pick);
@@ -1814,8 +1892,10 @@ function renderFinishChoices(){
 renderFinishChoices();
 $("#manageFinishes").onclick=()=>{manageFinishes=!manageFinishes;renderFinishChoices()};
 $("#resetFinishes").onclick=()=>{
-  if(confirm("仕上げ材候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){
-    finishChoices=DEFAULT_FINISH_CHOICES.map(x=>({...x}));
+  if(confirm(`${workPageLabel(activeFinishPage)}の候補を初期状態に戻しますか？\n入力済みの現場データは消えません。`)){
+    const others=finishChoices.filter(x=>(x.page||finishPageFromKind(x.kind||x.label))!==activeFinishPage);
+    const defaults=DEFAULT_FINISH_CHOICES.filter(x=>x.page===activeFinishPage).map(x=>({...x}));
+    finishChoices=[...others,...defaults];
     saveFinishChoices();renderFinishChoices();
   }
 };
@@ -1823,7 +1903,7 @@ $("#addCustomFinish").onclick=()=>{
   const input=$("#customFinish");
   if(addFinishChoice(input.value)){input.value="";renderFinishChoices()}
 };
-$("#closeFinishSheet").onclick=()=>{$("#finishSheet").classList.remove("show");manageFinishes=false;renderFinishChoices()};
+$("#closeFinishSheet").onclick=()=>{$("#finishSheet").classList.remove("show");finishTargetRoomId=null;manageFinishes=false;renderFinishChoices()};
 
 renderRoomChoices();
 $("#manageRooms").onclick=()=>{manageRooms=!manageRooms;renderRoomChoices()};
