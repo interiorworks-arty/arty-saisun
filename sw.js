@@ -1,4 +1,4 @@
-const CACHE="gencho-v090-20260816-cross-rules";
+const CACHE="gencho-v091-20260816-other-length-count";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

@@ -213,7 +213,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.9.0">
+<body data-build="v0.9.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -983,13 +983,15 @@ function renderFinishMaterial(r,item){
   }
 
   const hasRollOrders=kind==="CF"||kind==="リアテック"||kind==="ダイノック";
+  const hasOtherLengthOrders=kind==="その他床材";
 
   d.innerHTML=`<div class="finish-card-head"><div class="finish-type">${esc(item.type)}</div><button class="finish-delete">×</button></div>
     ${kind==="その他床材"?`<div class="finish-product-row"><input class="finish-name-input" value="${esc(item.itemName||"")}" placeholder="項目（例：リフォーム框）"><button class="finish-register register-item">項目登録</button></div><div class="finish-suggestions item-suggestions"></div>`:""}
     <div class="finish-product-row"><button type="button" class="finish-product-button product-button${item.product?"":" empty"}">${esc(item.product||"品番")}</button><button class="finish-register register-product"${item.product?"":" disabled"}>品番登録</button></div>
     <div class="finish-suggestions product-suggestions"></div>
     <div class="finish-fields">${fields}</div>
-    ${hasRollOrders?`<div class="finish-order-block"><div class="finish-order-label">発注寸法（m × 本数）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 発注寸法を追加</button><div class="finish-order-total">発注合計：<span></span></div></div>`:""}`;
+    ${hasRollOrders?`<div class="finish-order-block"><div class="finish-order-label">発注寸法（m × 本数）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 発注寸法を追加</button><div class="finish-order-total">発注合計：<span></span></div></div>`:""}
+    ${hasOtherLengthOrders?`<div class="finish-order-block other-length-orders"><div class="finish-order-label">寸法・本数（必要な場合）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 寸法・本数を追加</button><div class="finish-order-total">合計：<span></span></div></div>`:""}`;
 
   d.querySelector(".finish-delete").onclick=()=>{if(confirm(`${item.type}を削除しますか？`)){r.finishMaterials=r.finishMaterials.filter(x=>x.id!==item.id);save();render()}};
 
@@ -1023,7 +1025,7 @@ function renderFinishMaterial(r,item){
   const mode=d.querySelector(".mode");if(mode)mode.onchange=()=>{item.saleMode=mode.value;save();render()};
   const unit=d.querySelector(".unit");if(unit)unit.onclick=()=>openUnitSheet(item);
 
-  if(hasRollOrders){
+  if(hasRollOrders||hasOtherLengthOrders){
     const list=d.querySelector(".finish-order-list"),total=d.querySelector(".finish-order-total span");
     const updateTotal=()=>{total.textContent=finishFmtNumber(finishOrderTotal(item))+"m";save()};
     const renderOrders=()=>{
@@ -1871,7 +1873,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"0.9.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"0.9.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
