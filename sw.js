@@ -1,4 +1,4 @@
-const CACHE="gencho-v048-20260814-rowdelete";
+const CACHE="gencho-v049-20260815-requestedfix";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
