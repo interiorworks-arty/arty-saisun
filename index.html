@@ -18,7 +18,7 @@ main{max-width:760px;margin:auto;padding:14px 14px calc(90px + env(safe-area-ins
 input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;background:transparent;color:var(--ink);outline:none}input:focus{border-bottom-color:#91877f}
 .site,.room-card,.calc-card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
 .site input{width:100%;font-size:18px;font-weight:700;padding:7px 0}
-.tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 12px}.tab,.add-tab{white-space:nowrap;border:0;border-radius:999px;padding:9px 13px;background:#e6e1dd;color:#383431;font-weight:700}.tab.active{background:var(--accent);color:#fff}
+.tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 12px;align-items:center}.room-tab-wrap{display:flex;align-items:center;flex:0 0 auto;border-radius:999px;background:#e6e1dd;overflow:hidden}.room-tab-wrap.active{background:var(--accent)}.room-tab-wrap.drop-target{outline:2px solid #8e847c;outline-offset:2px}.room-tab-drag{border:0;background:transparent;color:#8a817a;padding:9px 4px 9px 9px;font-weight:900;cursor:grab;touch-action:none}.room-tab-drag:active{cursor:grabbing}.room-tab-wrap.active .room-tab-drag{color:#e9e5e2}.tab,.add-tab{white-space:nowrap;border:0;border-radius:999px;padding:9px 13px;background:#e6e1dd;color:#383431;font-weight:700}.room-tab-wrap .tab{background:transparent;border-radius:0;padding-left:6px}.room-tab-wrap.active .tab{color:#fff}.tab.active{background:var(--accent);color:#fff}
 .add-tab{font-size:18px;padding:6px 13px}
 .room-title{display:flex;justify-content:space-between;align-items:center;gap:10px}.room-title h2{margin:0;font-size:20px}.room-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.small-btn{border:0;background:transparent;color:#8b8179;padding:8px}.small-btn.img{background:#efebe8;color:#514a45;border-radius:10px;padding:8px 10px;font-weight:700}
 .section{padding:14px 0;border-top:1px solid var(--line)}.section:first-of-type{border-top:0}
@@ -91,7 +91,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 
 .product-keypad{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom));z-index:95;width:min(680px,calc(100% - 24px));background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:16px;padding:8px 10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:none;touch-action:none;--pk-h:42px;--pk-font:18px}
-.product-keypad.show{display:block}.product-keypad-head{position:relative;display:flex;align-items:center;justify-content:center;height:30px;margin:-2px 0 6px;cursor:grab;touch-action:none;user-select:none}.product-keypad-head:active{cursor:grabbing}.product-keypad-grip{position:absolute;left:50%;top:2px;transform:translateX(-50%);width:52px;height:5px;border-radius:999px;background:#c7c0ba}.product-keypad-label{font-size:11px;color:#8b837d;text-align:center;margin-top:11px;pointer-events:none}
+.product-keypad.show{display:block}.recent-product-wrap{margin:2px 0 7px}.recent-product-label{font-size:10px;color:#8b837d;margin:0 0 4px}.recent-product-list{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px}.recent-product-chip{flex:0 0 auto!important;min-height:30px!important;border-radius:999px!important;padding:4px 10px!important;font-size:12px!important;background:#e7e2de!important;color:#514a45!important;font-weight:800!important}.product-keypad-head{position:relative;display:flex;align-items:center;justify-content:center;height:30px;margin:-2px 0 6px;cursor:grab;touch-action:none;user-select:none}.product-keypad-head:active{cursor:grabbing}.product-keypad-grip{position:absolute;left:50%;top:2px;transform:translateX(-50%);width:52px;height:5px;border-radius:999px;background:#c7c0ba}.product-keypad-label{font-size:11px;color:#8b837d;text-align:center;margin-top:11px;pointer-events:none}
 .product-key-row{display:flex;gap:6px;margin-top:6px}.product-key-row.offset1{padding-left:4%}.product-key-row.offset2{padding-left:9%}.product-keypad button{flex:1;border:0;border-radius:10px;background:#eeeae6;color:var(--ink);min-width:0;min-height:var(--pk-h);font-size:var(--pk-font);font-weight:800;touch-action:manipulation;padding:0 4px}.product-keypad button.key-shift.active{background:var(--accent);color:#fff}.product-keypad button.key-done{background:var(--accent);color:#fff;flex:1.45}.product-keypad button.key-back{flex:1.25}
 .product-keypad-resize{position:absolute;right:2px;bottom:2px;width:28px;height:28px;touch-action:none;cursor:nwse-resize}.product-keypad-resize:before,.product-keypad-resize:after{content:"";position:absolute;right:6px;bottom:6px;border-radius:2px;border-right:2px solid #aaa19a;border-bottom:2px solid #aaa19a}.product-keypad-resize:before{width:13px;height:13px}.product-keypad-resize:after{width:7px;height:7px;right:10px;bottom:10px}
 
@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.5.3">
+<body data-build="v0.5.4">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -206,6 +206,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 </div>
 <div id="productKeypad" class="product-keypad" aria-hidden="true">
   <div class="product-keypad-head" id="productKeypadDragHandle"><div class="product-keypad-grip"></div><div class="product-keypad-label">品番入力</div></div>
+  <div id="recentProductWrap" class="recent-product-wrap"><div class="recent-product-label">最近使った品番</div><div id="recentProductCandidates" class="recent-product-list"></div></div>
   <div class="product-key-row">
     <button data-pkey="1">1</button><button data-pkey="2">2</button><button data-pkey="3">3</button><button data-pkey="4">4</button><button data-pkey="5">5</button><button data-pkey="6">6</button><button data-pkey="7">7</button><button data-pkey="8">8</button><button data-pkey="9">9</button><button data-pkey="0">0</button><button data-pkey="-">-</button><button class="key-back" data-pkey="back">×</button>
   </div>
@@ -291,10 +292,10 @@ currentSiteId=state.id;localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
 let activeRoom=state.rooms[0]?.id||null,calcMode="room",siteFilter="active";
 
 
-const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
+const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",RECENT_PRODUCT_KEY="gencho-recent-products-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
 const loadList=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}};
 const saveList=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY);
+let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY),recentProducts=loadList(RECENT_PRODUCT_KEY);
 
 let deletedRooms=loadList(ROOM_DELETED_KEY),deletedSections=loadList(SECTION_DELETED_KEY);
 function normalizedOrder(base,custom,stored,deleted=[]){
@@ -380,7 +381,7 @@ function registerProduct(product,repeat){
   const idx=savedProducts.findIndex(x=>String(x.product).toLowerCase()===p.toLowerCase());
   const item={product:p,repeat:r};
   if(idx>=0)savedProducts[idx]=item; else savedProducts.push(item);
-  saveList(PRODUCT_MASTER_KEY,savedProducts); return true;
+  saveList(PRODUCT_MASTER_KEY,savedProducts);saveList(RECENT_PRODUCT_KEY,recentProducts); return true;
 }
 
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,keypadMode="measure";
@@ -395,10 +396,12 @@ function applyProductKeypadLayout(){const kp=$("#productKeypad");if(!kp)return;i
 function saveProductKeypadLayout(){const kp=$("#productKeypad");if(!kp)return;const r=kp.getBoundingClientRect();productKeypadLayout={left:r.left,top:r.top,width:r.width};localStorage.setItem(PRODUCT_KEYPAD_PREF_KEY,JSON.stringify(productKeypadLayout))}
 function setProductKeypadFreePosition(){const kp=$("#productKeypad");if(!kp)return null;const r=kp.getBoundingClientRect();kp.style.transform="none";kp.style.bottom="auto";kp.style.left=r.left+"px";kp.style.top=r.top+"px";return r}
 function renderProductLetters(){[["productRowQwerty","QWERTYUIOP"],["productRowHome","ASDFGHJKL"],["productRowBottom","ZXCVBNM"]].forEach(([id,letters])=>{const row=document.getElementById(id);row.innerHTML="";[...letters].forEach(ch=>{const b=document.createElement("button");b.type="button";const shown=productUpper?ch:ch.toLowerCase();b.textContent=shown;b.dataset.pkey=shown;row.appendChild(b)})});$("#productShift")?.classList.toggle("active",productUpper)}
-function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live()}
-function showProductKeypad(btn,sec){hideMeasureKeypad();activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
-function hideProductKeypad(){const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input")}
-function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
+function rememberRecentProduct(value){const v=String(value||"").trim();if(!v)return;recentProducts=[v,...recentProducts.filter(x=>String(x).toLowerCase()!==v.toLowerCase())].slice(0,12);saveList(RECENT_PRODUCT_KEY,recentProducts)}
+function renderRecentProductCandidates(){const box=$("#recentProductCandidates"),wrap=$("#recentProductWrap");if(!box||!wrap)return;const q=String(activeProductSection?.product||"").trim().toLowerCase();let list=recentProducts.filter(Boolean);if(q){const matches=list.filter(x=>String(x).toLowerCase().includes(q));if(matches.length)list=matches}list=list.slice(0,6);box.innerHTML="";wrap.style.display=list.length?"block":"none";list.forEach(v=>{const b=document.createElement("button");b.type="button";b.className="recent-product-chip";b.textContent=v;b.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();if(!activeProductSection)return;activeProductSection.product=v;syncProductButton();rememberRecentProduct(v);hideProductKeypad()});box.appendChild(b)})}
+function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
+function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input")}
+function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
 
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
@@ -622,7 +625,16 @@ const fmt=n=>(Math.round((n+Number.EPSILON)*100)/100).toFixed(2)+"m",esc=s=>Stri
 function ensure(sec){if(!sec.measures.length)sec.measures.push(blank());if(sec.measures.at(-1).value.trim())sec.measures.push(blank())}
 function secTotals(sec){let none=0,withR=0;sec.measures.forEach(m=>{let c=calc(m.value,sec.repeat);if(c){none+=c.noneM;withR+=c.withM}});return{none,withR}}
 function roomTotals(r){let none=0,withR=0;r.sections.forEach(s=>{let t=secTotals(s);none+=t.none;withR+=t.withR});return{none,withR}}
-function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=>{let b=document.createElement("button");b.className="tab"+(r.id===activeRoom?" active":"");b.textContent=r.name;b.onclick=()=>{activeRoom=r.id;render()};w.appendChild(b)});let a=document.createElement("button");a.className="add-tab";a.textContent="+";a.onclick=()=>$("#roomSheet").classList.add("show");w.appendChild(a)}
+function bindRoomTabDrag(handle,wrap,r){
+  handle.addEventListener("pointerdown",e=>{
+    e.preventDefault();e.stopPropagation();hideMeasureKeypad();hideProductKeypad();
+    handle.setPointerCapture?.(e.pointerId);let targetId=null,targetWrap=null;
+    const move=ev=>{document.querySelectorAll(".room-tab-wrap.drop-target").forEach(x=>x.classList.remove("drop-target"));const el=document.elementFromPoint(ev.clientX,ev.clientY);const tr=el?.closest?.(".room-tab-wrap");if(tr&&tr!==wrap&&tr.dataset.roomId){targetId=tr.dataset.roomId;targetWrap=tr;tr.classList.add("drop-target")}};
+    const up=()=>{targetWrap?.classList.remove("drop-target");handle.removeEventListener("pointermove",move);handle.removeEventListener("pointerup",up);handle.removeEventListener("pointercancel",up);if(targetId){const from=state.rooms.findIndex(x=>x.id===r.id),to=state.rooms.findIndex(x=>x.id===targetId);if(from>=0&&to>=0&&from!==to){const [item]=state.rooms.splice(from,1);state.rooms.splice(to,0,item);save();render()}}};
+    handle.addEventListener("pointermove",move);handle.addEventListener("pointerup",up);handle.addEventListener("pointercancel",up);
+  });
+}
+function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=>{let wrap=document.createElement("div");wrap.className="room-tab-wrap"+(r.id===activeRoom?" active":"");wrap.dataset.roomId=r.id;let drag=document.createElement("button");drag.type="button";drag.className="room-tab-drag";drag.textContent="≡";drag.setAttribute("aria-label",r.name+"を並び替え");let b=document.createElement("button");b.className="tab"+(r.id===activeRoom?" active":"");b.textContent=r.name;b.onclick=()=>{activeRoom=r.id;render()};wrap.append(drag,b);bindRoomTabDrag(drag,wrap,r);w.appendChild(wrap)});let a=document.createElement("button");a.className="add-tab";a.textContent="+";a.onclick=()=>$("#roomSheet").classList.add("show");w.appendChild(a)}
 function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';return}
 let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img pdf-action" data-room-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button><button class="small-btn" data-delete-room>この部屋を削除</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
@@ -1213,13 +1225,13 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"0.4.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"0.5.4",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
       savedRooms,deletedRooms,roomOrder,
       savedSections,deletedSections,sectionOrder,
-      savedProducts
+      savedProducts,recentProducts
     }
   };
 }
@@ -1243,6 +1255,7 @@ function importBackupData(obj){
   deletedSections=Array.isArray(m.deletedSections)?m.deletedSections:[];
   sectionOrder=Array.isArray(m.sectionOrder)?m.sectionOrder:[...CATS];
   savedProducts=Array.isArray(m.savedProducts)?m.savedProducts:[];
+  recentProducts=Array.isArray(m.recentProducts)?m.recentProducts:[];
   saveList(ROOM_MASTER_KEY,savedRooms);saveList(ROOM_DELETED_KEY,deletedRooms);saveRoomOrder();
   saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();
   saveList(PRODUCT_MASTER_KEY,savedProducts);

@@ -1,4 +1,4 @@
-const CACHE="gencho-v053-20260815-fullupdate";
+const CACHE="gencho-v054-20260815-roomtabs-recentproducts";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
