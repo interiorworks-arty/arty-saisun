@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.4.9">
+<body data-build="v0.5.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -249,7 +249,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
  </div>
 </div>
 
-<div id="sectionSheet" class="menu"><div class="sheet"><div class="sheet-title-row"><h3 id="sectionSheetTitle">区分を追加</h3><button id="manageSections" class="sheet-manage-btn">並び替え・削除</button></div><div id="sectionChoices" class="choice-grid"></div><div class="manage-footer"><button id="resetSections" class="reset-master">区分候補を初期状態に戻す</button></div><input id="customSection" placeholder="その他の区分を入力"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
+<div id="sectionSheet" class="menu"><div class="sheet"><div class="sheet-title-row"><h3 id="sectionSheetTitle">区分を追加</h3><button id="manageSections" class="sheet-manage-btn">並び替え・削除</button></div><div id="sectionChoices" class="choice-grid"></div><div class="manage-footer"><button id="resetSections" class="reset-master">区分候補を初期状態に戻す</button></div><input id="customSection" placeholder="区分名を自由入力（例：天・ハリ）"><div class="sheet-actions"><button id="closeSection" class="cancel">キャンセル</button><button id="addCustomSection" class="primary2">追加</button></div></div></div>
 <div id="productMasterSheet" class="menu">
   <div class="sheet">
     <div class="sheet-title-row"><h3>登録品番</h3><button id="manageProducts" class="sheet-manage-btn">並び替え・削除</button></div>
@@ -317,19 +317,24 @@ function getEditingSection(){
   return r?.sections?.find(s=>s.id===editingSectionId)||null;
 }
 function updateSectionSheetMode(){
-  const title=$("#sectionSheetTitle"), addBtn=$("#addCustomSection");
-  const editing=!!getEditingSection();
-  if(title)title.textContent=editing?"区分を変更":"区分を追加";
+  const title=$("#sectionSheetTitle"), addBtn=$("#addCustomSection"), input=$("#customSection");
+  const editing=getEditingSection();
+  if(title)title.textContent=editing?"区分を変更・自由編集":"区分を追加";
   if(addBtn)addBtn.textContent=editing?"変更":"追加";
+  if(input){
+    input.placeholder=editing?"自由に書き換え（例：天・ハリ）":"区分名を自由入力（例：天・ハリ）";
+  }
 }
 function openSectionSheetForAdd(){
   editingSectionId=null;
+  const input=$("#customSection");if(input)input.value="";
   updateSectionSheetMode();
   $("#sectionSheet").classList.add("show");
 }
 function openSectionSheetForEdit(sec){
   if(!sec)return;
   editingSectionId=sec.id;
+  const input=$("#customSection");if(input)input.value=sec.name||"";
   updateSectionSheetMode();
   $("#sectionSheet").classList.add("show");
 }
@@ -791,11 +796,11 @@ function drawRepeatSubtotalLine(ctx,labelX,valueX,baseline,label,value){
   ctx.fillText(value,valueX-valueW,baseline);
   ctx.restore();
 }
-function drawMeasureSquare(ctx,x,baseline,size=16,color='#8f8882'){
-  const top=baseline-size+2;
+function drawMeasureSquare(ctx,x,baseline,size=32,color='#8f8882'){
+  const top=baseline-size+3;
   ctx.save();
   ctx.strokeStyle=color;
-  ctx.lineWidth=2;
+  ctx.lineWidth=2.5;
   ctx.strokeRect(x,top,size,size);
   ctx.restore();
 }
@@ -807,8 +812,8 @@ function splitMeasureForDraw(value){
 }
 function drawAlignedMeasureLine(ctx,x,baseline,value){
   const parts=splitMeasureForDraw(value);
-  drawMeasureSquare(ctx,x,baseline,15,'#8f8882');
-  const textX=x+28;
+  drawMeasureSquare(ctx,x,baseline,32,'#8f8882');
+  const textX=x+46;
   if(parts.raw){
     ctx.fillText(parts.raw,textX,baseline);
     return;
@@ -1250,7 +1255,7 @@ function renderSectionChoices(){
   sectionOrder.forEach(name=>{
     const w=document.createElement("div");w.className="choice-wrap"+(manageSections?" manage":"");w.dataset.orderKey=name;
     const b=document.createElement("button");b.className="choice";b.textContent=name;
-    if(!manageSections)b.onclick=()=>{let r=room();if(!r)return;const editing=getEditingSection();if(editing){editing.name=name;save();closeSectionSheet();render()}else{r.sections.push(newSec(name));save();closeSectionSheet();render()}};
+    if(!manageSections)b.onclick=()=>{let r=room();if(!r)return;const editing=getEditingSection();if(editing){editing.name=name;const input=$("#customSection");if(input)input.value="";save();closeSectionSheet();render()}else{r.sections.push(newSec(name));save();closeSectionSheet();render()}};
     const drag=document.createElement("button");drag.className="choice-drag";drag.textContent="≡";drag.type="button";
     const edit=document.createElement("button");edit.className="choice-edit";edit.textContent="✎";edit.type="button";edit.onclick=e=>{e.preventDefault();e.stopPropagation();renameSectionChoice(name)};
     const del=document.createElement("button");del.className="choice-delete";del.textContent="×";del.type="button";del.onclick=e=>{e.preventDefault();e.stopPropagation();deleteSectionChoice(name)};
