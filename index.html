@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.5.6">
+<body data-build="v0.5.7">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -542,7 +542,7 @@ function hideMeasureKeypad(){
 }
 function measureDisplayParts(v){
   const s=String(v||"").replace(/\*/g,"＊");
-  const m=s.match(/^(\d+(?:\.\d+)?)-(\d+)(＊?)$/);
+  const m=s.match(/^(\d+(?:\.\d+)?)-(\d+)(＊*)$/);
   if(!m)return null;
   return {left:m[1],right:m[2]+(m[3]||"")};
 }
@@ -646,7 +646,7 @@ function keypadPress(key){
   if(key==="-"){
     if(!activeMeasureInput.value.includes("-") && activeMeasureInput.value.length) activeMeasureInput.value+="-";
   }else if(key==="*"){
-    if(activeMeasureInput.value && !activeMeasureInput.value.endsWith("*")) activeMeasureInput.value+="*";
+    if(activeMeasureInput.value) activeMeasureInput.value+="*";
   }else{
     activeMeasureInput.value+=key;
   }
@@ -909,7 +909,7 @@ function drawMeasureSquare(ctx,x,baseline,size=32,color='#8f8882'){
 }
 function splitMeasureForDraw(value){
   const display=displayMeasureText(value).trim();
-  const m=display.match(/^(\d+(?:\.\d+)?)-(\d+)(＊?)$/);
+  const m=display.match(/^(\d+(?:\.\d+)?)-(\d+)(＊*)$/);
   if(!m)return {raw:display,left:'',right:'',suffix:''};
   return {raw:'',left:m[1],right:m[2],suffix:m[3]||''};
 }

@@ -1,4 +1,4 @@
-const CACHE="gencho-v056-20260815-multirepeat-backspace";
+const CACHE="gencho-v057-20260815-multistarfix";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
