@@ -1,4 +1,4 @@
-const CACHE="gencho-v061-20260815-room-export-unified";
+const CACHE="gencho-v070-20260815-finishmaterials-phase1";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
