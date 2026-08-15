@@ -143,7 +143,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .site-list{overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px 0 8px}
 .site-item{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 11px}
 .site-item-main{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.site-item-name{font-weight:800;font-size:15px;word-break:break-word}
+.site-item-name{font-weight:800;font-size:15px;word-break:break-word;display:flex;align-items:baseline;gap:22px;flex-wrap:wrap}.site-item-total{font-size:14px;color:#6f6862;font-weight:800;white-space:nowrap}
 .site-item-meta{font-size:11px;color:#8b837d;margin-top:3px}
 .site-item-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .site-item-actions button{border:0;border-radius:8px;padding:7px 9px;background:#eeeae7;color:#514a45;font-size:12px;font-weight:700}
@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.5.8">
+<body data-build="v0.5.9">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1251,6 +1251,15 @@ function fmtDate(ts){
   return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 function siteHasData(s){return !!(s.siteName||s.rooms?.some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))))}
+function siteRepeatTotal(s){
+  let total=0;
+  (s?.rooms||[]).forEach(r=>{
+    (r.sections||[]).forEach(sec=>{
+      total+=secTotals(sec).withR;
+    });
+  });
+  return total;
+}
 function renderSiteList(){
   const box=$("#siteList");if(!box)return;
   const q=($("#siteSearch")?.value||"").trim().toLowerCase();
@@ -1262,7 +1271,8 @@ function renderSiteList(){
   list.forEach(s=>{
     const item=document.createElement("div");item.className="site-item";
     const rooms=(s.rooms||[]).length;
-    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name">${esc(s.siteName||"現場名未入力")}</div><div class="site-item-meta">部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="site-pdf">PDF共有</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
+    const repeatTotal=siteRepeatTotal(s);
+    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name"><span>${esc(s.siteName||"現場名未入力")}</span><span class="site-item-total">${fmt(repeatTotal)}</span></div><div class="site-item-meta">部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="site-pdf">PDF共有</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
     item.querySelector(".open-site").onclick=()=>switchSite(s.id);
     item.querySelector(".site-pdf").onclick=()=>shareSitePdf(s);
     item.querySelector(".toggle-status").onclick=()=>{s.status=(s.status||"active")==="done"?"active":"done";s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));renderSiteList()};
