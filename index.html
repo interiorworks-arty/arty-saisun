@@ -226,7 +226,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v1.0.0">
+<body data-build="v1.0.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -655,7 +655,7 @@ const newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]});
 const FINISH_TYPES=["CF","フロアタイル","ソフト巾木","リアテック","ダイノック","その他床材"];
 const newFinishMaterial=(type,kind=type,page=finishPageFromKind(kind))=>({id:uid(),type,kind,page,product:"",area:"",orderQty:"",saleMode:"case",caseSqm:"",pieces:"",qty:"",unit:"m",itemName:"",orderCuts:[],caseMeters:""});
 const newRoom=name=>({id:uid(),name,sections:[],finishMaterials:[],memo:""});
-const newFinishRoom=name=>({id:uid(),name,finishMaterials:[],memo:""});
+const newFinishRoom=(name,page=null)=>({id:uid(),name,finishMaterials:[],memo:"",pages:page?[page]:[]});
 function ensureFinishRooms(siteObj=state){
   if(!Array.isArray(siteObj.finishRooms))siteObj.finishRooms=[];
   siteObj.finishRooms.forEach(r=>{
@@ -666,6 +666,8 @@ function ensureFinishRooms(siteObj=state){
       if(!Array.isArray(x.orderCuts))x.orderCuts=[];
       if(x.caseMeters==null)x.caseMeters="";
     });
+    if(!Array.isArray(r.pages))r.pages=[];
+    r.finishMaterials.forEach(x=>{const pg=x.page||finishPageFromKind(x.kind||x.type);if(pg&&!r.pages.includes(pg))r.pages.push(pg)});
     if(typeof r.memo!=="string")r.memo="";
   });
 }
@@ -1238,6 +1240,8 @@ function addFinishRoomForPage(page){
 }
 function openFinishSheetForRoom(roomId,page){
   finishTargetRoomId=roomId;
+  const fr=(state.finishRooms||[]).find(x=>x.id===roomId);
+  if(fr){if(!Array.isArray(fr.pages))fr.pages=[];if(!fr.pages.includes(page))fr.pages.push(page);save()}
   activeFinishPage=page;
   manageFinishes=false;
   const title=$("#finishSheet h3");
@@ -1278,8 +1282,9 @@ function renderFinishPage(){
 
   const shown=state.finishRooms.filter(r=>{
     const items=r.finishMaterials||[];
-    if(!items.length)return true;
-    return items.some(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
+    const hasPage=(r.pages||[]).includes(page);
+    const hasMaterial=items.some(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
+    return hasPage||hasMaterial;
   });
 
   if(!shown.length){
@@ -1300,8 +1305,10 @@ function renderFinishPage(){
     card.querySelector(".finish-page-room-edit").onclick=()=>{const n=prompt("部屋名を変更",r.name);if(n&&n.trim()){r.name=n.trim();save();renderFinishPage()}};
     bindFinishRoomDrag(card.querySelector(".finish-page-room-drag"),card,r,page);
     card.querySelector(".finish-page-room-delete").onclick=()=>{
-      if(!confirm(`「${r.name}」を仕上げ材ページから削除しますか？`))return;
-      state.finishRooms=state.finishRooms.filter(x=>x.id!==r.id);
+      if(!confirm(`「${r.name}」を${workPageLabel(page)}ページから削除しますか？\nこのページの入力データも削除されます。`))return;
+      r.finishMaterials=(r.finishMaterials||[]).filter(x=>(x.page||finishPageFromKind(x.kind||x.type))!==page);
+      r.pages=(r.pages||[]).filter(x=>x!==page);
+      if(!(r.pages||[]).length&&!(r.finishMaterials||[]).length)state.finishRooms=state.finishRooms.filter(x=>x.id!==r.id);
       save();renderFinishPage();
     };
     area.appendChild(card);
@@ -2040,7 +2047,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.0.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.0.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -2123,7 +2130,9 @@ function addRoomFromSharedChoice(name){
   if(roomSheetMode==="finish"){
     ensureFinishRooms(state);
     let fr=state.finishRooms.find(r=>r.name===n);
-    if(!fr){fr=newFinishRoom(n);state.finishRooms.push(fr)}
+    if(!fr){fr=newFinishRoom(n,finishRoomPageTarget);state.finishRooms.push(fr)}
+    if(!Array.isArray(fr.pages))fr.pages=[];
+    if(!fr.pages.includes(finishRoomPageTarget))fr.pages.push(finishRoomPageTarget);
     save();$("#roomSheet").classList.remove("show");renderFinishPage();return;
   }
   let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;save();$("#roomSheet").classList.remove("show");render();
