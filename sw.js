@@ -1,4 +1,4 @@
-const CACHE="gencho-v050-20260815-sectionfree-squarelarge";
+const CACHE="gencho-v052-20260815-measuresectionwidth";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
