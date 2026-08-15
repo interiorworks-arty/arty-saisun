@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.6.0">
+<body data-build="v0.6.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1097,8 +1097,8 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   }
 
   const subCount=rows.reduce((n,r)=>n+r.subs.length,0);
-  const rowBase=mode==="product"?118:100;
-  const subH=mode==="product"?36:48;
+  const rowBase=118;
+  const subH=36;
   const height=Math.max(900,290+rows.length*rowBase+subCount*subH+190);
 
   const c=document.createElement("canvas");
@@ -1123,62 +1123,30 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   y+=45;
 
   rows.forEach(row=>{
-    if(mode==="product"){
-      // Appの品番別表示と同じ並び：
-      // 品番 | 合計m → 部屋・区分：m → 最後にリピートなし / あり
-      ctx.fillStyle="#272522";
-      ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(row.title,pad+35,y);
-      ctx.textAlign="right";
-      ctx.fillText(fmt(row.withR),width-pad-35,y);
-      ctx.textAlign="left";
-      y+=39;
+    ctx.fillStyle="#272522";
+    ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText(row.title,pad+35,y);
+    ctx.textAlign="right";
+    ctx.fillText(fmt(row.withR),width-pad-35,y);
+    ctx.textAlign="left";
+    y+=39;
 
-      row.subs.forEach(s=>{
-        ctx.fillStyle="#766f69";
-        ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        ctx.fillText(`${s.label}：${fmt(s.withR)}`,pad+35,y);
-        y+=36;
-      });
+    row.subs.forEach(s=>{
+      ctx.fillStyle="#766f69";
+      ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`${s.label}：${fmt(s.withR)}`,pad+35,y);
+      y+=36;
+    });
 
-      ctx.fillStyle="#665f59";
-      ctx.font='700 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(`リピートなし ${fmt(row.none)} ／ リピートあり ${fmt(row.withR)}`,pad+35,y);
-      y+=34;
+    ctx.fillStyle="#665f59";
+    ctx.font='700 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText(`リピートなし ${fmt(row.none)} ／ リピートあり ${fmt(row.withR)}`,pad+35,y);
+    y+=34;
 
-      ctx.strokeStyle="#eee6e1";
-      ctx.lineWidth=2;
-      ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
-      y+=34;
-    }else{
-      // 部屋別出力は今まで通り
-      ctx.fillStyle="#272522";
-      ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(row.title,pad+35,y);
-      ctx.textAlign="right";
-      ctx.fillText(`↕あり ${fmt(row.withR)}`,width-pad-35,y);
-      ctx.textAlign="left";
-      y+=43;
-
-      ctx.fillStyle="#746d67";
-      ctx.font='600 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(`↕なし ${fmt(row.none)}`,pad+55,y);
-      y+=38;
-
-      row.subs.forEach(s=>{
-        ctx.fillStyle="#766f69";
-        ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        ctx.fillText(s.label,pad+65,y);
-        ctx.textAlign="right";
-        ctx.fillText(`↕なし ${fmt(s.none)}　↕あり ${fmt(s.withR)}`,width-pad-45,y);
-        ctx.textAlign="left";
-        y+=43;
-      });
-
-      ctx.strokeStyle="#eee6e1";
-      ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
-      y+=42;
-    }
+    ctx.strokeStyle="#eee6e1";
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
+    y+=34;
   });
 
   const total=siteTotals(siteObj);
@@ -1187,19 +1155,13 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   ctx.font='700 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
   ctx.fillText("現場合計",pad+50,y+34);
 
-  if(mode==="product"){
-    ctx.fillStyle="#272522";
-    ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
-    ctx.fillStyle="#766f69";
-    ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
-  }else{
-    ctx.fillStyle="#272522";
-    ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    ctx.fillText(`↕なし ${fmt(total.none)}`,pad+50,y+80);
-    ctx.fillText(`↕あり ${fmt(total.withR)}`,pad+500,y+80);
-  }
+  ctx.fillStyle="#272522";
+  ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
+  ctx.fillStyle="#766f69";
+  ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
+
   return c;
 }
 async function canvasToPdfJpegs(canvas){
