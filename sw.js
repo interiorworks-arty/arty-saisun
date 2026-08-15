@@ -1,4 +1,4 @@
-const CACHE="gencho-v080-20260816-separate-finish-pages";
+const CACHE="gencho-v081-20260816-page-tabs-fix";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

@@ -202,7 +202,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.8.0">
+<body data-build="v0.8.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -552,8 +552,7 @@ function renderRecentProductCandidates(){
   });
 }
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
-function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;document.querySelectorAll("[data-work-page]").forEach(btn=>btn.onclick=()=>setWorkPage(btn.dataset.workPage));
-renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
 function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
 
@@ -1740,7 +1739,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"0.8.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"0.8.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -2076,6 +2075,10 @@ $("#productKeypad").addEventListener("pointerdown",e=>{const btn=e.target.closes
 })();
 document.addEventListener("pointerdown",e=>{const pk=$("#productKeypad");if(!pk||!pk.classList.contains("show"))return;if(pk.contains(e.target)||e.target.classList?.contains("product-button"))return;hideProductKeypad()});
 
+document.querySelectorAll("[data-work-page]").forEach(btn=>{
+  btn.onclick=()=>setWorkPage(btn.dataset.workPage);
+});
+setWorkPage(activeWorkPage);
 render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 </script>
 </body></html>
