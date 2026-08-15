@@ -197,12 +197,16 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .finish-page-add{width:100%;border:0;background:#e8e2de;color:#514a45;border-radius:12px;padding:11px;font-weight:800;margin-top:9px}
 .finish-page-empty{color:#948c86;font-size:12px;padding:7px 2px}
 .finish-page-no-rooms{background:#fff;border-radius:16px;padding:18px;color:#827a74}
+.finish-page-toolbar{display:flex;gap:8px;margin-bottom:12px}
+.finish-page-toolbar button{flex:1;border:0;border-radius:12px;padding:11px;background:#e8e2de;color:#514a45;font-weight:900}
+.finish-page-room-delete{border:0;background:transparent;color:#a49b95;font-size:12px;font-weight:800}
+
 @media(max-width:560px){.work-page-tabs{grid-template-columns:repeat(2,1fr)}}
 
 
 </style>
 </head>
-<body data-build="v0.8.1">
+<body data-build="v0.8.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -332,7 +336,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 const KEY="gencho-v03-data",SITES_KEY="gencho-sites-v1",CURRENT_SITE_KEY="gencho-current-site-v1",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
 
 function makeSite(name=""){
-  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,rooms:[],status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,rooms:[],finishRooms:[],status:"active",createdAt:Date.now(),updatedAt:Date.now()}
 }
 function loadSites(){
   try{
@@ -606,6 +610,21 @@ const newSec=name=>({id:uid(),name,product:"",repeat:"",measures:[blank()]});
 const FINISH_TYPES=["CF","フロアタイル","ソフト巾木","リアテック","ダイノック","その他床材"];
 const newFinishMaterial=(type,kind=type,page=finishPageFromKind(kind))=>({id:uid(),type,kind,page,product:"",area:"",orderQty:"",saleMode:"case",caseSqm:"",pieces:"",qty:"",unit:"m",itemName:"",orderCuts:[],caseMeters:""});
 const newRoom=name=>({id:uid(),name,sections:[],finishMaterials:[],memo:""});
+const newFinishRoom=name=>({id:uid(),name,finishMaterials:[],memo:""});
+function ensureFinishRooms(siteObj=state){
+  if(!Array.isArray(siteObj.finishRooms))siteObj.finishRooms=[];
+  siteObj.finishRooms.forEach(r=>{
+    if(!Array.isArray(r.finishMaterials))r.finishMaterials=[];
+    r.finishMaterials.forEach(x=>{
+      if(!x.kind)x.kind=FINISH_TYPES.includes(x.type)?x.type:"その他床材";
+      if(!x.page)x.page=finishPageFromKind(x.kind);
+      if(!Array.isArray(x.orderCuts))x.orderCuts=[];
+      if(x.caseMeters==null)x.caseMeters="";
+    });
+    if(typeof r.memo!=="string")r.memo="";
+  });
+}
+
 function ensureRoomExtras(r){
   if(!r)return;
   if(!Array.isArray(r.finishMaterials))r.finishMaterials=[];
@@ -648,7 +667,11 @@ function finishProductCandidates(type,current=""){
   finishRecentProducts.filter(x=>x.type===type).forEach(x=>add(x.product));
   finishSavedProducts.filter(x=>x.type===type).forEach(x=>add(x.product));
   (state?.rooms||[]).forEach(r=>(r.finishMaterials||[]).filter(x=>x.type===type).forEach(x=>add(x.product)));
-  [...(sites||[])].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(s=>(s.rooms||[]).forEach(r=>(r.finishMaterials||[]).filter(x=>x.type===type).forEach(x=>add(x.product))));
+  (state?.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).filter(x=>x.type===type).forEach(x=>add(x.product)));
+  [...(sites||[])].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(s=>{
+    (s.rooms||[]).forEach(r=>(r.finishMaterials||[]).filter(x=>x.type===type).forEach(x=>add(x.product)));
+    (s.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).filter(x=>x.type===type).forEach(x=>add(x.product)));
+  });
   return out.slice(0,8);
 }
 function rememberFinishItem(name){
@@ -1009,6 +1032,25 @@ function renderFinishArea(card,r){
 function workPageLabel(page){
   return page==="floor"?"床":page==="sheet"?"シート":"その他仕上げ材";
 }
+function finishRoomCandidates(){
+  const out=[],seen=new Set(),add=n=>{n=String(n||"").trim();if(!n||seen.has(n))return;seen.add(n);out.push(n)};
+  roomOrder.forEach(add);
+  (state.rooms||[]).forEach(r=>add(r.name));
+  (state.finishRooms||[]).forEach(r=>add(r.name));
+  return out;
+}
+function addFinishRoomForPage(page){
+  ensureFinishRooms(state);
+  const choices=finishRoomCandidates();
+  let msg="部屋名を入力";
+  if(choices.length)msg+="\n\n候補例："+choices.slice(0,8).join(" / ");
+  const n=prompt(msg,"");
+  if(n===null)return;
+  const name=n.trim();if(!name)return;
+  let fr=state.finishRooms.find(r=>r.name===name);
+  if(!fr){fr=newFinishRoom(name);state.finishRooms.push(fr)}
+  save();renderFinishPage();
+}
 function openFinishSheetForRoom(roomId,page){
   finishTargetRoomId=roomId;
   activeFinishPage=page;
@@ -1025,19 +1067,40 @@ function renderFinishPage(){
   area.innerHTML="";
   const page=activeWorkPage;
   if(!["floor","sheet","other"].includes(page))return;
-  if(!state.rooms.length){
-    area.innerHTML='<div class="finish-page-no-rooms">クロスページの「＋」から部屋を追加してください</div>';
+  ensureFinishRooms(state);
+
+  const toolbar=document.createElement("div");
+  toolbar.className="finish-page-toolbar";
+  toolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';
+  toolbar.querySelector("button").onclick=()=>addFinishRoomForPage(page);
+  area.appendChild(toolbar);
+
+  const shown=state.finishRooms.filter(r=>{
+    const items=r.finishMaterials||[];
+    if(!items.length)return true;
+    return items.some(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
+  });
+
+  if(!shown.length){
+    const empty=document.createElement("div");empty.className="finish-page-no-rooms";
+    empty.textContent=`「＋ 部屋を追加」から${workPageLabel(page)}を施工する部屋を追加してください`;
+    area.appendChild(empty);
     return;
   }
-  state.rooms.forEach(r=>{
-    ensureRoomExtras(r);
-    const items=r.finishMaterials.filter(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
+
+  shown.forEach(r=>{
+    const items=(r.finishMaterials||[]).filter(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
     const card=document.createElement("div");card.className="finish-page-room";
-    card.innerHTML=`<div class="finish-page-room-head"><h2>${esc(r.name)}</h2></div><div class="finish-page-list"></div><button type="button" class="finish-page-add">＋ ${esc(workPageLabel(page))}を追加</button>`;
+    card.innerHTML=`<div class="finish-page-room-head"><h2>${esc(r.name)}</h2><button type="button" class="finish-page-room-delete">部屋を削除</button></div><div class="finish-page-list"></div><button type="button" class="finish-page-add">＋ ${esc(workPageLabel(page))}を追加</button>`;
     const list=card.querySelector(".finish-page-list");
-    if(!items.length)list.innerHTML=`<div class="finish-page-empty">${esc(workPageLabel(page))}の情報はまだありません</div>`;
+    if(!items.length)list.innerHTML=`<div class="finish-page-empty">${esc(workPageLabel(page))}の材料を選択してください</div>`;
     items.forEach(item=>list.appendChild(renderFinishMaterial(r,item)));
     card.querySelector(".finish-page-add").onclick=()=>openFinishSheetForRoom(r.id,page);
+    card.querySelector(".finish-page-room-delete").onclick=()=>{
+      if(!confirm(`「${r.name}」を仕上げ材ページから削除しますか？`))return;
+      state.finishRooms=state.finishRooms.filter(x=>x.id!==r.id);
+      save();renderFinishPage();
+    };
     area.appendChild(card);
   });
 }
@@ -1739,7 +1802,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"0.8.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"0.8.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -1782,12 +1845,12 @@ function importBackupData(obj){
   saveList(ROOM_MASTER_KEY,savedRooms);saveList(ROOM_DELETED_KEY,deletedRooms);saveRoomOrder();
   saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();
   saveList(PRODUCT_MASTER_KEY,savedProducts);
-  state=sites.find(s=>s.id===obj.currentSiteId)||sites[0];currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;
+  state=sites.find(s=>s.id===obj.currentSiteId)||sites[0];ensureFinishRooms(state);currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;
   localStorage.setItem(SITES_KEY,JSON.stringify(sites));localStorage.setItem(CURRENT_SITE_KEY,state.id);localStorage.setItem(KEY,JSON.stringify(state));
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){(state.rooms||[]).forEach(ensureRoomExtras);$("#siteName").value=state.siteName||"";if(activeWorkPage==="wall"){renderTabs();renderRoom()}else{renderFinishPage()}buildCalc()}
+function render(){(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);$("#siteName").value=state.siteName||"";if(activeWorkPage==="wall"){renderTabs();renderRoom()}else{renderFinishPage()}buildCalc()}
 
 
 
@@ -1861,7 +1924,7 @@ function renderFinishChoices(){
     if(!manageFinishes){
       const pick=e=>{
         e.preventDefault();e.stopPropagation();
-        const r=state.rooms.find(x=>x.id===finishTargetRoomId)||room();if(!r)return;
+        const r=(state.finishRooms||[]).find(x=>x.id===finishTargetRoomId);if(!r)return;
         ensureRoomExtras(r);
         r.finishMaterials.push(newFinishMaterial(choice.label,choice.kind,choice.page||activeFinishPage));
         save();
