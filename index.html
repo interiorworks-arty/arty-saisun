@@ -159,7 +159,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v0.5.4">
+<body data-build="v0.5.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">現場PDF</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -186,7 +186,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     <button type="button" data-key="1">1</button>
     <button type="button" data-key="2">2</button>
     <button type="button" data-key="3">3</button>
-    <button type="button" data-key="back">×</button>
+    <button type="button" data-key="back">⌫</button>
 
     <button type="button" data-key="4">4</button>
     <button type="button" data-key="5">5</button>
@@ -396,11 +396,74 @@ function applyProductKeypadLayout(){const kp=$("#productKeypad");if(!kp)return;i
 function saveProductKeypadLayout(){const kp=$("#productKeypad");if(!kp)return;const r=kp.getBoundingClientRect();productKeypadLayout={left:r.left,top:r.top,width:r.width};localStorage.setItem(PRODUCT_KEYPAD_PREF_KEY,JSON.stringify(productKeypadLayout))}
 function setProductKeypadFreePosition(){const kp=$("#productKeypad");if(!kp)return null;const r=kp.getBoundingClientRect();kp.style.transform="none";kp.style.bottom="auto";kp.style.left=r.left+"px";kp.style.top=r.top+"px";return r}
 function renderProductLetters(){[["productRowQwerty","QWERTYUIOP"],["productRowHome","ASDFGHJKL"],["productRowBottom","ZXCVBNM"]].forEach(([id,letters])=>{const row=document.getElementById(id);row.innerHTML="";[...letters].forEach(ch=>{const b=document.createElement("button");b.type="button";const shown=productUpper?ch:ch.toLowerCase();b.textContent=shown;b.dataset.pkey=shown;row.appendChild(b)})});$("#productShift")?.classList.toggle("active",productUpper)}
-function rememberRecentProduct(value){const v=String(value||"").trim();if(!v)return;recentProducts=[v,...recentProducts.filter(x=>String(x).toLowerCase()!==v.toLowerCase())].slice(0,12);saveList(RECENT_PRODUCT_KEY,recentProducts)}
-function renderRecentProductCandidates(){const box=$("#recentProductCandidates"),wrap=$("#recentProductWrap");if(!box||!wrap)return;const q=String(activeProductSection?.product||"").trim().toLowerCase();let list=recentProducts.filter(Boolean);if(q){const matches=list.filter(x=>String(x).toLowerCase().includes(q));if(matches.length)list=matches}list=list.slice(0,6);box.innerHTML="";wrap.style.display=list.length?"block":"none";list.forEach(v=>{const b=document.createElement("button");b.type="button";b.className="recent-product-chip";b.textContent=v;b.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();if(!activeProductSection)return;activeProductSection.product=v;syncProductButton();rememberRecentProduct(v);hideProductKeypad()});box.appendChild(b)})}
+function rememberRecentProduct(value){
+  const v=String(value||"").trim();
+  if(!v)return;
+  recentProducts=[v,...recentProducts.filter(x=>String(x).toLowerCase()!==v.toLowerCase())].slice(0,20);
+  saveList(RECENT_PRODUCT_KEY,recentProducts);
+}
+function collectUsedProducts(){
+  const out=[],seen=new Set();
+  const add=v=>{
+    v=String(v||"").trim();
+    if(!v)return;
+    const key=v.toLowerCase();
+    if(seen.has(key))return;
+    seen.add(key);
+    out.push(v);
+  };
+  recentProducts.forEach(add);
+
+  // 現在の現場を優先して、すでに入力済みの未登録品番も候補にする
+  (state?.rooms||[]).forEach(r=>(r.sections||[]).forEach(sec=>{
+    if(sec!==activeProductSection)add(sec.product);
+  }));
+
+  // 過去の現場で使った品番も候補にする（更新が新しい現場を優先）
+  [...(sites||[])].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(site=>{
+    (site.rooms||[]).forEach(r=>(r.sections||[]).forEach(sec=>{
+      if(sec!==activeProductSection)add(sec.product);
+    }));
+  });
+  return out;
+}
+function renderRecentProductCandidates(){
+  const box=$("#recentProductCandidates"),wrap=$("#recentProductWrap");
+  if(!box||!wrap)return;
+  const q=String(activeProductSection?.product||"").trim().toLowerCase();
+  let list=collectUsedProducts();
+
+  if(q){
+    list=list.filter(x=>{
+      const s=String(x).toLowerCase();
+      return s!==q && s.includes(q);
+    });
+  }
+
+  list=list.slice(0,8);
+  box.innerHTML="";
+  wrap.style.display=list.length?"block":"none";
+
+  list.forEach(v=>{
+    const b=document.createElement("button");
+    b.type="button";
+    b.className="recent-product-chip";
+    b.textContent=v;
+    b.addEventListener("pointerdown",e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      if(!activeProductSection)return;
+      activeProductSection.product=v;
+      syncProductButton();
+      rememberRecentProduct(v);
+      hideProductKeypad();
+    });
+    box.appendChild(b);
+  });
+}
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
 function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
-function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input")}
+function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
 
 
@@ -619,8 +682,8 @@ function createNewSite(name=""){
 }
 
 function room(){return state.rooms.find(r=>r.id===activeRoom)}
-function parse(v){let s=String(v||"").trim().replace(/\s/g,"").replace(/[＊※*]/g,"*").replace(/[×xX]/g,"-"),star=s.endsWith("*");if(star)s=s.slice(0,-1);let m=s.match(/^(\d+(?:\.\d+)?)-(\d+)$/);if(!m)return null;let len=+m[1],qty=+m[2];return len>0&&qty>0?{len,qty,star}:null}
-function calc(v,rep){let p=parse(v);if(!p)return null;let r=+rep||0,noneCm=p.len*p.qty,each=p.len;if(r>0)each=p.star?p.len+r:Math.ceil(p.len/r)*r;return {...p,r,each,noneM:noneCm/100,withM:each*p.qty/100}}
+function parse(v){let s=String(v||"").trim().replace(/\s/g,"").replace(/[＊※*]/g,"*").replace(/[×xX]/g,"-");const tail=s.match(/\*+$/);const starCount=tail?tail[0].length:0;if(starCount)s=s.slice(0,-starCount);let m=s.match(/^(\d+(?:\.\d+)?)-(\d+)$/);if(!m)return null;let len=+m[1],qty=+m[2];return len>0&&qty>0?{len,qty,star:starCount>0,starCount}:null}
+function calc(v,rep){let p=parse(v);if(!p)return null;let r=+rep||0,noneCm=p.len*p.qty,each=p.len;if(r>0)each=p.starCount>0?p.len+r*p.starCount:Math.ceil(p.len/r)*r;return {...p,r,each,noneM:noneCm/100,withM:each*p.qty/100}}
 const fmt=n=>(Math.round((n+Number.EPSILON)*100)/100).toFixed(2)+"m",esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function ensure(sec){if(!sec.measures.length)sec.measures.push(blank());if(sec.measures.at(-1).value.trim())sec.measures.push(blank())}
 function secTotals(sec){let none=0,withR=0;sec.measures.forEach(m=>{let c=calc(m.value,sec.repeat);if(c){none+=c.noneM;withR+=c.withM}});return{none,withR}}
@@ -792,7 +855,7 @@ function sectionMetaText(sec){
   const bits=[];
   if(sec.product&&sec.product.trim())bits.push(sec.product.trim());
   if(sec.repeat)bits.push(`↕${sec.repeat}`);
-  if(sec.measures.some(m=>String(m.value||"").includes("*")))bits.push("1柄伸ばしあり");
+  if(sec.measures.some(m=>String(m.value||"").includes("*")))bits.push("柄伸ばしあり");
   return bits.join("　");
 }
 function drawRepeatIcon(ctx,x,y,size=16,color="#665f59"){
