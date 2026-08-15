@@ -1,4 +1,4 @@
-const CACHE="gencho-v110-20260816-memo-page";
+const CACHE="gencho-v120-20260816-selectable-exports";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
