@@ -265,9 +265,15 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 #nativeProductSheet .sheet{max-width:620px}
 #nativeProductInput{width:100%;box-sizing:border-box;font-size:20px;padding:14px;border:1px solid #d9d2cd;border-radius:12px;background:#fff;color:var(--ink)}
+
+.keypad-cursor-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
+.keypad-cursor-row button,.product-cursor-row button{background:#e4dfdb!important}
+.edit-caret{display:inline-block;width:2px;height:1.12em;background:currentColor;vertical-align:-.12em;margin:0 1px;animation:caretBlink 1s steps(1) infinite}
+@keyframes caretBlink{50%{opacity:0}}
+.product-button.active-input,.measure-input.active-input,.repeat-button.active-input,.finish-num-button.active-input{outline:2px solid #8d837b;outline-offset:1px}
 </style>
 </head>
-<body data-build="v1.2.7">
+<body data-build="v1.2.8">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -318,7 +324,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     <button type="button" data-key="4">4</button>
     <button type="button" data-key="5">5</button>
     <button type="button" data-key="6">6</button>
-    <button type="button" style="visibility:hidden"> </button>
+    <button type="button" data-key=".">.</button>
 
     <button type="button" data-key="7">7</button>
     <button type="button" data-key="8">8</button>
@@ -328,6 +334,10 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     <button type="button" data-key="*">＊</button>
     <button type="button" data-key="0">0</button>
     <button type="button" data-key="-">−</button>
+  </div>
+  <div class="keypad-cursor-row">
+    <button type="button" data-key="left">◀</button>
+    <button type="button" data-key="right">▶</button>
   </div>
   <div class="keypad-resize" id="keypadResizeHandle" aria-label="テンキーのサイズ変更"></div>
 </div>
@@ -340,6 +350,10 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   <div class="product-key-row" id="productRowQwerty"></div>
   <div class="product-key-row offset1" id="productRowHome"></div>
   <div class="product-key-row offset2" id="productRowBottom"></div>
+  <div class="product-key-row product-cursor-row">
+    <button data-pkey="left">◀</button>
+    <button data-pkey="right">▶</button>
+  </div>
   <div class="product-key-row">
     <button class="key-shift active" id="productShift" data-pkey="shift">⇧</button>
     <button data-pkey="(">（</button>
@@ -626,7 +640,7 @@ function registerProduct(product,repeat){
   saveList(PRODUCT_MASTER_KEY,savedProducts);saveList(RECENT_PRODUCT_KEY,recentProducts); return true;
 }
 
-let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,keypadMode="measure";
+let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,keypadMode="measure",numberCursor=0,productCursor=0;
 
 const KEYPAD_PREF_KEY="gencho-keypad-layout-v1";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
@@ -709,9 +723,51 @@ function renderRecentProductCandidates(){
     box.appendChild(b);
   });
 }
-function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
-function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
-function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
+
+function cursorFromPointer(el,text,e){
+  const s=String(text||"");
+  if(!e||!el||!s.length)return s.length;
+  const r=el.getBoundingClientRect();
+  const x=Math.max(0,Math.min(r.width,e.clientX-r.left));
+  return Math.max(0,Math.min(s.length,Math.round((x/Math.max(1,r.width))*s.length)));
+}
+function caretHtml(value,pos,placeholder=""){
+  const s=String(value||"");
+  const p=Math.max(0,Math.min(s.length,Number(pos)||0));
+  if(!s)return `<span class="edit-caret"></span>${placeholder?`<span style="opacity:.55">${esc(placeholder)}</span>`:""}`;
+  return `${esc(s.slice(0,p))}<span class="edit-caret"></span>${esc(s.slice(p))}`;
+}
+function insertAtCursor(value,pos,ch){
+  const s=String(value||""),p=Math.max(0,Math.min(s.length,pos));
+  return {value:s.slice(0,p)+ch+s.slice(p),cursor:p+ch.length};
+}
+function backspaceAtCursor(value,pos){
+  const s=String(value||""),p=Math.max(0,Math.min(s.length,pos));
+  if(p<=0)return {value:s,cursor:p};
+  return {value:s.slice(0,p-1)+s.slice(p),cursor:p-1};
+}
+function renderProductCursor(){
+  if(!activeProductButton||!activeProductSection)return;
+  activeProductButton.innerHTML=caretHtml(activeProductSection.product,productCursor,"品番");
+  activeProductButton.classList.toggle("empty",!activeProductSection.product);
+}
+function renderNumberCursor(){
+  if(keypadMode==="measure"&&activeMeasureInput&&activeMeasureModel){
+    activeMeasureInput.innerHTML=caretHtml(activeMeasureModel.value,numberCursor,activeMeasureInput.dataset.placeholder||"");
+    return;
+  }
+  if(keypadMode==="repeat"&&activeRepeatButton&&activeRepeatSection){
+    activeRepeatButton.innerHTML=caretHtml(activeRepeatSection.repeat,numberCursor,"リピート");
+    activeRepeatButton.classList.toggle("empty",!activeRepeatSection.repeat);
+    return;
+  }
+  if(keypadMode==="generic"&&activeGenericInput&&activeGenericObject&&activeGenericKey){
+    activeGenericInput.innerHTML=caretHtml(activeGenericObject[activeGenericKey],numberCursor,activeGenericInput.dataset.placeholder||"");
+  }
+}
+function syncProductButton(){if(!activeProductButton||!activeProductSection)return;renderProductCursor();const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
+function showProductKeypad(btn,sec,e=null){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;productCursor=cursorFromPointer(btn,sec.product,e);document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();renderProductCursor();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);if(activeProductButton&&activeProductSection){activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product)}const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 let nativeProductTarget=null,nativeProductButton=null;
 function openNativeProductInput(){
   if(!activeProductSection)return;
@@ -740,8 +796,20 @@ function closeNativeProductInput(apply=false){
   }
   nativeProductTarget=null;nativeProductButton=null;
 }
-function productKeyPress(key){if(!activeProductSection)return;if(key==="native"){openNativeProductInput();return}if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(key==="space"){activeProductSection.product=(activeProductSection.product||"")+" ";syncProductButton();return}if(/^[A-Za-z0-9()\-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
-
+function productKeyPress(key){
+  if(!activeProductSection)return;
+  let v=String(activeProductSection.product||"");
+  if(key==="native"){openNativeProductInput();return}
+  if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}
+  if(key==="done"){rememberRecentProduct(v);hideProductKeypad();return}
+  if(key==="left"){productCursor=Math.max(0,productCursor-1);renderProductCursor();return}
+  if(key==="right"){productCursor=Math.min(v.length,productCursor+1);renderProductCursor();return}
+  if(key==="back"){const x=backspaceAtCursor(v,productCursor);activeProductSection.product=x.value;productCursor=x.cursor;syncProductButton();return}
+  let ch=null;
+  if(key==="space")ch=" ";
+  else if(/^[A-Za-z0-9()\-]$/.test(key))ch=key;
+  if(ch!==null){const x=insertAtCursor(v,productCursor,ch);activeProductSection.product=x.value;productCursor=x.cursor;syncProductButton()}
+}
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
 function applyKeypadLayout(){
@@ -881,10 +949,10 @@ function finishItemCandidates(current=""){
 function setNumberKeypadSpecial(mode){
   const star=$("#measureKeypad")?.querySelector('[data-key="*"]');
   const minus=$("#measureKeypad")?.querySelector('[data-key="-"]');
-  if(star){star.textContent=mode==="generic"?".":"＊";star.style.visibility="visible"}
-  if(minus){minus.textContent="−";minus.style.visibility=mode==="generic"?"hidden":"visible"}
+  if(star){star.textContent="＊";star.style.visibility=mode==="measure"?"visible":"hidden"}
+  if(minus){minus.textContent="−";minus.style.visibility=mode==="measure"?"visible":"hidden"}
 }
-function showMeasureKeypad(inp,model,sec,list,row){hideProductKeypad();
+function showMeasureKeypad(inp,model,sec,list,row,e=null){hideProductKeypad();
   keypadMode="measure";setNumberKeypadSpecial("measure");
   activeRepeatButton=null;activeRepeatSection=null;
   document.querySelectorAll(".measure-row.active-row").forEach(el=>el.classList.remove("active-row"));
@@ -893,31 +961,34 @@ function showMeasureKeypad(inp,model,sec,list,row){hideProductKeypad();
   activeMeasureModel=model;
   activeMeasureSection=sec;
   activeMeasureList=list;
-  activeMeasureRow=row; row?.classList.add("active-row"); inp?.classList.add("active-input");
+  activeMeasureRow=row; row?.classList.add("active-row"); inp?.classList.add("active-input");numberCursor=cursorFromPointer(inp,model.value,e);renderNumberCursor();
   $("#keypadLabel").textContent="寸法入力"; const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
-function showRepeatKeypad(btn,sec){hideProductKeypad();
+function showRepeatKeypad(btn,sec,e=null){hideProductKeypad();
   keypadMode="repeat";setNumberKeypadSpecial("measure");
-  activeRepeatButton=btn;activeRepeatSection=sec;
+  activeRepeatButton=btn;activeRepeatSection=sec;numberCursor=cursorFromPointer(btn,sec.repeat,e);btn.classList.add("active-input");renderNumberCursor();
   $("#keypadLabel").textContent="リピート入力";
   const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
-function showGenericNumberKeypad(inp,obj,key,label="数量入力",onUpdate=null){
+function showGenericNumberKeypad(inp,obj,key,label="数量入力",onUpdate=null,e=null){
   hideProductKeypad();
   keypadMode="generic";setNumberKeypadSpecial("generic");
-  activeGenericInput=inp;activeGenericObject=obj;activeGenericKey=key;activeGenericUpdate=onUpdate;
+  activeGenericInput=inp;activeGenericObject=obj;activeGenericKey=key;activeGenericUpdate=onUpdate;numberCursor=cursorFromPointer(inp,obj[key],e);inp?.classList.add("active-input");renderNumberCursor();
   $("#keypadLabel").textContent=label;
   const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
 function syncGenericNumber(){
   if(!activeGenericInput||!activeGenericObject||!activeGenericKey)return;
-  activeGenericInput.textContent=activeGenericObject[activeGenericKey]||"";
+  renderNumberCursor();
   save();if(typeof activeGenericUpdate==="function")activeGenericUpdate();
 }
 function hideMeasureKeypad(){
+  if(activeMeasureInput&&activeMeasureModel){renderMeasureButton(activeMeasureInput,activeMeasureModel.value,activeMeasureInput.dataset.placeholder||"");activeMeasureInput.classList.remove("active-input")}
+  if(activeRepeatButton&&activeRepeatSection){activeRepeatButton.textContent=activeRepeatSection.repeat||"リピート";activeRepeatButton.classList.toggle("empty",!activeRepeatSection.repeat);activeRepeatButton.classList.remove("active-input")}
+  if(activeGenericInput&&activeGenericObject&&activeGenericKey){activeGenericInput.textContent=activeGenericObject[activeGenericKey]||activeGenericInput.dataset.placeholder||"";activeGenericInput.classList.remove("active-input")}
   const kp=$("#measureKeypad");
   if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}
 }
@@ -944,7 +1015,7 @@ function syncActiveMeasure(){
     .replace(/[×xX]/g,"-")
     .replace(/[^\d.*-]/g,"");
   activeMeasureInput.value=activeMeasureModel.value;
-  renderMeasureButton(activeMeasureInput,activeMeasureModel.value,activeMeasureInput.dataset.placeholder||"");
+  renderNumberCursor();
   activeMeasureInput.classList.toggle("empty",!activeMeasureModel.value);
   if(activeMeasureRow&&activeMeasureSection&&activeMeasureList){
     const drag=activeMeasureRow.querySelector(".measure-drag");
@@ -983,67 +1054,67 @@ function keypadPress(key){
     if(!activeGenericObject||!activeGenericKey)return;
     let v=String(activeGenericObject[activeGenericKey]||"");
     if(key==="enter"){hideMeasureKeypad();return}
-    if(key==="back")v=v.slice(0,-1);
-    else if(key==="*"){if(!v.includes("."))v+=(v?".":"0.");}
-    else if(/^\d$/.test(key))v+=key;
+    if(key==="left"){numberCursor=Math.max(0,numberCursor-1);renderNumberCursor();return}
+    if(key==="right"){numberCursor=Math.min(v.length,numberCursor+1);renderNumberCursor();return}
+    if(key==="back"){const x=backspaceAtCursor(v,numberCursor);v=x.value;numberCursor=x.cursor}
+    else if(key==="."){
+      if(!v.includes(".")){const x=insertAtCursor(v,numberCursor,v?"." :"0.");v=x.value;numberCursor=x.cursor}
+    }else if(/^\d$/.test(key)){const x=insertAtCursor(v,numberCursor,key);v=x.value;numberCursor=x.cursor}
     else return;
-    activeGenericObject[activeGenericKey]=v;
-    syncGenericNumber();
-    return;
+    activeGenericObject[activeGenericKey]=v;syncGenericNumber();return;
   }
+
   if(keypadMode==="repeat"){
     if(!activeRepeatButton||!activeRepeatSection)return;
+    let v=String(activeRepeatSection.repeat||"");
     if(key==="enter"){hideMeasureKeypad();return}
-    if(key==="back"){
-      activeRepeatSection.repeat=String(activeRepeatSection.repeat||"").slice(0,-1);
-    }else if(/^\d$/.test(key)){
-      activeRepeatSection.repeat=String(activeRepeatSection.repeat||"")+key;
-    }else{
-      return;
-    }
-    activeRepeatButton.textContent=activeRepeatSection.repeat||"リピート";
-    activeRepeatButton.classList.toggle("empty",!activeRepeatSection.repeat);
-    save();live();return;
+    if(key==="left"){numberCursor=Math.max(0,numberCursor-1);renderNumberCursor();return}
+    if(key==="right"){numberCursor=Math.min(v.length,numberCursor+1);renderNumberCursor();return}
+    if(key==="back"){const x=backspaceAtCursor(v,numberCursor);v=x.value;numberCursor=x.cursor}
+    else if(key==="."){
+      if(!v.includes(".")){const x=insertAtCursor(v,numberCursor,v?"." :"0.");v=x.value;numberCursor=x.cursor}
+    }else if(/^\d$/.test(key)){const x=insertAtCursor(v,numberCursor,key);v=x.value;numberCursor=x.cursor}
+    else return;
+    activeRepeatSection.repeat=v;renderNumberCursor();save();live();return;
   }
 
   if(!activeMeasureInput||!activeMeasureModel)return;
+  let v=String(activeMeasureModel.value||"");
   if(key==="enter"){moveToNextMeasure();return}
+  if(key==="left"){numberCursor=Math.max(0,numberCursor-1);renderNumberCursor();return}
+  if(key==="right"){numberCursor=Math.min(v.length,numberCursor+1);renderNumberCursor();return}
+
   if(key==="back"){
-    if(activeMeasureInput.value.length){
-      activeMeasureInput.value=activeMeasureInput.value.slice(0,-1);
-      syncActiveMeasure();
+    const x=backspaceAtCursor(v,numberCursor);v=x.value;numberCursor=x.cursor;
+    activeMeasureInput.value=v;syncActiveMeasure();
 
-      // ×で最後の1文字まで消したら、余分な空欄行はそのまま残さず削除する。
-      // ただし区分内に1行しかない場合は、次の入力用として空欄行を1つ残す。
-      if(!activeMeasureModel.value && activeMeasureSection && activeMeasureList && activeMeasureRow && activeMeasureSection.measures.length>1){
-        const currentIndex=activeMeasureSection.measures.findIndex(x=>x.id===activeMeasureModel.id);
-        const nextIndex=currentIndex < activeMeasureSection.measures.length-1 ? currentIndex+1 : currentIndex-1;
-        const nextModel=activeMeasureSection.measures[nextIndex];
-
-        activeMeasureSection.measures=activeMeasureSection.measures.filter(x=>x.id!==activeMeasureModel.id);
-        activeMeasureRow.remove();
-        save();
-        live();
-
-        if(nextModel){
-          const nextRow=activeMeasureList.querySelector(`[data-mid="${nextModel.id}"]`);
-          const nextInput=nextRow?.querySelector(".measure-input");
-          if(nextInput && nextRow){
-            showMeasureKeypad(nextInput,nextModel,activeMeasureSection,activeMeasureList,nextRow);
-          }
-        }
+    if(!activeMeasureModel.value && activeMeasureSection && activeMeasureList && activeMeasureRow && activeMeasureSection.measures.length>1){
+      const currentIndex=activeMeasureSection.measures.findIndex(x=>x.id===activeMeasureModel.id);
+      const nextIndex=currentIndex < activeMeasureSection.measures.length-1 ? currentIndex+1 : currentIndex-1;
+      const nextModel=activeMeasureSection.measures[nextIndex];
+      activeMeasureSection.measures=activeMeasureSection.measures.filter(x=>x.id!==activeMeasureModel.id);
+      activeMeasureRow.remove();save();live();
+      if(nextModel){
+        const nextRow=activeMeasureList.querySelector(`[data-mid="${nextModel.id}"]`);
+        const nextInput=nextRow?.querySelector(".measure-input");
+        if(nextInput&&nextRow)showMeasureKeypad(nextInput,nextModel,activeMeasureSection,activeMeasureList,nextRow);
       }
     }
     return;
   }
+
+  let ch=null;
   if(key==="-"){
-    if(!activeMeasureInput.value.includes("-") && activeMeasureInput.value.length) activeMeasureInput.value+="-";
+    if(!v.includes("-")&&v.length)ch="-";
   }else if(key==="*"){
-    if(activeMeasureInput.value) activeMeasureInput.value+="*";
-  }else{
-    activeMeasureInput.value+=key;
+    if(v.length)ch="*";
+  }else if(key==="."){
+    const before=v.slice(0,numberCursor),segment=before.includes("-")?v.split("-")[1]||"":v.split("-")[0]||"";
+    if(!segment.includes("."))ch=".";
+  }else if(/^\d$/.test(key))ch=key;
+  if(ch!==null){
+    const x=insertAtCursor(v,numberCursor,ch);activeMeasureInput.value=x.value;numberCursor=x.cursor;syncActiveMeasure();
   }
-  syncActiveMeasure();
 }
 
 function persistSites(){
@@ -1159,8 +1230,8 @@ function renderFinishMaterial(r,item){
   };
 
   const prod=d.querySelector(".finish-product-button");
-  prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,item)};
-  prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,item)};
+  prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,item,e)};
+  prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,item,e)};
   d.querySelector(".register-product").onclick=()=>{if(registerFinishProduct(item.type,item.product)){alert("品番を登録しました");render()}};
   renderFinishSuggestions(d.querySelector(".product-suggestions"),item,"product");
 
@@ -1176,8 +1247,8 @@ function renderFinishMaterial(r,item){
     const b=d.querySelector(sel);if(!b)return;
     const refresh=()=>{b.textContent=item[key]||b.dataset.placeholder||"";if(cb)cb()};
     b.dataset.placeholder=b.textContent;
-    b.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(b,item,key,label,()=>{refresh()})};
-    b.onclick=e=>{e.preventDefault();showGenericNumberKeypad(b,item,key,label,()=>{refresh()})};
+    b.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(b,item,key,label,()=>{refresh()},e)};
+    b.onclick=e=>{e.preventDefault();showGenericNumberKeypad(b,item,key,label,()=>{refresh()},e)};
   };
   num(".area","area","施工数量");
   num(".qty","qty","数量",()=>{const x=d.querySelector(".base-case-result");if(x)x.textContent=finishBaseCases(item)||"—"});
@@ -1203,11 +1274,11 @@ function renderFinishMaterial(r,item){
         if(!cut.lengthUnit)cut.lengthUnit="m";if(!cut.countUnit)cut.countUnit="本";
         row.innerHTML=`<button type="button" class="num-btn len">${esc(cut.length||"寸法")}</button><button type="button" class="length-unit">${esc(cut.lengthUnit||"m")}</button><span class="op">×</span><button type="button" class="num-btn count">${esc(cut.count||"数量")}</button><button type="button" class="cut-unit">${esc(cut.countUnit||"本")}</button><button type="button" class="remove-order">×</button>`;
         const lb=row.querySelector(".len"),lub=row.querySelector(".length-unit"),cb=row.querySelector(".count"),ub=row.querySelector(".cut-unit");
-        lb.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()})};
-        lb.onclick=e=>{e.preventDefault();showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()})};
+        lb.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()},e)};
+        lb.onclick=e=>{e.preventDefault();showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()},e)};
         lub.onclick=()=>openUnitSheet(cut,"lengthUnit",()=>{lub.textContent=cut.lengthUnit||"m";save();renderOrders()});
-        cb.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()})};
-        cb.onclick=e=>{e.preventDefault();showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()})};
+        cb.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()},e)};
+        cb.onclick=e=>{e.preventDefault();showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()},e)};
         ub.onclick=()=>openUnitSheet(cut,"countUnit",()=>{ub.textContent=cut.countUnit||"本";save();renderOrders()});
         row.querySelector(".remove-order").onclick=()=>{item.orderCuts=item.orderCuts.filter(x=>x.id!==cut.id);save();renderOrders()};
         list.appendChild(row);
@@ -1558,9 +1629,9 @@ function addMeasureRowGlobal(sec,m,i,list){
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
-  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
+  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
   inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
-  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
+  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊※]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;renderMeasureButton(inp,m.value,inp.dataset.placeholder||"");drag.classList.toggle("hidden",!m.value);if(m.value)bindMeasureDrag(drag,row,sec,m);save();live()
@@ -1574,9 +1645,9 @@ function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.
 let cat=d.querySelector(".category"),prod=d.querySelector(".product"),rep=d.querySelector(".repeat");
 cat.onclick=()=>openSectionSheetForEdit(sec);
 cat.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openSectionSheetForEdit(sec)}};
-prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,sec)};
-prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,sec)};
-rep.onclick=()=>showRepeatKeypad(rep,sec);
+prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,sec,e)};
+prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,sec,e)};
+rep.onclick=e=>showRepeatKeypad(rep,sec,e);
 d.querySelector(".pick-product").onclick=()=>openProductMaster(sec);
 d.querySelector(".save-product").onclick=()=>{if(registerProduct(sec.product,sec.repeat)){alert("品番とリピートを登録しました");render()}};
 
@@ -1588,9 +1659,9 @@ function addMeasureRow(m,i){
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
-  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
+  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
   inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
-  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row)});
+  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊※]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;
@@ -2384,7 +2455,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.2.7",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.2.8",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
