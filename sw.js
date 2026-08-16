@@ -1,4 +1,4 @@
-const CACHE="gencho-v130-20260816-measure-strict-nowrap";
+const CACHE="gencho-v131-20260816-repeat-focus-horizontal";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
