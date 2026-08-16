@@ -258,9 +258,12 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 
 .product-key-row .key-space{flex:2}
+
+#nativeProductSheet .sheet{max-width:620px}
+#nativeProductInput{width:100%;box-sizing:border-box;font-size:20px;padding:14px;border:1px solid #d9d2cd;border-radius:12px;background:#fff;color:var(--ink)}
 </style>
 </head>
-<body data-build="v1.2.2">
+<body data-build="v1.2.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -338,9 +341,20 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     <button data-pkey="(">（</button>
     <button data-pkey=")">）</button>
     <button class="key-space" data-pkey="space">空白</button>
+    <button data-pkey="native">日本語</button>
     <button class="key-done" data-pkey="done">完了</button>
   </div>
   <div class="product-keypad-resize" id="productKeypadResizeHandle"></div>
+</div>
+<div id="nativeProductSheet" class="menu">
+  <div class="sheet">
+    <div class="sheet-title-row"><h3>日本語入力</h3></div>
+    <input id="nativeProductInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="品番・商品名を入力">
+    <div class="sheet-actions">
+      <button id="cancelNativeProduct" class="cancel">戻る</button>
+      <button id="doneNativeProduct" class="primary2">反映</button>
+    </div>
+  </div>
 </div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 
@@ -666,7 +680,35 @@ function renderRecentProductCandidates(){
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
 function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
 function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
-function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(key==="space"){activeProductSection.product=(activeProductSection.product||"")+" ";syncProductButton();return}if(/^[A-Za-z0-9()\-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
+let nativeProductTarget=null,nativeProductButton=null;
+function openNativeProductInput(){
+  if(!activeProductSection)return;
+  nativeProductTarget=activeProductSection;nativeProductButton=activeProductButton;
+  const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}
+  const inp=$("#nativeProductInput");inp.value=String(nativeProductTarget.product||"");
+  $("#nativeProductSheet").classList.add("show");
+  inp.focus();try{inp.setSelectionRange(inp.value.length,inp.value.length)}catch{}
+}
+function closeNativeProductInput(apply=false){
+  const inp=$("#nativeProductInput");
+  if(apply&&nativeProductTarget){
+    nativeProductTarget.product=inp.value;
+    rememberRecentProduct(nativeProductTarget.product);
+    if(nativeProductButton){
+      nativeProductButton.textContent=nativeProductTarget.product||"品番";
+      nativeProductButton.classList.toggle("empty",!nativeProductTarget.product);
+    }
+    save();
+  }
+  $("#nativeProductSheet").classList.remove("show");
+  if(!apply&&nativeProductTarget&&nativeProductButton){
+    const kp=$("#productKeypad");if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+  }else{
+    activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null;
+  }
+  nativeProductTarget=null;nativeProductButton=null;
+}
+function productKeyPress(key){if(!activeProductSection)return;if(key==="native"){openNativeProductInput();return}if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(key==="space"){activeProductSection.product=(activeProductSection.product||"")+" ";syncProductButton();return}if(/^[A-Za-z0-9()\-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
 
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
@@ -1659,8 +1701,7 @@ function buildRoomImageCanvas(r,siteObj=state){
     height += sectionGap;
   });
   height += 140;
-  canvas.width=width;
-  canvas.height=height;
+  setupExportCanvas(canvas,ctx,width,height);
 
   ctx.fillStyle='#f5f3f0'; ctx.fillRect(0,0,width,height);
   const cardX=pad, cardY=pad, cardW=width-pad*2, cardH=height-pad*2, radius=28;
@@ -1731,13 +1772,19 @@ function buildRoomImageCanvas(r,siteObj=state){
   ctx.fillText(withLabel,sumX+sumW-24-withW,sumY+64);
   return canvas;
 }
+const EXPORT_RENDER_SCALE=2;
+function setupExportCanvas(canvas,ctx,width,height){
+  canvas.width=Math.round(width*EXPORT_RENDER_SCALE);
+  canvas.height=Math.round(height*EXPORT_RENDER_SCALE);
+  ctx.setTransform(EXPORT_RENDER_SCALE,0,0,EXPORT_RENDER_SCALE,0,0);
+}
 async function canvasToPngFile(canvas,fileName){
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   return new File([blob],fileName,{type:'image/png'});
 }
 
 async function canvasToJpegInfo(canvas){
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.94));
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.98));
   return {bytes:new Uint8Array(await blob.arrayBuffer()),width:canvas.width,height:canvas.height};
 }
 function concatUint8(parts){
@@ -1756,7 +1803,7 @@ function buildSiteTotalCanvas(siteObj=state){
   const width=1240,pad=70;
   const rooms=(siteObj.rooms||[]).filter(r=>r.sections?.some(s=>s.measures?.some(m=>String(m.value||"").trim())));
   const height=Math.max(900,300+rooms.length*70+180);
-  const c=document.createElement("canvas");c.width=width;c.height=height;const ctx=c.getContext("2d");
+  const c=document.createElement("canvas");const ctx=c.getContext("2d");setupExportCanvas(c,ctx,width,height);
   ctx.fillStyle="#f5f3f0";ctx.fillRect(0,0,width,height);roundedRect(ctx,56,56,width-112,height-112,28,"#fff");
   let y=130;ctx.fillStyle="#8f8882";ctx.font='600 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(siteObj.siteName||"現場名未入力",pad+30,y);
   y+=70;ctx.fillStyle="#272522";ctx.font='800 46px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText("現場合計",pad+30,y);
@@ -1812,8 +1859,8 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   const height=Math.max(900,290+rows.length*rowBase+subCount*subH+190);
 
   const c=document.createElement("canvas");
-  c.width=width;c.height=height;
   const ctx=c.getContext("2d");
+  setupExportCanvas(c,ctx,width,height);
   ctx.fillStyle="#f5f3f0";ctx.fillRect(0,0,width,height);
   roundedRect(ctx,56,56,width-112,height-112,28,"#fff");
 
@@ -1980,8 +2027,8 @@ async function shareSitePdf(siteObj=state){
 
 function exportCanvasBase(title,subtitle="",height=900){
   const width=1240,pad=70;
-  const c=document.createElement("canvas");c.width=width;c.height=height;
-  const ctx=c.getContext("2d");ctx.fillStyle="#f5f3f0";ctx.fillRect(0,0,width,height);
+  const c=document.createElement("canvas");
+  const ctx=c.getContext("2d");setupExportCanvas(c,ctx,width,height);ctx.fillStyle="#f5f3f0";ctx.fillRect(0,0,width,height);
   roundedRect(ctx,56,56,width-112,height-112,28,"#fff");
   let y=126;
   ctx.fillStyle="#8f8882";ctx.font='600 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
@@ -2289,7 +2336,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.2.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.2.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -2638,6 +2685,8 @@ document.addEventListener("pointerdown",e=>{
 
 
 renderProductLetters();
+$("#doneNativeProduct").onclick=()=>closeNativeProductInput(true);
+$("#cancelNativeProduct").onclick=()=>closeNativeProductInput(false);
 $("#productKeypad").addEventListener("pointerdown",e=>{const btn=e.target.closest?.("button[data-pkey]");if(!btn)return;e.preventDefault();e.stopPropagation();productKeyPress(btn.dataset.pkey)});
 (()=>{
  const kp=$("#productKeypad"),drag=$("#productKeypadDragHandle"),resize=$("#productKeypadResizeHandle");if(!kp||!drag||!resize)return;
