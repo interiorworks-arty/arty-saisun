@@ -258,7 +258,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v1.2.0">
+<body data-build="v1.2.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -267,7 +267,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   <button type="button" data-work-page="wall" class="active">クロス</button>
   <button type="button" data-work-page="floor">床</button>
   <button type="button" data-work-page="sheet">シート</button>
-  <button type="button" data-work-page="other">その他仕上げ材</button>
+  <button type="button" data-work-page="other">その他</button>
   <button type="button" data-work-page="memo">メモ</button>
   <button type="button" data-work-page="order">発注</button>
 </div>
@@ -364,7 +364,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
       <label class="export-select-item"><input type="checkbox" data-export-part="wall" checked>クロス</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="floor" checked>床</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="sheet" checked>シート</label>
-      <label class="export-select-item"><input type="checkbox" data-export-part="other" checked>その他仕上げ材</label>
+      <label class="export-select-item"><input type="checkbox" data-export-part="other" checked>その他</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="memo">メモ</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="order">発注一覧</label>
     </div>
@@ -1203,10 +1203,13 @@ function collectOrderData(siteObj=state){
       const per=Number(item.caseMeters)||0;keyExtra=`base:${per}`;
       detail=per?`1ケース ${orderFmtNum(per)}m`:"1ケースm数 未入力";
     }else{
-      const validCuts=(item.orderCuts||[]).filter(x=>(Number(x.length)||0)>0&&(Number(x.count)||0)>0);
-      if(validCuts.length){
-        mode="cuts";cuts=validCuts;keyExtra="cuts";
-        detail=validCuts.map(x=>`${orderFmtNum(x.length)}m×${orderFmtNum(x.count)}本`).join(" / ");
+      const enteredCuts=(item.orderCuts||[]).filter(x=>(Number(x.length)||0)>0||(Number(x.count)||0)>0);
+      if(enteredCuts.length){
+        mode="cuts";cuts=enteredCuts;keyExtra="cuts";
+        detail=enteredCuts.map(x=>{
+          const len=Number(x.length)||0,count=Number(x.count)||0;
+          return len>0&&count>0?`${orderFmtNum(len)}m×${orderFmtNum(count)}本`:count>0?`${orderFmtNum(count)}本`:`${orderFmtNum(len)}m`;
+        }).join(" / ");
       }else{
         mode="qty";qtyNum=Number(item.qty)||0;unit=String(item.unit||"").trim()||"";
         keyExtra=`qty:${unit}`;
@@ -1223,7 +1226,8 @@ function collectOrderData(siteObj=state){
     if(mode==="cuts"){
       cuts.forEach(c=>{
         const len=Number(c.length)||0,count=Number(c.count)||0;
-        let row=g.cuts.find(x=>Math.abs(x.length-len)<1e-9);
+        if(count<=0)return;
+        let row=g.cuts.find(x=>Math.abs((Number(x.length)||0)-len)<1e-9);
         if(!row){row={length:len,count:0};g.cuts.push(row)}
         row.count+=count;
       });
@@ -1244,8 +1248,11 @@ function collectOrderData(siteObj=state){
     groups[page]=[...finishMap[page].values()].map(g=>{
       let qtyText="",detail=g.detail||"";
       if(g.mode==="cuts"){
-        g.cuts.sort((a,b)=>a.length-b.length);
-        qtyText=g.cuts.length?g.cuts.map(x=>`${orderFmtNum(x.length)}m×${orderFmtNum(x.count)}本`).join(" / "):"発注数量未入力";
+        g.cuts.sort((a,b)=>(Number(a.length)||0)-(Number(b.length)||0));
+        qtyText=g.cuts.length?g.cuts.map(x=>{
+          const len=Number(x.length)||0,count=Number(x.count)||0;
+          return len>0?`${orderFmtNum(len)}m×${orderFmtNum(count)}本`:`${orderFmtNum(count)}本`;
+        }).join(" / "):"発注数量未入力";
       }else if(g.mode==="tilecase"){
         qtyText=g.casePer>0&&g.qtyNum>0?`${Math.ceil(g.qtyNum/g.casePer)}ケース`:"発注数量未入力";
         detail=`施工 ${orderFmtNum(g.qtyNum)}㎡${g.casePer?` / 1ケース ${orderFmtNum(g.casePer)}㎡`:""}`;
@@ -1266,7 +1273,7 @@ function renderOrderPage(){
   area.innerHTML='<div class="order-page-note">現調で入力した品番・商品名から自動反映</div>';
   const wrap=document.createElement("div");wrap.className="order-page";
   const data=collectOrderData(state);
-  const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他仕上げ材"]];
+  const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
   let any=false;
 
   defs.forEach(([key,label])=>{
@@ -2008,14 +2015,17 @@ function finishItemExportLines(item){
     if(item.qty)lines.push(`採寸 ${item.qty}m`);
     if(item.qty&&item.caseMeters)lines.push(`発注 ${Math.ceil(Number(item.qty)/Number(item.caseMeters))}ケース（${item.caseMeters}m/ケース）`);
   }else{
-    const cuts=(item.orderCuts||[]).filter(x=>x.length&&x.count);
-    if(cuts.length)lines.push(cuts.map(x=>`${x.length}m×${x.count}本`).join(" / "));
+    const cuts=(item.orderCuts||[]).filter(x=>(Number(x.length)||0)>0||(Number(x.count)||0)>0);
+    if(cuts.length)lines.push(cuts.map(x=>{
+      const len=Number(x.length)||0,count=Number(x.count)||0;
+      return len>0&&count>0?`${orderFmtNum(len)}m×${orderFmtNum(count)}本`:count>0?`${orderFmtNum(count)}本`:`${orderFmtNum(len)}m`;
+    }).join(" / "));
     else if(item.qty)lines.push(`${item.qty}${item.unit||""}`);
   }
   return lines;
 }
 function buildFinishExportCanvas(page,siteObj=state){
-  const label=page==="floor"?"床":page==="sheet"?"シート":"その他仕上げ材";
+  const label=page==="floor"?"床":page==="sheet"?"シート":"その他";
   const rooms=finishExportItems(page,siteObj);
   let rows=0;rooms.forEach(r=>{rows+=1;r.items.forEach(i=>rows+=finishItemExportLines(i).length+1)});
   const base=exportCanvasBase(label,"",Math.max(900,280+rows*42+140));
@@ -2052,7 +2062,7 @@ function orderLineText(item){
 }
 function buildOrderExportCanvas(siteObj=state){
   const data=collectOrderData(siteObj);
-  const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他仕上げ材"]];
+  const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
   let count=0;defs.forEach(([k])=>count+=(data[k]||[]).length);
   const base=exportCanvasBase("発注一覧","",Math.max(900,330+count*95+defs.length*45));
   const {c,ctx,pad,width}=base;let y=base.y;
@@ -2271,7 +2281,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.2.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.2.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
