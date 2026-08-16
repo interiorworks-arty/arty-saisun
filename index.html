@@ -256,9 +256,11 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 
 
+
+.product-key-row .key-space{flex:2}
 </style>
 </head>
-<body data-build="v1.2.1">
+<body data-build="v1.2.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -331,7 +333,13 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   <div class="product-key-row" id="productRowQwerty"></div>
   <div class="product-key-row offset1" id="productRowHome"></div>
   <div class="product-key-row offset2" id="productRowBottom"></div>
-  <div class="product-key-row"><button class="key-shift active" id="productShift" data-pkey="shift">⇧</button><button class="key-done" data-pkey="done">完了</button></div>
+  <div class="product-key-row">
+    <button class="key-shift active" id="productShift" data-pkey="shift">⇧</button>
+    <button data-pkey="(">（</button>
+    <button data-pkey=")">）</button>
+    <button class="key-space" data-pkey="space">空白</button>
+    <button class="key-done" data-pkey="done">完了</button>
+  </div>
   <div class="product-keypad-resize" id="productKeypadResizeHandle"></div>
 </div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
@@ -658,7 +666,7 @@ function renderRecentProductCandidates(){
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product);const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
 function showProductKeypad(btn,sec){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
 function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
-function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(/^[A-Za-z0-9-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
+function productKeyPress(key){if(!activeProductSection)return;if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}if(key==="done"){rememberRecentProduct(activeProductSection.product);hideProductKeypad();return}if(key==="back"){activeProductSection.product=String(activeProductSection.product||"").slice(0,-1);syncProductButton();return}if(key==="space"){activeProductSection.product=(activeProductSection.product||"")+" ";syncProductButton();return}if(/^[A-Za-z0-9()\-]$/.test(key)){activeProductSection.product=(activeProductSection.product||"")+key;syncProductButton()}}
 
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
@@ -2281,7 +2289,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.2.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.2.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
