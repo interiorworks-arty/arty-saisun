@@ -272,9 +272,46 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .edit-caret{display:inline-block;width:2px;height:1.12em;background:currentColor;vertical-align:-.12em;margin:0 1px;animation:caretBlink 1s steps(1) infinite}
 @keyframes caretBlink{50%{opacity:0}}
 .product-button.active-input,.measure-input.active-input,.repeat-button.active-input,.finish-num-button.active-input{outline:2px solid #8d837b;outline-offset:1px}
+
+/* 寸法表示は長くても絶対に1行 */
+.measure-input,
+.measure-input *,
+.measure-row .measure-input,
+.measure-row .measure-input *{
+  white-space:nowrap !important;
+  word-break:keep-all !important;
+  overflow-wrap:normal !important;
+  flex-wrap:nowrap !important;
+}
+.measure-input{
+  display:block !important;
+  width:100% !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:clip !important;
+  line-height:1.25 !important;
+}
+.measure-input .edit-caret{
+  display:inline-block !important;
+  flex:0 0 auto !important;
+}
+.measure-row{
+  align-items:center !important;
+}
+.measure-row .measure-input{
+  font-size:clamp(14px,2.1vw,20px) !important;
+}
+
+.caret-line{
+  display:inline-flex !important;
+  flex-wrap:nowrap !important;
+  white-space:nowrap !important;
+  align-items:baseline;
+  max-width:100%;
+}
 </style>
 </head>
-<body data-build="v1.2.9">
+<body data-build="v1.3.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -735,8 +772,8 @@ function cursorFromPointer(el,text,e){
 function caretHtml(value,pos,placeholder=""){
   const s=String(value||"");
   const p=Math.max(0,Math.min(s.length,Number(pos)||0));
-  if(!s)return `<span class="edit-caret"></span>${placeholder?`<span style="opacity:.55">${esc(placeholder)}</span>`:""}`;
-  return `${esc(s.slice(0,p))}<span class="edit-caret"></span>${esc(s.slice(p))}`;
+  if(!s)return `<span class="caret-line"><span class="edit-caret"></span>${placeholder?`<span style="opacity:.55">${esc(placeholder)}</span>`:""}</span>`;
+  return `<span class="caret-line">${esc(s.slice(0,p))}<span class="edit-caret"></span>${esc(s.slice(p))}</span>`;
 }
 function insertAtCursor(value,pos,ch){
   const s=String(value||""),p=Math.max(0,Math.min(s.length,pos));
@@ -2456,7 +2493,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.2.9",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.3.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
