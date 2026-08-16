@@ -1,4 +1,4 @@
-const CACHE="gencho-v123-20260816-native-japanese-hq-pdf";
+const CACHE="gencho-v124-20260816-order-cut-unit";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
