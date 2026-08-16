@@ -25,6 +25,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .section-head{display:grid;grid-template-columns:minmax(140px,auto) minmax(150px,1.35fr) minmax(120px,1fr) 24px;gap:7px;align-items:center}.category{font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.category.editable{cursor:pointer;position:relative}.category.editable::after{content:"✎";font-size:11px;color:#a39a93;margin-left:4px;vertical-align:top}
 .placeholder-input{width:100%;font-size:14px;padding:7px 0}.placeholder-input::placeholder{color:#b2aaa4}.product-button{width:100%;font-size:14px;padding:7px 0;border:0;border-bottom:1px solid transparent;background:transparent;color:var(--ink);text-align:left;min-height:34px}.product-button.empty{color:#b2aaa4}.product-button.active-input{border-bottom-color:#91877f}.repeat-wrap{display:flex;align-items:center;gap:2px}.repeat-prefix{color:#938b84}
 .measure-row{display:grid;grid-template-columns:26px 1fr auto;gap:8px;align-items:center;min-height:36px}.measure-drag{border:0;background:transparent;color:#b0a8a2;font-size:20px;padding:4px 0;touch-action:none;cursor:grab}.measure-drag:active{cursor:grabbing}.measure-drag.hidden{visibility:hidden}.measure-row.drop-target{background:#f3efec;border-radius:8px}.measure-input{width:100%;font-size:20px;font-weight:650;padding:5px 1px;border:0;background:transparent;text-align:left;color:var(--ink);min-height:34px;display:grid;grid-template-columns:58px 12px 1fr;align-items:baseline;font-variant-numeric:tabular-nums}.measure-input .m-left{text-align:right}.measure-input .m-hyphen{text-align:center}.measure-input .m-right{text-align:left}.measure-input .m-raw{grid-column:1/4;text-align:left}.measure-input.empty{color:#c4bdb7;font-weight:400}
+.measure-input.active-input{display:flex!important;align-items:center;white-space:nowrap;flex-wrap:nowrap;overflow:hidden;text-align:left}
 .line-result{font-size:12px;color:#8b837d;white-space:nowrap}.section-totals{display:flex;gap:16px;margin-top:8px;font-size:12px;color:#766f69}.section-totals strong{font-size:14px;color:var(--ink)}
 .add-section{width:100%;border:0;background:#efebe8;color:#514a45;border-radius:12px;padding:12px;font-weight:700;margin-top:8px}
 .finish-area{margin-top:18px;padding-top:15px;border-top:2px solid #eee8e3}
@@ -273,7 +274,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .product-button.active-input,.measure-input.active-input,.repeat-button.active-input,.finish-num-button.active-input{outline:2px solid #8d837b;outline-offset:1px}
 </style>
 </head>
-<body data-build="v1.2.8">
+<body data-build="v1.2.9">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2455,7 +2456,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.2.8",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.2.9",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
