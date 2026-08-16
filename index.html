@@ -315,7 +315,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .repeat-group .repeat-button{min-width:0;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
-<body data-build="v1.3.2">
+<body data-build="v1.3.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -443,10 +443,10 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   <div class="sheet">
     <div class="sheet-title-row"><h3>出力内容を選択</h3></div>
     <div class="export-select-list">
-      <label class="export-select-item"><input type="checkbox" data-export-part="wall" checked>クロス</label>
-      <label class="export-select-item"><input type="checkbox" data-export-part="floor" checked>床</label>
-      <label class="export-select-item"><input type="checkbox" data-export-part="sheet" checked>シート</label>
-      <label class="export-select-item"><input type="checkbox" data-export-part="other" checked>その他</label>
+      <label class="export-select-item"><input type="checkbox" data-export-part="wall">クロス</label>
+      <label class="export-select-item"><input type="checkbox" data-export-part="floor">床</label>
+      <label class="export-select-item"><input type="checkbox" data-export-part="sheet">シート</label>
+      <label class="export-select-item"><input type="checkbox" data-export-part="other">その他</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="memo">メモ</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="order">発注一覧</label>
     </div>
@@ -2523,7 +2523,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.3.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.3.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -2777,7 +2777,14 @@ $("#newSite").onclick=()=>{
   if(n===null)return;
   createNewSite(n.trim());
 };
-$("#currentSitePdf").onclick=()=>{save();$("#exportSheet").classList.add("show")};
+$("#currentSitePdf").onclick=()=>{
+  save();
+  const currentPart=activeWorkPage==="wall"?"wall":activeWorkPage;
+  document.querySelectorAll("#exportSheet [data-export-part]").forEach(cb=>{
+    cb.checked=cb.dataset.exportPart===currentPart;
+  });
+  $("#exportSheet").classList.add("show");
+};
 $("#closeExportSheet").onclick=()=>$("#exportSheet").classList.remove("show");
 $("#exportSelectedImage").onclick=()=>exportSelectedAsImage();
 $("#exportSelectedPdf").onclick=()=>exportSelectedAsPdf();
