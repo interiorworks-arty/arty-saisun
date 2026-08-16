@@ -1,4 +1,4 @@
-const CACHE="gencho-v134-20260816-iphone-layout";
+const CACHE="gencho-v140-20260816-other-full-product-master";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

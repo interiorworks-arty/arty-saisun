@@ -449,9 +449,26 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     gap:6px!important;
   }
 }
+
+.finish-full-product-actions{display:flex;gap:7px;margin-top:9px}
+.finish-full-product-actions button{flex:1;border:0;border-radius:9px;padding:9px 8px;font-size:12px;font-weight:900}
+.finish-full-product-actions .open-full-products{background:#eee9e5;color:#514a45}
+.finish-full-product-actions .save-full-product{background:var(--accent);color:#fff}
+.full-product-list{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto;margin:10px 0}
+.full-product-wrap{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center}
+.full-product-wrap.manage{grid-template-columns:1fr auto auto auto}
+.full-product-main{border:0;border-radius:11px;background:#eeeae7;color:#514a45;padding:11px;text-align:left;min-width:0}
+.full-product-main strong{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.full-product-main span{display:block;font-size:11px;color:#7c746e;margin-top:3px}
+.full-product-drag,.full-product-edit,.full-product-delete{border:0;border-radius:8px;background:#eeeae7;color:#665e58;padding:8px;font-weight:800}
+.full-product-delete{color:#9c6262}
+@media(max-width:600px){
+  .finish-full-product-actions{flex-direction:column}
+  .full-product-wrap{grid-template-columns:minmax(0,1fr) auto auto auto}
+}
 </style>
 </head>
-<body data-build="v1.3.4">
+<body data-build="v1.4.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -620,6 +637,18 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     </div>
   </div>
 </div>
+<div id="finishFullProductSheet" class="menu">
+  <div class="sheet">
+    <div class="sheet-title-row">
+      <h3 id="finishFullProductTitle">登録商品</h3>
+      <button id="manageFinishFullProducts" class="sheet-manage-btn">並び替え・編集・削除</button>
+    </div>
+    <div id="finishFullProductList" class="full-product-list"></div>
+    <div class="sheet-actions">
+      <button id="closeFinishFullProductSheet" class="cancel">閉じる</button>
+    </div>
+  </div>
+</div>
 <div id="unitSheet" class="menu">
   <div class="sheet">
     <div class="sheet-title-row"><h3>単位を選択</h3><button id="manageUnits" class="sheet-manage-btn">並び替え・編集・削除</button></div>
@@ -669,14 +698,14 @@ currentSiteId=state.id;localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
 let activeRoom=state.rooms[0]?.id||null,calcMode="room",siteFilter="active";
 
 
-const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",RECENT_PRODUCT_KEY="gencho-recent-products-v1",FINISH_PRODUCT_MASTER_KEY="gencho-finish-product-master-v1",FINISH_RECENT_PRODUCT_KEY="gencho-finish-recent-product-v1",FINISH_ITEM_MASTER_KEY="gencho-finish-item-master-v1",FINISH_RECENT_ITEM_KEY="gencho-finish-recent-item-v1",FINISH_TYPE_MASTER_KEY="gencho-finish-type-master-v1",UNIT_MASTER_KEY="gencho-unit-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
+const ROOM_MASTER_KEY="gencho-room-master-v1",SECTION_MASTER_KEY="gencho-section-master-v1",PRODUCT_MASTER_KEY="gencho-product-master-v1",RECENT_PRODUCT_KEY="gencho-recent-products-v1",FINISH_PRODUCT_MASTER_KEY="gencho-finish-product-master-v1",FINISH_FULL_PRODUCT_MASTER_KEY="gencho-finish-full-product-master-v1",FINISH_RECENT_PRODUCT_KEY="gencho-finish-recent-product-v1",FINISH_ITEM_MASTER_KEY="gencho-finish-item-master-v1",FINISH_RECENT_ITEM_KEY="gencho-finish-recent-item-v1",FINISH_TYPE_MASTER_KEY="gencho-finish-type-master-v1",UNIT_MASTER_KEY="gencho-unit-master-v1",ROOM_ORDER_KEY="gencho-room-order-v1",SECTION_ORDER_KEY="gencho-section-order-v1",ROOM_DELETED_KEY="gencho-room-deleted-v1",SECTION_DELETED_KEY="gencho-section-deleted-v1";
 const loadList=k=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}};
 const saveList=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY),recentProducts=loadList(RECENT_PRODUCT_KEY),finishSavedProducts=loadList(FINISH_PRODUCT_MASTER_KEY),finishRecentProducts=loadList(FINISH_RECENT_PRODUCT_KEY),finishSavedItems=loadList(FINISH_ITEM_MASTER_KEY),finishRecentItems=loadList(FINISH_RECENT_ITEM_KEY);
+let savedRooms=loadList(ROOM_MASTER_KEY),savedSections=loadList(SECTION_MASTER_KEY),savedProducts=loadList(PRODUCT_MASTER_KEY),recentProducts=loadList(RECENT_PRODUCT_KEY),finishSavedProducts=loadList(FINISH_PRODUCT_MASTER_KEY),finishFullProducts=loadList(FINISH_FULL_PRODUCT_MASTER_KEY),finishRecentProducts=loadList(FINISH_RECENT_PRODUCT_KEY),finishSavedItems=loadList(FINISH_ITEM_MASTER_KEY),finishRecentItems=loadList(FINISH_RECENT_ITEM_KEY);
 const DEFAULT_UNITS=["m","㎡","枚","ケース","本","個"];
 let unitChoices=loadList(UNIT_MASTER_KEY);
 if(!Array.isArray(unitChoices)||!unitChoices.length)unitChoices=[...DEFAULT_UNITS];
-let manageUnits=false,unitTargetItem=null,unitTargetKey="unit",unitTargetAfter=null;
+let manageUnits=false,unitTargetItem=null,unitTargetKey="unit",unitTargetAfter=null,manageFinishFullProducts=false,finishFullProductTargetItem=null;
 function saveUnitChoices(){saveList(UNIT_MASTER_KEY,unitChoices)}
 
 const DEFAULT_FINISH_CHOICES=[
@@ -1364,6 +1393,76 @@ function renderTabs(){let w=$("#roomTabs");w.innerHTML="";state.rooms.forEach(r=
 function finishField(label,inputHtml){
   return `<div class="finish-field"><label>${label}</label>${inputHtml}</div>`;
 }
+
+function saveFinishFullProducts(){saveList(FINISH_FULL_PRODUCT_MASTER_KEY,finishFullProducts)}
+function finishFullProductsFor(category){
+  return finishFullProducts.filter(x=>x.category===category);
+}
+function registerFinishFullProduct(item){
+  const name=String(item.itemName||"").trim();
+  const product=String(item.product||"").trim();
+  const qty=String(item.qty||"").trim();
+  const unit=String(item.unit||"").trim();
+  if(!name&&!product){alert("商品名か品番を入力してください");return false}
+  const category=String(item.type||"その他").trim();
+  const existing=finishFullProducts.find(x=>x.category===category&&x.itemName===name&&x.product===product);
+  if(existing){
+    existing.qty=qty;existing.unit=unit;
+  }else{
+    finishFullProducts.push({id:uid(),category,itemName:name,product,qty,unit});
+  }
+  saveFinishFullProducts();return true;
+}
+function applyFinishFullProduct(master,item){
+  item.itemName=master.itemName||"";
+  item.product=master.product||"";
+  item.qty=master.qty||"";
+  item.unit=master.unit||"m";
+  rememberFinishItem(item.itemName);
+  rememberFinishProduct(item.type,item.product);
+  save();render();
+}
+function editFinishFullProduct(master){
+  const name=prompt("商品名を編集",master.itemName||"");if(name===null)return;
+  const product=prompt("品番を編集",master.product||"");if(product===null)return;
+  const qty=prompt("数量を編集",master.qty||"");if(qty===null)return;
+  const unit=prompt("単位を編集",master.unit||"m");if(unit===null)return;
+  master.itemName=name.trim();master.product=product.trim();master.qty=qty.trim();master.unit=unit.trim()||"m";
+  if(master.unit&&!unitChoices.includes(master.unit)){unitChoices.push(master.unit);saveUnitChoices()}
+  saveFinishFullProducts();renderFinishFullProductMaster();
+}
+function deleteFinishFullProduct(master){
+  if(!confirm(`「${master.itemName||master.product}」を登録商品から削除しますか？`))return;
+  finishFullProducts=finishFullProducts.filter(x=>x.id!==master.id);
+  saveFinishFullProducts();renderFinishFullProductMaster();
+}
+function renderFinishFullProductMaster(){
+  const box=$("#finishFullProductList");if(!box)return;box.innerHTML="";
+  const category=finishFullProductTargetItem?.type||"";
+  $("#finishFullProductTitle").textContent=category?`${category}の登録商品`:"登録商品";
+  const items=finishFullProductsFor(category);
+  if(!items.length)box.innerHTML='<div style="color:#8b837d;padding:10px 2px">まだ登録商品はありません</div>';
+  items.forEach(master=>{
+    const w=document.createElement("div");w.className="full-product-wrap"+(manageFinishFullProducts?" manage":"");w.dataset.orderKey=master.id;
+    const b=document.createElement("button");b.type="button";b.className="full-product-main";
+    b.innerHTML=`<strong>${esc(master.itemName||master.product||"商品")}</strong><span>${master.product?esc(master.product)+"　":""}${master.qty?esc(master.qty)+esc(master.unit||""):""}</span>`;
+    if(!manageFinishFullProducts)b.onclick=()=>{if(finishFullProductTargetItem)applyFinishFullProduct(master,finishFullProductTargetItem);$("#finishFullProductSheet").classList.remove("show");finishFullProductTargetItem=null};
+    const drag=document.createElement("button");drag.type="button";drag.className="full-product-drag";drag.textContent="≡";
+    const edit=document.createElement("button");edit.type="button";edit.className="full-product-edit";edit.textContent="✎";edit.onclick=e=>{e.stopPropagation();editFinishFullProduct(master)};
+    const del=document.createElement("button");del.type="button";del.className="full-product-delete";del.textContent="×";del.onclick=e=>{e.stopPropagation();deleteFinishFullProduct(master)};
+    w.append(b,drag,edit,del);box.appendChild(w);
+    if(manageFinishFullProducts){
+      bindChoiceDrag(drag,w,()=>finishFullProducts,saveFinishFullProducts,renderFinishFullProductMaster,x=>x.id,master.id);
+    }
+  });
+  $("#manageFinishFullProducts").textContent=manageFinishFullProducts?"完了":"並び替え・編集・削除";
+}
+function openFinishFullProductMaster(item){
+  hideProductKeypad();hideMeasureKeypad();
+  finishFullProductTargetItem=item;manageFinishFullProducts=false;
+  renderFinishFullProductMaster();$("#finishFullProductSheet").classList.add("show");
+}
+
 function renderFinishSuggestions(box,item,kind="product"){
   box.innerHTML="";
   const vals=kind==="item"?finishItemCandidates(item.itemName):finishProductCandidates(item.type,item.product);
@@ -1412,10 +1511,11 @@ function renderFinishMaterial(r,item){
   const hasOtherLengthOrders=kind==="その他床材";
 
   d.innerHTML=`<div class="finish-card-head"><div class="finish-type">${esc(item.type)}</div><button type="button" class="finish-type-edit">名前編集</button><button class="finish-delete">×</button></div>
-    ${kind==="その他床材"?`<div class="finish-product-row"><input class="finish-name-input" value="${esc(item.itemName||"")}" placeholder="項目（例：リフォーム框）"><button class="finish-register register-item">項目登録</button></div><div class="finish-suggestions item-suggestions"></div>`:""}
-    <div class="finish-product-row"><button type="button" class="finish-product-button product-button${item.product?"":" empty"}">${esc(item.product||"品番")}</button><button class="finish-register register-product"${item.product?"":" disabled"}>品番登録</button></div>
+    ${kind==="その他床材"?`<div class="finish-product-row" style="grid-template-columns:1fr"><input class="finish-name-input" value="${esc(item.itemName||"")}" placeholder="商品名（例：エンド見切り シルバー）"></div><div class="finish-suggestions item-suggestions"></div>`:""}
+    <div class="finish-product-row"${kind==="その他床材"?' style="grid-template-columns:1fr"':""}><button type="button" class="finish-product-button product-button${item.product?"":" empty"}">${esc(item.product||"品番")}</button>${kind==="その他床材"?"":`<button class="finish-register register-product"${item.product?"":" disabled"}>品番登録</button>`}</div>
     <div class="finish-suggestions product-suggestions"></div>
     <div class="finish-fields">${fields}</div>
+    ${kind==="その他床材"?`<div class="finish-full-product-actions"><button type="button" class="open-full-products">登録商品</button><button type="button" class="save-full-product">この商品を登録</button></div>`:""}
     ${hasRollOrders?`<div class="finish-order-block"><div class="finish-order-label">発注寸法（m × 本数）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 発注寸法を追加</button><div class="finish-order-total">発注合計：<span></span></div></div>`:""}
     ${hasOtherLengthOrders?`<div class="finish-order-block other-length-orders"><div class="finish-order-label">寸法・本数（必要な場合）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 寸法・本数を追加</button><div class="finish-order-total">合計：<span></span></div></div>`:""}`;
 
@@ -1430,14 +1530,17 @@ function renderFinishMaterial(r,item){
   const prod=d.querySelector(".finish-product-button");
   prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,item,e)};
   prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,item,e)};
-  d.querySelector(".register-product").onclick=()=>{if(registerFinishProduct(item.type,item.product)){alert("品番を登録しました");render()}};
+  const rp=d.querySelector(".register-product");
+  if(rp)rp.onclick=()=>{if(registerFinishProduct(item.type,item.product)){alert("品番を登録しました");render()}};
+  const openFull=d.querySelector(".open-full-products"),saveFull=d.querySelector(".save-full-product");
+  if(openFull)openFull.onclick=()=>openFinishFullProductMaster(item);
+  if(saveFull)saveFull.onclick=()=>{if(registerFinishFullProduct(item)){alert("商品を登録しました");render()}};
   renderFinishSuggestions(d.querySelector(".product-suggestions"),item,"product");
 
   if(kind==="その他床材"){
     const ni=d.querySelector(".finish-name-input");
     ni.oninput=()=>{item.itemName=ni.value;save();renderFinishSuggestions(d.querySelector(".item-suggestions"),item,"item")};
     ni.onblur=()=>rememberFinishItem(item.itemName);
-    d.querySelector(".register-item").onclick=()=>{if(registerFinishItem(item.itemName)){alert("項目を登録しました");render()}};
     renderFinishSuggestions(d.querySelector(".item-suggestions"),item,"item");
   }
 
@@ -2598,6 +2701,8 @@ function renderProductMaster(){
 function openProductMaster(sec){
   hideProductKeypad();hideMeasureKeypad();productMasterTargetSection=sec;manageProducts=false;renderProductMaster();$("#productMasterSheet").classList.add("show");
 }
+$("#manageFinishFullProducts").onclick=()=>{manageFinishFullProducts=!manageFinishFullProducts;renderFinishFullProductMaster()};
+$("#closeFinishFullProductSheet").onclick=()=>{$("#finishFullProductSheet").classList.remove("show");finishFullProductTargetItem=null;manageFinishFullProducts=false};
 $("#manageUnits").onclick=()=>{manageUnits=!manageUnits;renderUnitChoices()};
 $("#resetUnits").onclick=()=>{if(confirm("単位候補を初期状態に戻しますか？")){unitChoices=[...DEFAULT_UNITS];saveUnitChoices();renderUnitChoices()}};
 $("#addCustomUnit").onclick=()=>{const n=$("#customUnit").value.trim();if(n&&!unitChoices.includes(n)){unitChoices.push(n);saveUnitChoices();$("#customUnit").value="";renderUnitChoices()}};
@@ -2659,14 +2764,14 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.3.4",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.4.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
       savedRooms,deletedRooms,roomOrder,
       savedSections,deletedSections,sectionOrder,
       savedProducts,recentProducts,
-      finishSavedProducts,finishRecentProducts,finishSavedItems,finishRecentItems,finishChoices,unitChoices
+      finishSavedProducts,finishFullProducts,finishRecentProducts,finishSavedItems,finishRecentItems,finishChoices,unitChoices
     }
   };
 }
@@ -2692,13 +2797,14 @@ function importBackupData(obj){
   savedProducts=Array.isArray(m.savedProducts)?m.savedProducts:[];
   recentProducts=Array.isArray(m.recentProducts)?m.recentProducts:[];
   finishSavedProducts=Array.isArray(m.finishSavedProducts)?m.finishSavedProducts:[];
+  finishFullProducts=Array.isArray(m.finishFullProducts)?m.finishFullProducts:[];
   finishRecentProducts=Array.isArray(m.finishRecentProducts)?m.finishRecentProducts:[];
   finishSavedItems=Array.isArray(m.finishSavedItems)?m.finishSavedItems:[];
   finishRecentItems=Array.isArray(m.finishRecentItems)?m.finishRecentItems:[];
   finishChoices=(Array.isArray(m.finishChoices)&&m.finishChoices.length?m.finishChoices:DEFAULT_FINISH_CHOICES).map(x=>normalizeFinishChoice({...x}));
   unitChoices=Array.isArray(m.unitChoices)&&m.unitChoices.length?m.unitChoices:[...DEFAULT_UNITS];saveUnitChoices();
   saveFinishChoices();
-  saveList(FINISH_PRODUCT_MASTER_KEY,finishSavedProducts);saveList(FINISH_RECENT_PRODUCT_KEY,finishRecentProducts);
+  saveList(FINISH_PRODUCT_MASTER_KEY,finishSavedProducts);saveList(FINISH_FULL_PRODUCT_MASTER_KEY,finishFullProducts);saveList(FINISH_RECENT_PRODUCT_KEY,finishRecentProducts);
   saveList(FINISH_ITEM_MASTER_KEY,finishSavedItems);saveList(FINISH_RECENT_ITEM_KEY,finishRecentItems);
   saveList(ROOM_MASTER_KEY,savedRooms);saveList(ROOM_DELETED_KEY,deletedRooms);saveRoomOrder();
   saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();
