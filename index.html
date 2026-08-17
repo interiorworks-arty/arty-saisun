@@ -468,7 +468,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 </style>
 </head>
-<body data-build="v1.4.0">
+<body data-build="v1.4.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -849,7 +849,7 @@ function registerProduct(product,repeat){
 
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,keypadMode="measure",numberCursor=0,productCursor=0;
 
-const KEYPAD_PREF_KEY="gencho-keypad-layout-v1";
+const KEYPAD_PREF_KEY="gencho-keypad-layout-v2";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
 
 const PRODUCT_KEYPAD_PREF_KEY="gencho-product-keypad-layout-v1";
@@ -974,7 +974,7 @@ function renderNumberCursor(){
   }
 }
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;renderProductCursor();const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
-function showProductKeypad(btn,sec,e=null){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;productCursor=cursorFromPointer(btn,sec.product,e);document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();renderProductCursor();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
+function showProductKeypad(btn,sec,e=null){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;productCursor=String(sec.product||"").length;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();renderProductCursor();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
 function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);if(activeProductButton&&activeProductSection){activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product)}const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 let nativeProductTarget=null,nativeProductButton=null;
 function openNativeProductInput(){
@@ -1022,6 +1022,29 @@ function productKeyPress(key){
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
 function applyKeypadLayout(){
   const kp=$("#measureKeypad"); if(!kp)return;
+
+  // iPadでは初回だけ右下を初期位置にする。
+  // 一度ユーザーが動かした後は、その位置を今まで通り記憶する。
+  if(!keypadLayout && window.innerWidth>=700){
+    const maxW=Math.max(270,window.innerWidth-16);
+    const w=clamp(420,270,Math.min(540,maxW));
+    kp.style.width=w+"px";
+    kp.style.transform="none";
+    kp.style.bottom="auto";
+    const keyH=clamp(Math.round(46*(w/420)),40,60);
+    const keyFont=clamp(Math.round(20*(w/420)),17,25);
+    kp.style.setProperty("--key-h",keyH+"px");
+    kp.style.setProperty("--key-font",keyFont+"px");
+    requestAnimationFrame(()=>{
+      const rect=kp.getBoundingClientRect();
+      const left=Math.max(8,window.innerWidth-rect.width-18);
+      const top=Math.max(8,window.innerHeight-rect.height-92);
+      kp.style.left=left+"px";
+      kp.style.top=top+"px";
+    });
+    return;
+  }
+
   if(keypadLayout){
     const maxW=Math.max(270,window.innerWidth-16);
     const w=clamp(+keypadLayout.width||420,270,Math.min(540,maxW));
@@ -1188,14 +1211,14 @@ function showMeasureKeypad(inp,model,sec,list,row,e=null){hideProductKeypad();
   activeMeasureModel=model;
   activeMeasureSection=sec;
   activeMeasureList=list;
-  activeMeasureRow=row; row?.classList.add("active-row"); inp?.classList.add("active-input");numberCursor=cursorFromPointer(inp,model.value,e);renderNumberCursor();
+  activeMeasureRow=row; row?.classList.add("active-row"); inp?.classList.add("active-input");numberCursor=String(model.value||"").length;renderNumberCursor();
   $("#keypadLabel").textContent="寸法入力"; const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
 }
 function showRepeatKeypad(btn,sec,key="repeat",e=null){hideProductKeypad();
   clearActiveNumberEditor();
   keypadMode="repeat";setNumberKeypadSpecial("measure");
-  activeRepeatButton=btn;activeRepeatSection=sec;activeRepeatKey=key;numberCursor=cursorFromPointer(btn,sec[key],e);btn.classList.add("active-input");renderNumberCursor();
+  activeRepeatButton=btn;activeRepeatSection=sec;activeRepeatKey=key;numberCursor=String(sec[key]||"").length;btn.classList.add("active-input");renderNumberCursor();
   $("#keypadLabel").textContent=key==="hRepeat"?"↔︎リピート入力":"↕︎リピート入力";
   const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
@@ -1204,7 +1227,7 @@ function showGenericNumberKeypad(inp,obj,key,label="数量入力",onUpdate=null,
   hideProductKeypad();
   clearActiveNumberEditor();
   keypadMode="generic";setNumberKeypadSpecial("generic");
-  activeGenericInput=inp;activeGenericObject=obj;activeGenericKey=key;activeGenericUpdate=onUpdate;numberCursor=cursorFromPointer(inp,obj[key],e);inp?.classList.add("active-input");renderNumberCursor();
+  activeGenericInput=inp;activeGenericObject=obj;activeGenericKey=key;activeGenericUpdate=onUpdate;numberCursor=String(obj[key]||"").length;inp?.classList.add("active-input");renderNumberCursor();
   $("#keypadLabel").textContent=label;
   const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
@@ -2764,7 +2787,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.4.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.4.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
