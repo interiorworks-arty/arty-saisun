@@ -466,13 +466,25 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .finish-full-product-actions{flex-direction:column}
   .full-product-wrap{grid-template-columns:minmax(0,1fr) auto auto auto}
 }
+
+.site{display:flex;gap:8px;align-items:center}
+.site #siteName{flex:1;min-width:0}
+.site-date-input{width:150px;flex:0 0 150px}
+.site-sort{display:flex;gap:7px;margin:8px 0 10px}
+.site-sort button{flex:1;border:0;border-radius:9px;padding:8px;background:#eeeae7;color:#625a54;font-size:12px;font-weight:800}
+.site-sort button.active{background:var(--accent);color:#fff}
+.site-item-date{font-weight:800;color:#625a54}
+@media(max-width:600px){
+  .site{flex-direction:column;align-items:stretch}
+  .site-date-input{width:100%;flex:none}
+}
 </style>
 </head>
-<body data-build="v1.4.2">
+<body data-build="v1.4.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
-<div class="site"><input id="siteName" placeholder="現場名"></div>
+<div class="site"><input id="siteName" placeholder="現場名"><input id="siteDate" class="site-date-input" type="date" aria-label="現場日付"></div>
 <div class="work-page-tabs">
   <button type="button" data-work-page="wall" class="active">クロス</button>
   <button type="button" data-work-page="floor">床</button>
@@ -584,6 +596,10 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
       <button id="filterDone">完了</button>
       <button id="filterAll">すべて</button>
     </div>
+    <div class="site-sort">
+      <button id="sortByDate" class="active">日付順（新しい順）</button>
+      <button id="sortByName">現場名（あいうえお順）</button>
+    </div>
     <div id="siteList" class="site-list"></div>
     <div class="site-backup-actions">
       <button id="exportBackup">バックアップ書き出し</button>
@@ -670,8 +686,12 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 <script>
 const KEY="gencho-v03-data",SITES_KEY="gencho-sites-v1",CURRENT_SITE_KEY="gencho-current-site-v1",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
 
+function localDateYmd(d=new Date()){
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
 function makeSite(name=""){
-  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,rooms:[],finishRooms:[],memo:"",status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",status:"active",createdAt:Date.now(),updatedAt:Date.now()}
 }
 function loadSites(){
   try{
@@ -695,6 +715,8 @@ let sites=loadSites();
 let currentSiteId=localStorage.getItem(CURRENT_SITE_KEY)||sites[0].id;
 let state=sites.find(s=>s.id===currentSiteId)||sites[0];
 currentSiteId=state.id;localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
+const SITE_SORT_KEY="gencho-site-sort-v1";
+let siteSort=localStorage.getItem(SITE_SORT_KEY)||"date";
 let activeRoom=state.rooms[0]?.id||null,calcMode="room",siteFilter="active";
 
 
@@ -1376,8 +1398,9 @@ function persistSites(){
   localStorage.setItem(KEY,JSON.stringify(state));
 }
 function save(){
-  const inp=$("#siteName");
+  const inp=$("#siteName"),dateInp=$("#siteDate");
   if(inp)state.siteName=inp.value.trim();
+  if(dateInp)state.siteDate=dateInp.value||"";
   persistSites();
 }
 function switchSite(id){
@@ -2762,7 +2785,18 @@ function siteRepeatTotal(s){
 function renderSiteList(){
   const box=$("#siteList");if(!box)return;
   const q=($("#siteSearch")?.value||"").trim().toLowerCase();
-  let list=[...sites].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  let list=[...sites];
+  if(siteSort==="name"){
+    list.sort((a,b)=>String(a.siteName||"").localeCompare(String(b.siteName||""),"ja",{sensitivity:"base",numeric:true}));
+  }else{
+    list.sort((a,b)=>{
+      const ad=String(a.siteDate||""),bd=String(b.siteDate||"");
+      if(ad&&bd&&ad!==bd)return bd.localeCompare(ad);
+      if(ad&&!bd)return -1;
+      if(!ad&&bd)return 1;
+      return (b.updatedAt||0)-(a.updatedAt||0);
+    });
+  }
   if(siteFilter!=="all")list=list.filter(s=>(s.status||"active")===siteFilter);
   if(q)list=list.filter(s=>(s.siteName||"現場名未入力").toLowerCase().includes(q));
   box.innerHTML="";
@@ -2771,10 +2805,17 @@ function renderSiteList(){
     const item=document.createElement("div");item.className="site-item";
     const rooms=(s.rooms||[]).length;
     const repeatTotal=siteRepeatTotal(s);
-    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name"><span>${esc(s.siteName||"現場名未入力")}</span><span class="site-item-total">${fmt(repeatTotal)}</span></div><div class="site-item-meta">部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="site-pdf">PDF共有</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
+    item.innerHTML=`<div class="site-item-main"><div><div class="site-item-name"><span>${esc(s.siteName||"現場名未入力")}</span><span class="site-item-total">${fmt(repeatTotal)}</span></div><div class="site-item-meta"><span class="site-item-date">${s.siteDate?esc(s.siteDate.replaceAll("-","/")):"日付未設定"}</span>　部屋 ${rooms}　更新 ${fmtDate(s.updatedAt)}</div></div><span class="site-status-badge ${(s.status||"active")==="done"?"done":""}">${(s.status||"active")==="done"?"完了":"進行中"}</span></div><div class="site-item-actions"><button class="open-site">開く</button><button class="site-pdf">PDF共有</button><button class="toggle-status">${(s.status||"active")==="done"?"進行中へ戻す":"完了にする"}</button><button class="edit-date">日付変更</button><button class="rename-site">名前変更</button><button class="danger delete-site">削除</button></div>`;
     item.querySelector(".open-site").onclick=()=>switchSite(s.id);
     item.querySelector(".site-pdf").onclick=()=>shareSitePdf(s);
     item.querySelector(".toggle-status").onclick=()=>{s.status=(s.status||"active")==="done"?"active":"done";s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));renderSiteList()};
+    item.querySelector(".edit-date").onclick=()=>{
+      const input=document.createElement("input");input.type="date";input.value=s.siteDate||"";
+      input.style.position="fixed";input.style.left="-9999px";document.body.appendChild(input);
+      input.onchange=()=>{s.siteDate=input.value||"";s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));if(s.id===state.id)render();input.remove();renderSiteList()};
+      input.onblur=()=>setTimeout(()=>input.isConnected&&input.remove(),200);
+      input.showPicker?.();input.focus();
+    };
     item.querySelector(".rename-site").onclick=()=>{const n=prompt("現場名を変更",s.siteName||"");if(n!==null){s.siteName=n.trim();s.updatedAt=Date.now();localStorage.setItem(SITES_KEY,JSON.stringify(sites));if(s.id===state.id)render();renderSiteList()}};
     item.querySelector(".delete-site").onclick=()=>{
       if(sites.length<=1){alert("現場は1件以上残してください");return}
@@ -2786,7 +2827,14 @@ function renderSiteList(){
     box.appendChild(item);
   });
 }
-function openSiteManager(){hideMeasureKeypad();hideProductKeypad();save();renderSiteList();$("#siteManager").classList.add("show")}
+function updateSiteSortButtons(){
+  $("#sortByDate")?.classList.toggle("active",siteSort==="date");
+  $("#sortByName")?.classList.toggle("active",siteSort==="name");
+}
+function setSiteSort(mode){
+  siteSort=mode;localStorage.setItem(SITE_SORT_KEY,siteSort);updateSiteSortButtons();renderSiteList();
+}
+function openSiteManager(){hideMeasureKeypad();hideProductKeypad();save();updateSiteSortButtons();renderSiteList();$("#siteManager").classList.add("show")}
 function setSiteFilter(f){
   siteFilter=f;
   $("#filterActive").classList.toggle("active",f==="active");
@@ -2797,7 +2845,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.4.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.4.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -2847,7 +2895,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";$("#siteName").value=state.siteName||"";if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";if(state.siteDate==null)state.siteDate="";$("#siteName").value=state.siteName||"";$("#siteDate").value=state.siteDate||"";if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
@@ -3043,7 +3091,7 @@ updateSectionSheetMode();
 $("#manageSections").onclick=()=>{manageSections=!manageSections;renderSectionChoices()};
 $("#resetSections").onclick=()=>{if(confirm("区分候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){savedSections=[];deletedSections=[];sectionOrder=[...CATS];saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();renderSectionChoices()}};
 $("#closeSection").onclick=()=>closeSectionSheet();$("#addCustomSection").onclick=()=>{let n=$("#customSection").value.trim(),r=room();if(n&&r){addUniqueText(SECTION_MASTER_KEY,savedSections,n);if(!sectionOrder.includes(n)){sectionOrder.push(n);saveSectionOrder()}renderSectionChoices();const editing=getEditingSection();if(editing){editing.name=n}else{r.sections.push(newSec(n))}$("#customSection").value="";save();closeSectionSheet();render()}};
-$("#siteName").oninput=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
+$("#siteName").oninput=save;$("#siteDate").onchange=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
 $("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
 
@@ -3074,6 +3122,8 @@ $("#siteSearch").oninput=renderSiteList;
 $("#filterActive").onclick=()=>setSiteFilter("active");
 $("#filterDone").onclick=()=>setSiteFilter("done");
 $("#filterAll").onclick=()=>setSiteFilter("all");
+$("#sortByDate").onclick=()=>setSiteSort("date");
+$("#sortByName").onclick=()=>setSiteSort("name");
 $("#exportBackup").onclick=exportBackup;
 $("#importBackup").onclick=()=>$("#backupFileInput").click();
 $("#backupFileInput").onchange=async e=>{
