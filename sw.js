@@ -1,4 +1,4 @@
-const CACHE="gencho-v141-20260817-cursor-right-keypad-bottom-right";
+const CACHE="gencho-v142-20260817-export-selected-labels";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

@@ -468,7 +468,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 </style>
 </head>
-<body data-build="v1.4.1">
+<body data-build="v1.4.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2594,6 +2594,14 @@ function combineCanvasesVertically(canvases){
 function selectedExportParts(){
   return [...document.querySelectorAll("#exportSheet [data-export-part]:checked")].map(x=>x.dataset.exportPart);
 }
+function selectedExportLabel(parts){
+  const labels={wall:"クロス",floor:"床",sheet:"シート",other:"その他",memo:"メモ",order:"発注一覧"};
+  return (parts||[]).map(x=>labels[x]).filter(Boolean).join("・");
+}
+function selectedExportTitle(parts){
+  const label=selectedExportLabel(parts);
+  return label?`現調まとめ［${label}］`:"現調まとめ";
+}
 function buildSelectedExportCanvases(parts,siteObj=state){
   const canvases=[];
   if(parts.includes("wall")){
@@ -2614,10 +2622,11 @@ async function exportSelectedAsImage(){
     save();const parts=selectedExportParts();if(!parts.length){alert("出力する内容を選択してください");return}
     const canvases=buildSelectedExportCanvases(parts,state);if(!canvases.length){alert("選択した内容に出力できるデータがありません");return}
     const canvas=combineCanvasesVertically(canvases);
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_現調まとめ.png`;
+    const exportTitle=selectedExportTitle(parts);
+    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(exportTitle)}.png`;
     const file=await canvasToPngFile(canvas,fn);
     $("#exportSheet").classList.remove("show");
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} 現調まとめ`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${exportTitle}`);
   }catch(e){console.error(e);alert("画像作成に失敗しました")}
 }
 async function exportSelectedAsPdf(){
@@ -2627,9 +2636,10 @@ async function exportSelectedAsPdf(){
     const images=[];
     for(const canvas of canvases){const pages=await canvasToPdfJpegs(canvas);images.push(...pages)}
     const blob=makePdfFromJpegs(images);
-    const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_現調まとめ.pdf`,{type:"application/pdf"});
+    const exportTitle=selectedExportTitle(parts);
+    const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(exportTitle)}.pdf`,{type:"application/pdf"});
     $("#exportSheet").classList.remove("show");
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} 現調まとめPDF`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${exportTitle} PDF`);
   }catch(e){console.error(e);alert("PDF作成に失敗しました")}
 }
 
@@ -2787,7 +2797,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.4.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.4.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
