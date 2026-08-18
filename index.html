@@ -284,6 +284,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   flex-wrap:nowrap !important;
 }
 .measure-input{
+  touch-action:pan-y !important;
   display:block !important;
   width:100% !important;
   min-width:0 !important;
@@ -496,7 +497,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .site-item-date:active{opacity:.65}
 </style>
 </head>
-<body data-build="v1.4.5">
+<body data-build="v1.4.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1986,15 +1987,40 @@ function bindMeasureDrag(handle,row,sec,m){
   });
 }
 
+function bindMeasureTap(inp,m,sec,list,row){
+  let sx=0,sy=0,moved=false,suppressClick=false;
+  const MOVE_THRESHOLD=10;
+  inp.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse")return;
+    sx=e.clientX;sy=e.clientY;moved=false;
+  },{passive:true});
+  inp.addEventListener("pointermove",e=>{
+    if(e.pointerType==="mouse")return;
+    if(Math.abs(e.clientX-sx)>MOVE_THRESHOLD||Math.abs(e.clientY-sy)>MOVE_THRESHOLD)moved=true;
+  },{passive:true});
+  inp.addEventListener("pointerup",e=>{
+    if(e.pointerType==="mouse")return;
+    suppressClick=true;
+    setTimeout(()=>{suppressClick=false},350);
+    if(moved)return;
+    e.preventDefault();
+    showMeasureKeypad(inp,m,sec,list,row,e);
+  });
+  inp.addEventListener("pointercancel",()=>{moved=true});
+  inp.addEventListener("click",e=>{
+    e.preventDefault();
+    if(suppressClick)return;
+    showMeasureKeypad(inp,m,sec,list,row,e);
+  });
+}
+
 function addMeasureRowGlobal(sec,m,i,list){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
-  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
-  inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
-  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
+  bindMeasureTap(inp,m,sec,list,row);
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊※]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;renderMeasureButton(inp,m.value,inp.dataset.placeholder||"");drag.classList.toggle("hidden",!m.value);if(m.value)bindMeasureDrag(drag,row,sec,m);save();live()
@@ -2023,9 +2049,7 @@ function addMeasureRow(m,i){
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
-  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
-  inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
-  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
+  bindMeasureTap(inp,m,sec,list,row);
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊※]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;
@@ -2881,7 +2905,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.4.5",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.4.6",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
