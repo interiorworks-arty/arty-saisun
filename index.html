@@ -1891,6 +1891,11 @@ function renderFinishPage(){
     const empty=document.createElement("div");empty.className="finish-page-no-rooms";
     empty.textContent=`「＋ 部屋を追加」から${workPageLabel(page)}を施工する部屋を追加してください`;
     area.appendChild(empty);
+    const bottomToolbar=document.createElement("div");
+    bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";
+    bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';
+    bottomToolbar.querySelector("button").onclick=()=>addFinishRoomForPage(page);
+    area.appendChild(bottomToolbar);
     return;
   }
 
@@ -1913,6 +1918,11 @@ function renderFinishPage(){
     };
     area.appendChild(card);
   });
+  const bottomToolbar=document.createElement("div");
+  bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";
+  bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';
+  bottomToolbar.querySelector("button").onclick=()=>addFinishRoomForPage(page);
+  area.appendChild(bottomToolbar);
 }
 function setWorkPage(page){
   activeWorkPage=page;
@@ -1928,7 +1938,7 @@ function setWorkPage(page){
   else renderFinishPage();
 }
 
-function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';return}
+function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';let bottomToolbar=document.createElement("div");bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';bottomToolbar.querySelector("button").onclick=()=>openSharedRoomSheet("wall");area.appendChild(bottomToolbar);return}
 let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img pdf-action" data-room-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button><button class="small-btn" data-delete-room>この部屋を削除</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
 
@@ -1948,7 +1958,7 @@ card.querySelector("[data-delete-room]").onclick=()=>{
 card.querySelector("[data-save]").onclick=()=>saveCurrentRoomImage();
 card.querySelector("[data-room-pdf]").onclick=()=>shareRoomPdf(r,state);
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>openSectionSheetForAdd();
-area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+area.appendChild(card);let bottomToolbar=document.createElement("div");bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';bottomToolbar.querySelector("button").onclick=()=>openSharedRoomSheet("wall");area.appendChild(bottomToolbar);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 
 
 function bindMeasureDrag(handle,row,sec,m){
