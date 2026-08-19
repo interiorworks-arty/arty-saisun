@@ -1,4 +1,4 @@
-const CACHE="gencho-v161-20260820-site-switch-refresh";
+const CACHE="gencho-v162-20260820-site-header-refresh";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
