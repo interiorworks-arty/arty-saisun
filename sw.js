@@ -1,4 +1,4 @@
-const CACHE="gencho-v153-20260819-photo-bulk-delete";
+const CACHE="gencho-v154-20260819-selection-scroll-next-count";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
