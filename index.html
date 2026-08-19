@@ -284,6 +284,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   flex-wrap:nowrap !important;
 }
 .measure-input{
+  touch-action:pan-y !important;
   display:block !important;
   width:100% !important;
   min-width:0 !important;
@@ -496,7 +497,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .site-item-date:active{opacity:.65}
 </style>
 </head>
-<body data-build="v1.4.6">
+<body data-build="v1.4.10">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -956,8 +957,7 @@ function renderRecentProductCandidates(){
     b.type="button";
     b.className="recent-product-chip";
     b.textContent=v;
-    b.addEventListener("pointerdown",e=>{
-      e.preventDefault();
+    bindTapOnly(b,e=>{
       e.stopPropagation();
       if(!activeProductSection)return;
       activeProductSection.product=v;
@@ -1590,8 +1590,7 @@ function renderFinishMaterial(r,item){
   };
 
   const prod=d.querySelector(".finish-product-button");
-  prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,item,e)};
-  prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,item,e)};
+  bindTapOnly(prod,e=>showProductKeypad(prod,item,e));
   const rp=d.querySelector(".register-product");
   if(rp)rp.onclick=()=>{if(registerFinishProduct(item.type,item.product)){alert("品番を登録しました");render()}};
   const openFull=d.querySelector(".open-full-products"),saveFull=d.querySelector(".save-full-product");
@@ -1610,8 +1609,7 @@ function renderFinishMaterial(r,item){
     const b=d.querySelector(sel);if(!b)return;
     const refresh=()=>{b.textContent=item[key]||b.dataset.placeholder||"";if(cb)cb()};
     b.dataset.placeholder=b.textContent;
-    b.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(b,item,key,label,()=>{refresh()},e)};
-    b.onclick=e=>{e.preventDefault();showGenericNumberKeypad(b,item,key,label,()=>{refresh()},e)};
+    bindTapOnly(b,e=>showGenericNumberKeypad(b,item,key,label,()=>{refresh()},e));
   };
   num(".area","area","施工数量");
   num(".qty","qty","数量",()=>{const x=d.querySelector(".base-case-result");if(x)x.textContent=finishBaseCases(item)||"—"});
@@ -1638,41 +1636,16 @@ function renderFinishMaterial(r,item){
         if(!cut.lengthUnit)cut.lengthUnit="m";if(!cut.countUnit)cut.countUnit="本";
         row.innerHTML=`<button type="button" class="finish-order-drag" aria-label="発注寸法を並び替え">≡</button><button type="button" class="num-btn len">${esc(cut.length||"寸法")}</button><button type="button" class="length-unit">${esc(cut.lengthUnit||"m")}</button><span class="op">×</span><button type="button" class="num-btn count">${esc(cut.count||"数量")}</button><button type="button" class="cut-unit">${esc(cut.countUnit||"本")}</button><button type="button" class="remove-order">×</button>`;
         const drag=row.querySelector(".finish-order-drag"),lb=row.querySelector(".len"),lub=row.querySelector(".length-unit"),cb=row.querySelector(".count"),ub=row.querySelector(".cut-unit");
-
         drag.addEventListener("pointerdown",e=>{
           e.preventDefault();e.stopPropagation();hideMeasureKeypad();hideProductKeypad();
-          drag.setPointerCapture?.(e.pointerId);
-          let targetId=null,targetRow=null;
-          const move=ev=>{
-            list.querySelectorAll(".finish-order-row.drag-target").forEach(x=>x.classList.remove("drag-target"));
-            const el=document.elementFromPoint(ev.clientX,ev.clientY);
-            const tr=el?.closest?.(".finish-order-row");
-            if(tr&&tr!==row&&tr.dataset.cutId){targetId=tr.dataset.cutId;targetRow=tr;tr.classList.add("drag-target")}
-          };
-          const up=()=>{
-            targetRow?.classList.remove("drag-target");
-            drag.removeEventListener("pointermove",move);drag.removeEventListener("pointerup",up);drag.removeEventListener("pointercancel",up);
-            if(targetId){
-              const arr=item.orderCuts||[];
-              const from=arr.findIndex(x=>String(x.id)===String(cut.id));
-              const to=arr.findIndex(x=>String(x.id)===String(targetId));
-              if(from>=0&&to>=0&&from!==to){
-                const [moved]=arr.splice(from,1);
-                arr.splice(to,0,moved);
-                save();renderOrders();
-              }
-            }
-          };
-          drag.addEventListener("pointermove",move);
-          drag.addEventListener("pointerup",up);
-          drag.addEventListener("pointercancel",up);
+          drag.setPointerCapture?.(e.pointerId);let targetId=null,targetRow=null;
+          const move=ev=>{list.querySelectorAll(".finish-order-row.drag-target").forEach(x=>x.classList.remove("drag-target"));const el=document.elementFromPoint(ev.clientX,ev.clientY);const tr=el?.closest?.(".finish-order-row");if(tr&&tr!==row&&tr.dataset.cutId){targetId=tr.dataset.cutId;targetRow=tr;tr.classList.add("drag-target")}};
+          const up=()=>{targetRow?.classList.remove("drag-target");drag.removeEventListener("pointermove",move);drag.removeEventListener("pointerup",up);drag.removeEventListener("pointercancel",up);if(targetId){const arr=item.orderCuts||[];const from=arr.findIndex(x=>String(x.id)===String(cut.id)),to=arr.findIndex(x=>String(x.id)===String(targetId));if(from>=0&&to>=0&&from!==to){const [moved]=arr.splice(from,1);arr.splice(to,0,moved);save();renderOrders()}}};
+          drag.addEventListener("pointermove",move);drag.addEventListener("pointerup",up);drag.addEventListener("pointercancel",up);
         });
-
-        lb.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()},e)};
-        lb.onclick=e=>{e.preventDefault();showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()},e)};
+        bindTapOnly(lb,e=>showGenericNumberKeypad(lb,cut,"length","寸法",()=>{lb.textContent=cut.length||"寸法";updateTotal()},e));
         lub.onclick=()=>openUnitSheet(cut,"lengthUnit",()=>{lub.textContent=cut.lengthUnit||"m";save();renderOrders()});
-        cb.onpointerdown=e=>{e.preventDefault();showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()},e)};
-        cb.onclick=e=>{e.preventDefault();showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()},e)};
+        bindTapOnly(cb,e=>showGenericNumberKeypad(cb,cut,"count","数量",()=>{cb.textContent=cut.count||"数量";updateTotal()},e));
         ub.onclick=()=>openUnitSheet(cut,"countUnit",()=>{ub.textContent=cut.countUnit||"本";save();renderOrders()});
         row.querySelector(".remove-order").onclick=()=>{item.orderCuts=item.orderCuts.filter(x=>x.id!==cut.id);save();renderOrders()};
         list.appendChild(row);
@@ -1948,6 +1921,11 @@ function renderFinishPage(){
     };
     area.appendChild(card);
   });
+  const bottomToolbar=document.createElement("div");
+  bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";
+  bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';
+  bottomToolbar.querySelector("button").onclick=()=>addFinishRoomForPage(page);
+  area.appendChild(bottomToolbar);
 }
 function setWorkPage(page){
   activeWorkPage=page;
@@ -1983,7 +1961,7 @@ card.querySelector("[data-delete-room]").onclick=()=>{
 card.querySelector("[data-save]").onclick=()=>saveCurrentRoomImage();
 card.querySelector("[data-room-pdf]").onclick=()=>shareRoomPdf(r,state);
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>openSectionSheetForAdd();
-area.appendChild(card);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+area.appendChild(card);let bottomToolbar=document.createElement("div");bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';bottomToolbar.querySelector("button").onclick=()=>openSharedRoomSheet("wall");area.appendChild(bottomToolbar);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 
 
 function bindMeasureDrag(handle,row,sec,m){
@@ -2017,15 +1995,68 @@ function bindMeasureDrag(handle,row,sec,m){
   });
 }
 
+// 共通タップ判定：指が動いた場合はスワイプとして扱い、入力・選択を開始しない
+function bindTapOnly(el,handler,threshold=10){
+  if(!el)return;
+  let sx=0,sy=0,moved=false,suppressClick=false;
+  el.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse")return;
+    sx=e.clientX;sy=e.clientY;moved=false;
+  },{passive:true});
+  el.addEventListener("pointermove",e=>{
+    if(e.pointerType==="mouse")return;
+    if(Math.abs(e.clientX-sx)>threshold||Math.abs(e.clientY-sy)>threshold)moved=true;
+  },{passive:true});
+  el.addEventListener("pointerup",e=>{
+    if(e.pointerType==="mouse")return;
+    suppressClick=true;
+    setTimeout(()=>{suppressClick=false},350);
+    if(moved)return;
+    e.preventDefault();
+    handler(e);
+  });
+  el.addEventListener("pointercancel",()=>{moved=true});
+  el.addEventListener("click",e=>{
+    if(suppressClick)return;
+    e.preventDefault();
+    handler(e);
+  });
+}
+
+function bindMeasureTap(inp,m,sec,list,row){
+  let sx=0,sy=0,moved=false,suppressClick=false;
+  const MOVE_THRESHOLD=10;
+  inp.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse")return;
+    sx=e.clientX;sy=e.clientY;moved=false;
+  },{passive:true});
+  inp.addEventListener("pointermove",e=>{
+    if(e.pointerType==="mouse")return;
+    if(Math.abs(e.clientX-sx)>MOVE_THRESHOLD||Math.abs(e.clientY-sy)>MOVE_THRESHOLD)moved=true;
+  },{passive:true});
+  inp.addEventListener("pointerup",e=>{
+    if(e.pointerType==="mouse")return;
+    suppressClick=true;
+    setTimeout(()=>{suppressClick=false},350);
+    if(moved)return;
+    e.preventDefault();
+    showMeasureKeypad(inp,m,sec,list,row,e);
+  });
+  inp.addEventListener("pointercancel",()=>{moved=true});
+  inp.addEventListener("click",e=>{
+    e.preventDefault();
+    if(suppressClick)return;
+    showMeasureKeypad(inp,m,sec,list,row,e);
+  });
+}
+
 function addMeasureRowGlobal(sec,m,i,list){
   let row=document.createElement("div"),c=calc(m.value,sec.repeat);
   row.className="measure-row";
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
-  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
-  inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
-  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
+  bindMeasureTap(inp,m,sec,list,row);
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊※]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;renderMeasureButton(inp,m.value,inp.dataset.placeholder||"");drag.classList.toggle("hidden",!m.value);if(m.value)bindMeasureDrag(drag,row,sec,m);save();live()
@@ -2039,10 +2070,9 @@ function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.
 let cat=d.querySelector(".category"),prod=d.querySelector(".product"),rep=d.querySelector(".repeat-v"),hrep=d.querySelector(".repeat-h");
 cat.onclick=()=>openSectionSheetForEdit(sec);
 cat.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openSectionSheetForEdit(sec)}};
-prod.onclick=e=>{e.preventDefault();showProductKeypad(prod,sec,e)};
-prod.onpointerdown=e=>{e.preventDefault();showProductKeypad(prod,sec,e)};
-rep.onclick=e=>showRepeatKeypad(rep,sec,"repeat",e);
-hrep.onclick=e=>showRepeatKeypad(hrep,sec,"hRepeat",e);
+bindTapOnly(prod,e=>showProductKeypad(prod,sec,e));
+bindTapOnly(rep,e=>showRepeatKeypad(rep,sec,"repeat",e));
+bindTapOnly(hrep,e=>showRepeatKeypad(hrep,sec,"hRepeat",e));
 d.querySelector(".pick-product").onclick=()=>openProductMaster(sec);
 d.querySelector(".save-product").onclick=()=>{if(registerProduct(sec.product,sec.repeat)){alert("品番とリピートを登録しました");render()}};
 
@@ -2054,9 +2084,7 @@ function addMeasureRow(m,i){
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
-  inp.addEventListener("pointerdown",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
-  inp.addEventListener("focus",()=>{showMeasureKeypad(inp,m,sec,list,row);inp.blur()});
-  inp.addEventListener("click",e=>{e.preventDefault();showMeasureKeypad(inp,m,sec,list,row,e)});
+  bindMeasureTap(inp,m,sec,list,row);
   inp.oninput=()=>{
     m.value=inp.value.replace(/[＊※]/g,"*").replace(/[×xX]/g,"-").replace(/[^\d.*-]/g,"");
     inp.value=m.value;
@@ -2912,7 +2940,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.4.6",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.4.10",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -3062,8 +3090,7 @@ function renderFinishChoices(){
         finishTargetRoomId=null;
         render();
       };
-      b.addEventListener("pointerup",pick);
-      b.addEventListener("click",e=>{if(e.detail===0)pick(e)});
+      bindTapOnly(b,pick);
     }
 
     const drag=document.createElement("button");drag.className="choice-drag";drag.textContent="≡";drag.type="button";
@@ -3211,7 +3238,7 @@ $("#measureKeypad").querySelectorAll("button[data-key]").forEach(btn=>{
     keypadPress(btn.dataset.key);
   });
 });
-document.addEventListener("pointerdown",e=>{
+document.addEventListener("click",e=>{
   const kp=$("#measureKeypad");
   if(!kp)return;
   if(kp.contains(e.target) || e.target.classList?.contains("measure-input"))return;
@@ -3279,7 +3306,7 @@ $("#productKeypad").addEventListener("pointerdown",e=>{const btn=e.target.closes
  drag.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();const st=setProductKeypadFreePosition();if(!st)return;const sx=e.clientX,sy=e.clientY,sl=st.left,top=st.top;drag.setPointerCapture?.(e.pointerId);const mv=ev=>{kp.style.left=clamp(sl+ev.clientX-sx,8,Math.max(8,window.innerWidth-kp.offsetWidth-8))+"px";kp.style.top=clamp(top+ev.clientY-sy,8,Math.max(8,window.innerHeight-kp.offsetHeight-8))+"px"};const up=()=>{drag.removeEventListener("pointermove",mv);drag.removeEventListener("pointerup",up);drag.removeEventListener("pointercancel",up);saveProductKeypadLayout()};drag.addEventListener("pointermove",mv);drag.addEventListener("pointerup",up);drag.addEventListener("pointercancel",up)});
  resize.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();const st=setProductKeypadFreePosition();if(!st)return;const sx=e.clientX,sw=st.width,sl=st.left,top=st.top;resize.setPointerCapture?.(e.pointerId);const mv=ev=>{const maxW=Math.min(860,window.innerWidth-sl-8),w=clamp(sw+ev.clientX-sx,380,Math.max(380,maxW));kp.style.width=w+"px";kp.style.setProperty("--pk-h",clamp(Math.round(42*(w/680)),36,58)+"px");kp.style.setProperty("--pk-font",clamp(Math.round(18*(w/680)),15,25)+"px");kp.style.left=sl+"px";kp.style.top=clamp(top,8,Math.max(8,window.innerHeight-kp.offsetHeight-8))+"px"};const up=()=>{resize.removeEventListener("pointermove",mv);resize.removeEventListener("pointerup",up);resize.removeEventListener("pointercancel",up);saveProductKeypadLayout()};resize.addEventListener("pointermove",mv);resize.addEventListener("pointerup",up);resize.addEventListener("pointercancel",up)});
 })();
-document.addEventListener("pointerdown",e=>{const pk=$("#productKeypad");if(!pk||!pk.classList.contains("show"))return;if(pk.contains(e.target)||e.target.classList?.contains("product-button"))return;hideProductKeypad()});
+document.addEventListener("click",e=>{const pk=$("#productKeypad");if(!pk||!pk.classList.contains("show"))return;if(pk.contains(e.target)||e.target.classList?.contains("product-button"))return;hideProductKeypad()});
 
 document.querySelectorAll("[data-work-page]").forEach(btn=>{
   btn.onclick=()=>setWorkPage(btn.dataset.workPage);
