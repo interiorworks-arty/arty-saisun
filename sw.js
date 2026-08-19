@@ -1,4 +1,4 @@
-const CACHE="gencho-v150-20260819-photo-page";
+const CACHE="gencho-v151-20260819-photo-pdf-page-safe";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

@@ -531,7 +531,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 </style>
 </head>
-<body data-build="v1.5.0">
+<body data-build="v1.5.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2024,26 +2024,40 @@ function imageFromBlob(blob){
 async function buildPhotoExportCanvases(siteObj=state){
   const photos=await photoDbAllForSite(siteObj.id);if(!photos.length)return [];
   const rooms=photoRoomNamesFromSite(siteObj,photos).filter(n=>photos.some(p=>p.roomName===n)),out=[];
+  const perPage=6; // 2列×3段。A4のページ境界で写真が切れない枚数
+  const pageHeight=1700; // canvasToPdfJpegs のA4分割高(約1753px)より小さく固定
+  const rowH=430,gap=28,imgH=310;
+
   for(const roomName of rooms){
     const list=photos.filter(p=>p.roomName===roomName);
-    const rowH=430,rows=Math.ceil(list.length/2),height=Math.max(900,300+rows*rowH);
-    const base=exportCanvasBase("写真",roomName,height),{c,ctx,pad,width}=base;let y=base.y;
-    const gap=28,colW=(width-pad*2-gap-50)/2,imgH=310;
-    for(let i=0;i<list.length;i++){
-      const col=i%2,row=Math.floor(i/2),x=pad+25+col*(colW+gap),top=y+row*rowH,rec=list[i];
-      try{
-        const {img,url}=await imageFromBlob(rec.blob);
-        const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,scale=Math.min(colW/iw,imgH/ih),dw=iw*scale,dh=ih*scale;
-        ctx.fillStyle="#eeeae7";ctx.fillRect(x,top,colW,imgH);
-        ctx.drawImage(img,x+(colW-dw)/2,top+(imgH-dh)/2,dw,dh);URL.revokeObjectURL(url);
-      }catch{}
-      if(rec.note){
-        ctx.fillStyle="#5e5751";ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        const lines=wrapCanvasText(ctx,rec.note,colW-8).slice(0,3);
-        lines.forEach((line,li)=>ctx.fillText(line,x+4,top+imgH+27+li*23));
+    const pageCount=Math.ceil(list.length/perPage);
+
+    for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
+      const chunk=list.slice(pageIndex*perPage,(pageIndex+1)*perPage);
+      const subtitle=pageCount>1?`${roomName}　${pageIndex+1}/${pageCount}`:roomName;
+      const base=exportCanvasBase("写真",subtitle,pageHeight),{c,ctx,pad,width}=base;
+      const y=base.y;
+      const colW=(width-pad*2-gap-50)/2;
+
+      for(let i=0;i<chunk.length;i++){
+        const col=i%2,row=Math.floor(i/2),x=pad+25+col*(colW+gap),top=y+row*rowH,rec=chunk[i];
+        try{
+          const {img,url}=await imageFromBlob(rec.blob);
+          const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+          const scale=Math.min(colW/iw,imgH/ih),dw=iw*scale,dh=ih*scale;
+          ctx.fillStyle="#eeeae7";ctx.fillRect(x,top,colW,imgH);
+          ctx.drawImage(img,x+(colW-dw)/2,top+(imgH-dh)/2,dw,dh);
+          URL.revokeObjectURL(url);
+        }catch{}
+        if(rec.note){
+          ctx.fillStyle="#5e5751";
+          ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+          const lines=wrapCanvasText(ctx,rec.note,colW-8).slice(0,3);
+          lines.forEach((line,li)=>ctx.fillText(line,x+4,top+imgH+27+li*23));
+        }
       }
+      out.push(c);
     }
-    out.push(c);
   }
   return out;
 }
@@ -3158,7 +3172,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.5.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.5.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
