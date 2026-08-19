@@ -578,9 +578,22 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-select-bottom .photo-select-delete{
   min-width:220px;padding:10px 14px;font-size:12px
 }
+
+.photo-room-manage{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.photo-room-move,.photo-room-remove{
+  border:0;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900
+}
+.photo-room-move{background:#eeeae7;color:#514a45;touch-action:none}
+.photo-room-remove{background:#efe3e1;color:#9c6262}
+.photo-room.drag-target{outline:3px dashed #8d837b;outline-offset:3px}
+
+.photo-room-edit{
+  border:0;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900;
+  background:#eeeae7;color:#514a45
+}
 </style>
 </head>
-<body data-build="v1.5.6">
+<body data-build="v1.5.8">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1970,13 +1983,61 @@ async function photoDbDelete(id){
     tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)};
   });
 }
+function ensurePhotoRoomPrefs(siteObj=state){
+  if(!Array.isArray(siteObj.photoHiddenRooms))siteObj.photoHiddenRooms=[];
+  if(!Array.isArray(siteObj.photoRoomOrder))siteObj.photoRoomOrder=[];
+  if(!siteObj.photoRoomAliases||typeof siteObj.photoRoomAliases!=="object"||Array.isArray(siteObj.photoRoomAliases))siteObj.photoRoomAliases={};
+}
+function photoRoomDisplayName(roomName,siteObj=state){
+  ensurePhotoRoomPrefs(siteObj);
+  return String(siteObj.photoRoomAliases?.[roomName]||roomName);
+}
+function editPhotoRoomName(roomName,currentRooms=[]){
+  if(roomName==="共通")return false;
+  ensurePhotoRoomPrefs(state);
+  const current=photoRoomDisplayName(roomName,state);
+  const value=prompt("写真・動画ページの部屋名を編集",current);
+  if(value===null)return false;
+  const next=String(value).trim();
+  if(!next){alert("部屋名を入力してください");return false}
+  const duplicate=(currentRooms||[]).some(n=>n!==roomName&&photoRoomDisplayName(n,state)===next);
+  if(duplicate){alert("同じ部屋名がすでにあります");return false}
+  if(next===roomName)delete state.photoRoomAliases[roomName];
+  else state.photoRoomAliases[roomName]=next;
+  save();return true;
+}
 function photoRoomNamesFromSite(siteObj=state,photos=[]){
-  const out=[],seen=new Set(),add=n=>{n=String(n||"").trim();if(!n||seen.has(n))return;seen.add(n);out.push(n)};
+  ensurePhotoRoomPrefs(siteObj);
+  const raw=[],seen=new Set(),add=n=>{n=String(n||"").trim();if(!n||seen.has(n))return;seen.add(n);raw.push(n)};
   add("共通");
   (siteObj.rooms||[]).forEach(r=>add(r.name));
   (siteObj.finishRooms||[]).forEach(r=>add(r.name));
   photos.forEach(p=>add(p.roomName));
-  return out;
+
+  const hidden=new Set((siteObj.photoHiddenRooms||[]).filter(n=>n!=="共通"));
+  const visible=raw.filter(n=>n==="共通"||!hidden.has(n));
+  const order=(siteObj.photoRoomOrder||[]).filter(n=>visible.includes(n));
+  visible.forEach(n=>{if(!order.includes(n))order.push(n)});
+  // 共通は常に先頭
+  const rest=order.filter(n=>n!=="共通");
+  siteObj.photoRoomOrder=["共通",...rest];
+  return ["共通",...rest];
+}
+function hidePhotoRoom(roomName){
+  if(roomName==="共通")return;
+  ensurePhotoRoomPrefs(state);
+  if(!state.photoHiddenRooms.includes(roomName))state.photoHiddenRooms.push(roomName);
+  state.photoRoomOrder=state.photoRoomOrder.filter(n=>n!==roomName);
+  save();
+}
+function reorderPhotoRoom(fromName,toName,currentRooms=null){
+  ensurePhotoRoomPrefs(state);
+  const arr=(currentRooms||state.photoRoomOrder||[]).filter(n=>n!=="共通");
+  const from=arr.indexOf(fromName),to=arr.indexOf(toName);
+  if(from<0||to<0||from===to)return;
+  const [moved]=arr.splice(from,1);arr.splice(to,0,moved);
+  state.photoRoomOrder=["共通",...arr];
+  save();
 }
 function compressPhotoFile(file,maxSide=1600,quality=.82){
   return new Promise((resolve,reject)=>{
@@ -2131,8 +2192,13 @@ async function renderPhotoPage(){
 
       const card=document.createElement("div");card.className="photo-room";
       const countText=[imageCount?`${imageCount}枚`:"",videoCount?`${videoCount}動画`:""].filter(Boolean).join("・")||"0枚";
-      card.innerHTML=`<div class="photo-room-head"><h2>${esc(roomName)}</h2><div class="photo-room-count">${countText}</div>
+      const roomDisplayName=photoRoomDisplayName(roomName,state);
+      card.dataset.roomName=roomName;
+      card.innerHTML=`<div class="photo-room-head"><h2>${esc(roomDisplayName)}</h2><div class="photo-room-count">${countText}</div>
         <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div>
+        <div class="photo-room-manage">
+          ${roomName!=="共通"?`<button type="button" class="photo-room-move" title="部屋を移動">≡</button><button type="button" class="photo-room-edit">名前編集</button><button type="button" class="photo-room-remove">部屋を削除</button>`:""}
+        </div>
         <div class="photo-select-tools">
           ${selecting
             ? `<button type="button" class="photo-select-all">すべて選択</button><button type="button" class="photo-select-clear">選択解除</button><button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
@@ -2147,6 +2213,49 @@ async function renderPhotoPage(){
       card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
       card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName);
       card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName);
+
+      const roomEdit=card.querySelector(".photo-room-edit");
+      if(roomEdit)roomEdit.onclick=async()=>{
+        if(editPhotoRoomName(roomName,rooms))await renderPhotoPage();
+      };
+
+      const roomRemove=card.querySelector(".photo-room-remove");
+      if(roomRemove)roomRemove.onclick=async()=>{
+        if(roomPhotos.length){
+          alert("この部屋には写真・動画があります。先に写真・動画を削除してください。");
+          return;
+        }
+        if(confirm(`「${photoRoomDisplayName(roomName,state)}」を写真・動画ページから削除しますか？\n※クロス・床・シートなど他ページの部屋は削除されません。`)){
+          hidePhotoRoom(roomName);
+          if(photoSelectRoom===roomName)clearPhotoSelection();
+          await renderPhotoPage();
+        }
+      };
+
+      const roomMove=card.querySelector(".photo-room-move");
+      if(roomMove)roomMove.onpointerdown=e=>{
+        e.preventDefault();e.stopPropagation();
+        roomMove.setPointerCapture?.(e.pointerId);
+        let targetName=null,targetCard=null;
+        const move=ev=>{
+          wrap.querySelectorAll(".photo-room.drag-target").forEach(x=>x.classList.remove("drag-target"));
+          const el=document.elementFromPoint(ev.clientX,ev.clientY)?.closest?.(".photo-room");
+          if(el&&el!==card){
+            const targetRoom=el.dataset.roomName;
+            if(targetRoom&&targetRoom!=="共通"){targetName=targetRoom;targetCard=el;el.classList.add("drag-target")}
+          }
+        };
+        const up=async()=>{
+          targetCard?.classList.remove("drag-target");
+          roomMove.removeEventListener("pointermove",move);
+          roomMove.removeEventListener("pointerup",up);
+          roomMove.removeEventListener("pointercancel",up);
+          if(targetName){reorderPhotoRoom(roomName,targetName,rooms);await renderPhotoPage()}
+        };
+        roomMove.addEventListener("pointermove",move);
+        roomMove.addEventListener("pointerup",up);
+        roomMove.addEventListener("pointercancel",up);
+      };
 
       const toggle=card.querySelector(".photo-select-toggle");
       if(toggle)toggle.onclick=()=>{photoSelectRoom=roomName;photoSelectedIds=new Set();renderPhotoPage()};
@@ -2168,7 +2277,7 @@ async function renderPhotoPage(){
         const pc=document.createElement("div");
         pc.className="photo-card"+(selecting?" select-mode":"")+(selected?" selected":"");
         pc.dataset.photoId=rec.id;
-        pc.innerHTML=`<div class="photo-thumb-wrap">${isVideo?'<span class="photo-video-badge">🎥 動画</span>':""}${selecting?`<span class="photo-select-check">${selected?"✓":""}</span>`:""}<img class="photo-thumb" alt="${esc(roomName)}の${isVideo?"動画":"写真"}"></div>
+        pc.innerHTML=`<div class="photo-thumb-wrap">${isVideo?'<span class="photo-video-badge">🎥 動画</span>':""}${selecting?`<span class="photo-select-check">${selected?"✓":""}</span>`:""}<img class="photo-thumb" alt="${esc(photoRoomDisplayName(roomName,state))}の${isVideo?"動画":"写真"}"></div>
           <div class="photo-card-tools"><button type="button" class="photo-drag">≡</button><button type="button" class="photo-delete">削除</button></div>
           <textarea class="photo-note" placeholder="${isVideo?"動画":"写真"}メモ">${esc(rec.note||"")}</textarea>`;
 
@@ -2269,7 +2378,8 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null){
     const pageCount=Math.ceil(list.length/perPage);
     for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
       const chunk=list.slice(pageIndex*perPage,(pageIndex+1)*perPage);
-      const subtitle=pageCount>1?`${roomName}　${pageIndex+1}/${pageCount}`:roomName;
+      const displayRoom=photoRoomDisplayName(roomName,siteObj);
+      const subtitle=pageCount>1?`${displayRoom}　${pageIndex+1}/${pageCount}`:displayRoom;
       const base=exportCanvasBase("写真・動画",subtitle,pageHeight),{c,ctx,pad,width}=base;
       const y=base.y,colW=(width-pad*2-gap-50)/2;
 
@@ -2307,9 +2417,9 @@ async function exportPhotoRoomImage(roomName){
     const canvases=await buildPhotoExportCanvases(state,roomName);
     if(!canvases.length){alert("この部屋に写真・動画がありません");return}
     const canvas=combineCanvasesVertically(canvases);
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(roomName)}_写真・動画.png`;
+    const displayRoom=photoRoomDisplayName(roomName,state);const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_写真・動画.png`;
     const file=await canvasToPngFile(canvas,fn);
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${roomName} 写真・動画`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} 写真・動画`);
   }catch(e){console.error(e);alert("画像作成に失敗しました")}
 }
 async function exportPhotoRoomPdf(roomName){
@@ -2319,7 +2429,7 @@ async function exportPhotoRoomPdf(roomName){
     const images=[];
     for(const canvas of canvases)images.push(await canvasToJpegInfo(canvas));
     const blob=makePdfFromJpegs(images);
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(roomName)}_写真・動画.pdf`;
+    const displayRoom=photoRoomDisplayName(roomName,state);const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_写真・動画.pdf`;
     const file=new File([blob],fn,{type:"application/pdf"});
     await shareOrDownloadFile(file,`${state.siteName||"現調"} ${roomName} 写真・動画 PDF`);
   }catch(e){console.error(e);alert("PDF作成に失敗しました")}
@@ -3435,7 +3545,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.5.6",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.5.8",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{

@@ -1,4 +1,4 @@
-const CACHE="gencho-v156-20260819-bottom-delete";
+const CACHE="gencho-v158-20260820-photo-room-rename";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
