@@ -544,9 +544,29 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .photo-add-actions{flex-wrap:wrap}
   .photo-add-actions button{min-width:45%}
 }
+
+.photo-select-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.photo-select-toggle,.photo-select-cancel,.photo-select-delete{
+  border:0;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900
+}
+.photo-select-toggle{background:#eeeae7;color:#514a45}
+.photo-select-cancel{background:#eeeae7;color:#6b645e}
+.photo-select-delete{background:#efe3e1;color:#9c6262}
+.photo-card.select-mode{cursor:pointer}
+.photo-card.selected{outline:3px solid #7c736d;outline-offset:2px}
+.photo-select-check{
+  position:absolute;right:8px;top:8px;z-index:3;width:28px;height:28px;border-radius:999px;
+  border:2px solid #fff;background:rgba(60,56,52,.55);color:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:900
+}
+.photo-card.selected .photo-select-check{background:#6f665f}
+.photo-card.select-mode .photo-delete,.photo-card.select-mode .photo-drag,.photo-card.select-mode .photo-note{pointer-events:none;opacity:.45}
+@media(max-width:600px){
+  .photo-select-tools{width:100%}
+}
 </style>
 </head>
-<body data-build="v1.5.2">
+<body data-build="v1.5.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -556,7 +576,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   <button type="button" data-work-page="floor">床</button>
   <button type="button" data-work-page="sheet">シート</button>
   <button type="button" data-work-page="other">その他</button>
-  <button type="button" data-work-page="photo">写真</button>
+  <button type="button" data-work-page="photo">写真・動画</button>
   <button type="button" data-work-page="memo">メモ</button>
   <button type="button" data-work-page="order">発注</button>
 </div>
@@ -2039,6 +2059,23 @@ function openPhotoPreview(rec){
   $("#photoLightboxClose").onclick=closeMediaPreview;
   $("#photoLightbox").onclick=e=>{if(e.target.id==="photoLightbox")closeMediaPreview()};
 }
+
+let photoSelectRoom=null,photoSelectedIds=new Set();
+function clearPhotoSelection(){
+  photoSelectRoom=null;photoSelectedIds=new Set();
+}
+function togglePhotoSelection(roomName,id){
+  if(photoSelectRoom!==roomName){photoSelectRoom=roomName;photoSelectedIds=new Set()}
+  if(photoSelectedIds.has(id))photoSelectedIds.delete(id);else photoSelectedIds.add(id);
+}
+async function deleteSelectedPhotos(roomName){
+  const ids=[...photoSelectedIds];
+  if(!ids.length){alert("削除する写真・動画を選択してください");return}
+  if(!confirm(`選択した${ids.length}件の写真・動画を削除しますか？`))return;
+  for(const id of ids)await photoDbDelete(id);
+  clearPhotoSelection();
+  await renderPhotoPage();
+}
 async function renderPhotoPage(){
   const area=$("#photoPageArea");if(!area)return;
   area.innerHTML='<div class="photo-loading">写真・動画を読み込み中...</div>';
@@ -2049,25 +2086,47 @@ async function renderPhotoPage(){
       const roomPhotos=photos.filter(p=>p.roomName===roomName);
       const imageCount=roomPhotos.filter(x=>mediaTypeOf(x)==="image").length;
       const videoCount=roomPhotos.length-imageCount;
+      const selecting=photoSelectRoom===roomName;
+      const selectedCount=selecting?photoSelectedIds.size:0;
+
       const card=document.createElement("div");card.className="photo-room";
       const countText=[imageCount?`${imageCount}枚`:"",videoCount?`${videoCount}動画`:""].filter(Boolean).join("・")||"0枚";
       card.innerHTML=`<div class="photo-room-head"><h2>${esc(roomName)}</h2><div class="photo-room-count">${countText}</div>
-        <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div></div>
-        <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ 写真・動画を選択</button></div>
+        <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div>
+        <div class="photo-select-tools">
+          ${selecting
+            ? `<button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
+            : `<button type="button" class="photo-select-toggle">□ 写真・動画を選択</button>`}
+        </div></div>
+        <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ アルバムから選択</button></div>
         <div class="photo-grid"></div>`;
+
       card.querySelector(".photo-camera").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoCameraInput");inp.value="";inp.click()};
       card.querySelector(".video-camera").onclick=()=>{photoTargetRoom=roomName;const inp=$("#videoCameraInput");inp.value="";inp.click()};
       card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
       card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName);
       card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName);
+
+      const toggle=card.querySelector(".photo-select-toggle");
+      if(toggle)toggle.onclick=()=>{photoSelectRoom=roomName;photoSelectedIds=new Set();renderPhotoPage()};
+      const cancel=card.querySelector(".photo-select-cancel");
+      if(cancel)cancel.onclick=()=>{clearPhotoSelection();renderPhotoPage()};
+      const delSelected=card.querySelector(".photo-select-delete");
+      if(delSelected)delSelected.onclick=()=>deleteSelectedPhotos(roomName);
+
       const grid=card.querySelector(".photo-grid");
       if(!roomPhotos.length){grid.innerHTML='<div class="photo-empty">写真・動画はまだありません</div>'}
+
       roomPhotos.forEach(rec=>{
         const isVideo=mediaTypeOf(rec)==="video";
-        const pc=document.createElement("div");pc.className="photo-card";pc.dataset.photoId=rec.id;
-        pc.innerHTML=`<div class="photo-thumb-wrap">${isVideo?'<span class="photo-video-badge">🎥 動画</span>':""}<img class="photo-thumb" alt="${esc(roomName)}の${isVideo?"動画":"写真"}"></div>
+        const selected=selecting&&photoSelectedIds.has(rec.id);
+        const pc=document.createElement("div");
+        pc.className="photo-card"+(selecting?" select-mode":"")+(selected?" selected":"");
+        pc.dataset.photoId=rec.id;
+        pc.innerHTML=`<div class="photo-thumb-wrap">${isVideo?'<span class="photo-video-badge">🎥 動画</span>':""}${selecting?`<span class="photo-select-check">${selected?"✓":""}</span>`:""}<img class="photo-thumb" alt="${esc(roomName)}の${isVideo?"動画":"写真"}"></div>
           <div class="photo-card-tools"><button type="button" class="photo-drag">≡</button><button type="button" class="photo-delete">削除</button></div>
           <textarea class="photo-note" placeholder="${isVideo?"動画":"写真"}メモ">${esc(rec.note||"")}</textarea>`;
+
         const img=pc.querySelector(".photo-thumb");
         const sourceBlob=isVideo?(rec.thumbBlob||null):rec.blob;
         if(sourceBlob){
@@ -2076,11 +2135,23 @@ async function renderPhotoPage(){
           const c=document.createElement("canvas");c.width=640;c.height=360;const x=c.getContext("2d");
           x.fillStyle="#ddd7d2";x.fillRect(0,0,c.width,c.height);x.fillStyle="#514a45";x.font="800 54px sans-serif";x.textAlign="center";x.fillText("🎥 動画",c.width/2,c.height/2+15);img.src=c.toDataURL("image/jpeg",.7);
         }
-        img.onclick=()=>openPhotoPreview(rec);
+
+        if(selecting){
+          pc.onclick=e=>{
+            if(e.target.closest("textarea,button"))return;
+            togglePhotoSelection(roomName,rec.id);
+            renderPhotoPage();
+          };
+        }else{
+          img.onclick=()=>openPhotoPreview(rec);
+        }
+
         pc.querySelector(".photo-note").onchange=async e=>{rec.note=e.target.value;await photoDbPut(rec)};
         pc.querySelector(".photo-delete").onclick=async()=>{if(confirm(`この${isVideo?"動画":"写真"}を削除しますか？`)){await photoDbDelete(rec.id);await renderPhotoPage()}};
+
         const drag=pc.querySelector(".photo-drag");
         drag.onpointerdown=e=>{
+          if(selecting)return;
           e.preventDefault();e.stopPropagation();drag.setPointerCapture?.(e.pointerId);let targetId=null,target=null;
           const move=ev=>{
             grid.querySelectorAll(".photo-card.drag-target").forEach(x=>x.classList.remove("drag-target"));
@@ -3287,7 +3358,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.5.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.5.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
