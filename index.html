@@ -593,7 +593,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 </style>
 </head>
-<body data-build="v1.5.8">
+<body data-build="v1.5.9">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1990,10 +1990,10 @@ function ensurePhotoRoomPrefs(siteObj=state){
 }
 function photoRoomDisplayName(roomName,siteObj=state){
   ensurePhotoRoomPrefs(siteObj);
-  return String(siteObj.photoRoomAliases?.[roomName]||roomName);
+  const fallback=roomName==="共通"?"その他":roomName;
+  return String(siteObj.photoRoomAliases?.[roomName]||fallback);
 }
 function editPhotoRoomName(roomName,currentRooms=[]){
-  if(roomName==="共通")return false;
   ensurePhotoRoomPrefs(state);
   const current=photoRoomDisplayName(roomName,state);
   const value=prompt("写真・動画ページの部屋名を編集",current);
@@ -2009,22 +2009,25 @@ function editPhotoRoomName(roomName,currentRooms=[]){
 function photoRoomNamesFromSite(siteObj=state,photos=[]){
   ensurePhotoRoomPrefs(siteObj);
   const raw=[],seen=new Set(),add=n=>{n=String(n||"").trim();if(!n||seen.has(n))return;seen.add(n);raw.push(n)};
-  add("共通");
+  // 初期順：クロス・床・シート等で使っている部屋を上から順に
   (siteObj.rooms||[]).forEach(r=>add(r.name));
   (siteObj.finishRooms||[]).forEach(r=>add(r.name));
+  // 写真・動画だけに残っている部屋も保持
   photos.forEach(p=>add(p.roomName));
+  // 内部互換用の「共通」は画面では「その他」として一番下
+  add("共通");
 
-  const hidden=new Set((siteObj.photoHiddenRooms||[]).filter(n=>n!=="共通"));
-  const visible=raw.filter(n=>n==="共通"||!hidden.has(n));
-  const order=(siteObj.photoRoomOrder||[]).filter(n=>visible.includes(n));
-  visible.forEach(n=>{if(!order.includes(n))order.push(n)});
-  // 共通は常に先頭
-  const rest=order.filter(n=>n!=="共通");
-  siteObj.photoRoomOrder=["共通",...rest];
-  return ["共通",...rest];
+  const hidden=new Set(siteObj.photoHiddenRooms||[]);
+  const visible=raw.filter(n=>!hidden.has(n));
+  const saved=(siteObj.photoRoomOrder||[]).filter(n=>visible.includes(n)&&n!=="共通");
+  const normalVisible=visible.filter(n=>n!=="共通");
+  normalVisible.forEach(n=>{if(!saved.includes(n))saved.push(n)});
+  const result=[...saved];
+  if(visible.includes("共通"))result.push("共通");
+  siteObj.photoRoomOrder=[...result];
+  return result;
 }
 function hidePhotoRoom(roomName){
-  if(roomName==="共通")return;
   ensurePhotoRoomPrefs(state);
   if(!state.photoHiddenRooms.includes(roomName))state.photoHiddenRooms.push(roomName);
   state.photoRoomOrder=state.photoRoomOrder.filter(n=>n!==roomName);
@@ -2032,11 +2035,14 @@ function hidePhotoRoom(roomName){
 }
 function reorderPhotoRoom(fromName,toName,currentRooms=null){
   ensurePhotoRoomPrefs(state);
-  const arr=(currentRooms||state.photoRoomOrder||[]).filter(n=>n!=="共通");
+  if(fromName==="共通"||toName==="共通")return;
+  const current=currentRooms||state.photoRoomOrder||[];
+  const arr=current.filter(n=>n!=="共通");
   const from=arr.indexOf(fromName),to=arr.indexOf(toName);
   if(from<0||to<0||from===to)return;
   const [moved]=arr.splice(from,1);arr.splice(to,0,moved);
-  state.photoRoomOrder=["共通",...arr];
+  const hasOther=current.includes("共通")&&!state.photoHiddenRooms.includes("共通");
+  state.photoRoomOrder=hasOther?[...arr,"共通"]:[...arr];
   save();
 }
 function compressPhotoFile(file,maxSide=1600,quality=.82){
@@ -2197,7 +2203,9 @@ async function renderPhotoPage(){
       card.innerHTML=`<div class="photo-room-head"><h2>${esc(roomDisplayName)}</h2><div class="photo-room-count">${countText}</div>
         <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div>
         <div class="photo-room-manage">
-          ${roomName!=="共通"?`<button type="button" class="photo-room-move" title="部屋を移動">≡</button><button type="button" class="photo-room-edit">名前編集</button><button type="button" class="photo-room-remove">部屋を削除</button>`:""}
+          ${roomName==="共通"
+            ? `<button type="button" class="photo-room-edit">名前編集</button><button type="button" class="photo-room-remove">部屋を削除</button>`
+            : `<button type="button" class="photo-room-move" title="部屋を移動">≡</button><button type="button" class="photo-room-edit">名前編集</button><button type="button" class="photo-room-remove">部屋を削除</button>`}
         </div>
         <div class="photo-select-tools">
           ${selecting
@@ -3545,7 +3553,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.5.8",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.5.9",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
