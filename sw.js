@@ -1,4 +1,4 @@
-const CACHE="gencho-v160-20260820-photo-room-free-order";
+const CACHE="gencho-v161-20260820-site-switch-refresh";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

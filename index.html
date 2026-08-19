@@ -604,7 +604,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-room-title-line .photo-room-move:active{cursor:grabbing}
 </style>
 </head>
-<body data-build="v1.6.0">
+<body data-build="v1.6.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1538,11 +1538,13 @@ function save(){
 function switchSite(id){
   save();
   const next=sites.find(s=>s.id===id);if(!next)return;
-  state=next;currentSiteId=next.id;activeRoom=state.rooms[0]?.id||null;activeWorkPage="wall";
+  state=next;currentSiteId=next.id;activeRoom=state.rooms[0]?.id||null;
+  clearPhotoSelection();
   localStorage.setItem(CURRENT_SITE_KEY,currentSiteId);
   $("#siteManager").classList.remove("show");
   $("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary");
-  render();
+  setWorkPage(activeWorkPage);
+  buildCalc();
 }
 function createNewSite(name=""){
   save();
@@ -2192,9 +2194,12 @@ async function deleteSelectedPhotos(roomName){
 }
 async function renderPhotoPage(){
   const area=$("#photoPageArea");if(!area)return;
+  const renderSiteId=state.id;
   area.innerHTML='<div class="photo-loading">写真・動画を読み込み中...</div>';
   try{
-    const photos=await photoDbAllForSite(state.id),rooms=photoRoomNamesFromSite(state,photos);
+    const photos=await photoDbAllForSite(renderSiteId);
+    if(state.id!==renderSiteId)return;
+    const rooms=photoRoomNamesFromSite(state,photos);
     const wrap=document.createElement("div");wrap.className="photo-page";
     rooms.forEach(roomName=>{
       const roomPhotos=photos.filter(p=>p.roomName===roomName);
@@ -2369,6 +2374,7 @@ async function renderPhotoPage(){
       });
       wrap.appendChild(card);
     });
+    if(state.id!==renderSiteId)return;
     area.innerHTML="";area.appendChild(wrap);
   }catch(e){
     console.error(e);area.innerHTML='<div class="photo-loading">写真・動画ストレージを開けませんでした</div>';
@@ -3559,7 +3565,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.6.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.6.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
