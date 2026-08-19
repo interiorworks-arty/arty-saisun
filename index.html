@@ -564,9 +564,16 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 @media(max-width:600px){
   .photo-select-tools{width:100%}
 }
+
+.photo-select-all,.photo-select-clear{
+  border:0;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900;
+  background:#eeeae7;color:#514a45
+}
+.photo-card.select-mode{touch-action:none}
+.photo-card.select-mode .photo-thumb-wrap{touch-action:none}
 </style>
 </head>
-<body data-build="v1.5.4">
+<body data-build="v1.5.5">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2073,6 +2080,26 @@ function togglePhotoSelection(roomName,id){
   if(photoSelectRoom!==roomName){photoSelectRoom=roomName;photoSelectedIds=new Set()}
   if(photoSelectedIds.has(id))photoSelectedIds.delete(id);else photoSelectedIds.add(id);
 }
+
+function updatePhotoSelectionUI(card,roomName){
+  if(photoSelectRoom!==roomName)return;
+  card.querySelectorAll(".photo-card.select-mode").forEach(pc=>{
+    const id=pc.dataset.photoId;
+    const selected=photoSelectedIds.has(id);
+    pc.classList.toggle("selected",selected);
+    const mark=pc.querySelector(".photo-select-check");
+    if(mark)mark.textContent=selected?"✓":"";
+  });
+  const del=card.querySelector(".photo-select-delete");
+  if(del)del.textContent=`選択した${photoSelectedIds.size}件を削除`;
+}
+function selectAllPhotosForRoom(roomName,ids,card){
+  photoSelectRoom=roomName;photoSelectedIds=new Set(ids);updatePhotoSelectionUI(card,roomName);
+}
+function clearAllPhotosForRoom(roomName,card){
+  if(photoSelectRoom!==roomName)return;
+  photoSelectedIds.clear();updatePhotoSelectionUI(card,roomName);
+}
 async function deleteSelectedPhotos(roomName){
   const ids=[...photoSelectedIds];
   if(!ids.length){alert("削除する写真・動画を選択してください");return}
@@ -2100,7 +2127,7 @@ async function renderPhotoPage(){
         <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div>
         <div class="photo-select-tools">
           ${selecting
-            ? `<button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
+            ? `<button type="button" class="photo-select-all">すべて選択</button><button type="button" class="photo-select-clear">選択解除</button><button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
             : `<button type="button" class="photo-select-toggle">□ 写真・動画を選択</button>`}
         </div></div>
         <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ アルバムから選択</button></div>
@@ -2118,6 +2145,10 @@ async function renderPhotoPage(){
       if(cancel)cancel.onclick=()=>{clearPhotoSelection();renderPhotoPage()};
       const delSelected=card.querySelector(".photo-select-delete");
       if(delSelected)delSelected.onclick=()=>deleteSelectedPhotos(roomName);
+      const selectAll=card.querySelector(".photo-select-all");
+      if(selectAll)selectAll.onclick=()=>selectAllPhotosForRoom(roomName,roomPhotos.map(x=>x.id),card);
+      const clearAll=card.querySelector(".photo-select-clear");
+      if(clearAll)clearAll.onclick=()=>clearAllPhotosForRoom(roomName,card);
 
       const grid=card.querySelector(".photo-grid");
       if(!roomPhotos.length){grid.innerHTML='<div class="photo-empty">写真・動画はまだありません</div>'}
@@ -2142,14 +2173,42 @@ async function renderPhotoPage(){
         }
 
         if(selecting){
-          pc.onclick=e=>{
+          let selectPointerId=null,dragSelecting=false,lastHitId=null,startX=0,startY=0;
+          const applyHit=(clientX,clientY)=>{
+            const hit=document.elementFromPoint(clientX,clientY)?.closest?.(".photo-card.select-mode");
+            if(!hit||!grid.contains(hit))return;
+            const id=hit.dataset.photoId;if(!id||id===lastHitId)return;
+            lastHitId=id;
+            if(!photoSelectedIds.has(id))photoSelectedIds.add(id);
+            updatePhotoSelectionUI(card,roomName);
+          };
+          pc.onpointerdown=e=>{
             if(e.target.closest("textarea,button"))return;
-            togglePhotoSelection(roomName,rec.id);
-            const nowSelected=photoSelectedIds.has(rec.id);
-            pc.classList.toggle("selected",nowSelected);
-            const mark=pc.querySelector(".photo-select-check");
-            if(mark)mark.textContent=nowSelected?"✓":"";
-            if(delSelected)delSelected.textContent=`選択した${photoSelectedIds.size}件を削除`;
+            e.preventDefault();
+            selectPointerId=e.pointerId;dragSelecting=false;lastHitId=null;startX=e.clientX;startY=e.clientY;
+            pc.setPointerCapture?.(e.pointerId);
+          };
+          pc.onpointermove=e=>{
+            if(selectPointerId!==e.pointerId)return;
+            const moved=Math.hypot(e.clientX-startX,e.clientY-startY);
+            if(moved>8)dragSelecting=true;
+            if(dragSelecting)applyHit(e.clientX,e.clientY);
+          };
+          const finishSelect=e=>{
+            if(selectPointerId!==e.pointerId)return;
+            if(!dragSelecting){
+              togglePhotoSelection(roomName,rec.id);
+              updatePhotoSelectionUI(card,roomName);
+            }else{
+              applyHit(e.clientX,e.clientY);
+            }
+            try{pc.releasePointerCapture?.(e.pointerId)}catch{}
+            selectPointerId=null;dragSelecting=false;lastHitId=null;
+          };
+          pc.onpointerup=finishSelect;
+          pc.onpointercancel=e=>{
+            try{pc.releasePointerCapture?.(e.pointerId)}catch{}
+            selectPointerId=null;dragSelecting=false;lastHitId=null;
           };
         }else{
           img.onclick=()=>openPhotoPreview(rec);
@@ -3367,7 +3426,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.5.4",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.5.5",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
