@@ -1,4 +1,4 @@
-const CACHE="gencho-v166-20260820-order-two-columns";
+const CACHE="gencho-v167-20260820-order-readability";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
