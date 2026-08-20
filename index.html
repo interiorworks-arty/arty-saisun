@@ -652,9 +652,55 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .order-cut-edit-row .order-cut-unit-label{
   font-size:12px;color:#6f6761;font-weight:800
 }
+
+/* 発注ページ：左＝入力値 / 右＝発注編集値 */
+.order-compare{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:14px;margin-top:10px
+}
+.order-compare-col{
+  min-width:0;border-top:1px solid #eee7e2;padding-top:8px
+}
+.order-compare-label{
+  font-size:10px;color:#9a918a;font-weight:800;margin-bottom:6px
+}
+.order-original-value{
+  font-size:15px;font-weight:900;color:#514a45;line-height:1.55;
+  font-variant-numeric:tabular-nums
+}
+.order-edit-value{
+  display:flex;justify-content:flex-end;align-items:center;gap:5px;min-height:34px
+}
+.order-edit-value .order-item-qty-button{
+  min-width:88px
+}
+.order-cut-original-list,
+.order-cut-edit-list{
+  display:flex;flex-direction:column;gap:6px
+}
+.order-cut-original-row{
+  min-height:34px;display:flex;align-items:center;gap:5px;
+  font-size:13px;font-weight:900;color:#514a45;
+  font-variant-numeric:tabular-nums
+}
+.order-cut-edit-row{
+  min-height:34px;display:flex;align-items:center;justify-content:flex-end;
+  gap:5px;flex-wrap:nowrap
+}
+.order-compare .order-reset-wrap{
+  grid-column:2;display:flex;justify-content:flex-end;margin-top:-4px
+}
+.order-item-head .order-item-qty{
+  display:none
+}
+@media(max-width:600px){
+  .order-compare{gap:8px}
+  .order-cut-length{min-width:58px}
+  .order-cut-count{min-width:48px}
+}
 </style>
 </head>
-<body data-build="v1.6.5">
+<body data-build="v1.6.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2052,7 +2098,7 @@ function collectOrderData(siteObj=state){
 }
 function renderOrderPage(){
   const area=$("#orderPageArea");if(!area)return;
-  area.innerHTML='<div class="order-page-note">採寸・入力値はそのまま保持。発注ページだけ実際の発注寸法・数量に変更できます。</div>';
+  area.innerHTML='<div class="order-page-note">左が入力値、右が実際に発注する数値です。右側だけ変更できます。</div>';
   const wrap=document.createElement("div");wrap.className="order-page";
   const data=collectOrderData(state);
   const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
@@ -2070,17 +2116,54 @@ function renderOrderPage(){
       const roomText=[...new Set(item.rooms||[])].join(" / ");
       const changed=!!item.hasOverride;
 
-      let qtyHtml="";
+      let compareHtml="";
       if(item.mode==="cuts"){
-        qtyHtml=`<div class="order-item-qty">${esc(item.qtyText||"")}</div>`;
+        const leftRows=(item.cuts||[]).map(c=>{
+          const len=orderFmtNum(c.autoLength),cnt=orderFmtNum(c.autoCount);
+          return `<div class="order-cut-original-row"><span>${esc(len)}</span><span>${esc(c.lengthUnit||"m")}</span><span>×</span><span>${esc(cnt)}</span><span>${esc(c.countUnit||"本")}</span></div>`;
+        }).join("");
+
+        const rightRows=(item.cuts||[]).map(c=>
+          `<div class="order-cut-edit-row" data-cut-sig="${esc(c.sig)}">
+            <button type="button" class="order-cut-length${c.lengthChanged?" changed":""}">${esc(orderFmtNum(c.orderLength))}</button>
+            <span class="order-cut-unit-label">${esc(c.lengthUnit||"m")}</span>
+            <span class="order-cut-unit-label">×</span>
+            <button type="button" class="order-cut-count${c.countChanged?" changed":""}">${esc(orderFmtNum(c.orderCount))}</button>
+            <span class="order-cut-unit">${esc(c.countUnit||"本")}</span>
+          </div>`
+        ).join("");
+
+        compareHtml=`<div class="order-compare">
+          <div class="order-compare-col">
+            <div class="order-compare-label">入力値</div>
+            <div class="order-cut-original-list">${leftRows}</div>
+          </div>
+          <div class="order-compare-col">
+            <div class="order-compare-label" style="text-align:right">発注</div>
+            <div class="order-cut-edit-list">${rightRows}</div>
+          </div>
+          ${changed?`<div class="order-reset-wrap"><button type="button" class="order-reset">元に戻す</button></div>`:""}
+        </div>`;
       }else{
-        qtyHtml=`<button type="button" class="order-item-qty-button${changed?" changed":""}">${esc(item.qtyText||"")}</button>`;
+        compareHtml=`<div class="order-compare">
+          <div class="order-compare-col">
+            <div class="order-compare-label">入力値</div>
+            <div class="order-original-value">${esc(item.autoQtyText||item.qtyText||"")}</div>
+          </div>
+          <div class="order-compare-col">
+            <div class="order-compare-label" style="text-align:right">発注</div>
+            <div class="order-edit-value"><button type="button" class="order-item-qty-button${changed?" changed":""}">${esc(item.qtyText||"")}</button></div>
+          </div>
+          ${changed?`<div class="order-reset-wrap"><button type="button" class="order-reset">元に戻す</button></div>`:""}
+        </div>`;
       }
 
-      d.innerHTML=`<div class="order-item-head"><div><div class="order-item-name">${esc(item.name)}</div>${item.product?`<div class="order-item-product">${esc(item.product)}</div>`:""}</div>${qtyHtml}</div>
-        ${changed?`<div class="order-edit-row"><button type="button" class="order-reset">元に戻す</button></div>`:""}
-        ${item.mode==="cuts"?`<div class="order-cut-edit-list">${(item.cuts||[]).map(c=>`<div class="order-cut-edit-row" data-cut-sig="${esc(c.sig)}"><button type="button" class="order-cut-length${c.lengthChanged?" changed":""}">${esc(orderFmtNum(c.orderLength))}</button><span class="order-cut-unit-label">${esc(c.lengthUnit||"m")}</span><span class="order-cut-unit-label">×</span><button type="button" class="order-cut-count${c.countChanged?" changed":""}">${esc(orderFmtNum(c.orderCount))}</button><span class="order-cut-unit">${esc(c.countUnit||"本")}</span></div>`).join("")}</div>`:""}
-        ${item.detail?`<div class="order-item-detail">${esc(item.detail)}</div>`:""}${roomText?`<div class="order-item-detail">${esc(roomText)}</div>`:""}`;
+      d.innerHTML=`<div class="order-item-head">
+          <div><div class="order-item-name">${esc(item.name)}</div>${item.product?`<div class="order-item-product">${esc(item.product)}</div>`:""}</div>
+        </div>
+        ${compareHtml}
+        ${item.detail?`<div class="order-item-detail">${esc(item.detail)}</div>`:""}
+        ${roomText?`<div class="order-item-detail">${esc(roomText)}</div>`:""}`;
 
       const reset=d.querySelector(".order-reset");
       if(reset)reset.onclick=()=>resetOrderOverride(item.orderKey);
@@ -3743,7 +3826,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.6.5",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.6.6",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
