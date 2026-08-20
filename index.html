@@ -713,7 +713,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 </style>
 </head>
-<body data-build="v1.6.9">
+<body data-build="v1.7.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -3572,130 +3572,147 @@ function orderLineText(item){
   const name=item.product?`${item.name}　${item.product}`:item.name;
   return `${name}　${item.qtyText||""}`;
 }
-function orderExportItemHeight(item){
-  let h=108;
+function orderExportItemHeight(item,cutCountOverride=null,includeRooms=true){
+  let h=110;
   if(item.mode==="cuts"){
-    const rows=Math.ceil((item.cuts||[]).length/2);
-    h+=rows*48;
+    const count=cutCountOverride==null?(item.cuts||[]).length:cutCountOverride;
+    h+=Math.ceil(count/2)*48;
   }else{
     h+=48;
   }
-  if(item.mode==="wall"&&Array.isArray(item.roomTotals)&&item.roomTotals.length){
-    h+=Math.ceil(item.roomTotals.length/3)*34+12;
-  }else if((item.rooms||[]).length){
-    h+=38;
+  if(includeRooms){
+    if(item.mode==="wall"&&Array.isArray(item.roomTotals)&&item.roomTotals.length){
+      h+=Math.ceil(item.roomTotals.length/3)*34+14;
+    }else if((item.rooms||[]).length){
+      h+=40;
+    }
+    if(item.detail)h+=34;
   }
-  if(item.detail)h+=34;
   return Math.max(160,h);
 }
-function buildOrderExportCanvas(siteObj=state){
+function orderExportSegments(item){
+  if(item.mode!=="cuts")return [{item,cuts:null,continued:false,last:true,height:orderExportItemHeight(item)}];
+
+  const cuts=item.cuts||[];
+  // 1カードが1ページを超えないよう、長い寸法一覧だけ分割。
+  // 2列×最大16行 = 32寸法/カード。
+  const maxCuts=32;
+  if(cuts.length<=maxCuts)return [{item,cuts,continued:false,last:true,height:orderExportItemHeight(item)}];
+
+  const out=[];
+  for(let i=0;i<cuts.length;i+=maxCuts){
+    const chunk=cuts.slice(i,i+maxCuts),last=i+maxCuts>=cuts.length;
+    out.push({
+      item,cuts:chunk,continued:i>0,last,
+      height:orderExportItemHeight(item,chunk.length,last)
+    });
+  }
+  return out;
+}
+function buildOrderExportCanvases(siteObj=state){
   const data=collectOrderData(siteObj);
   const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
+  const pageH=1700, bottomLimit=1600;
+  const pages=[];
+  let base=null,c=null,ctx=null,pad=70,width=1240,y=0,left=0,right=0,contentW=0,pageNo=0;
 
-  let totalH=300;
-  defs.forEach(([k])=>{
-    const items=data[k]||[];
-    if(!items.length)return;
-    totalH+=58;
-    items.forEach(item=>totalH+=orderExportItemHeight(item)+18);
-  });
-
-  const base=exportCanvasBase("発注一覧","",Math.max(900,totalH));
-  const {c,ctx,pad,width}=base;
-  let y=base.y;
-  const left=pad+26,right=width-pad-26,contentW=right-left;
-
-  const roundRectFill=(x,y,w,h,r,fill,stroke=null)=>{
-    ctx.beginPath();
-    ctx.roundRect(x,y,w,h,r);
+  const newPage=()=>{
+    pageNo++;
+    base=exportCanvasBase("発注一覧",pageNo>1?`${pageNo}ページ`:"",pageH);
+    ({c,ctx,pad,width}=base);
+    y=base.y;
+    left=pad+26;right=width-pad-26;contentW=right-left;
+    pages.push(c);
+  };
+  const roundRectFill=(x,yy,w,h,r,fill,stroke=null)=>{
+    ctx.beginPath();ctx.roundRect(x,yy,w,h,r);
     ctx.fillStyle=fill;ctx.fill();
     if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}
   };
-  const drawWrapped=(txt,x,yy,maxW,lineH=25)=>{
-    const arr=wrapCanvasText(ctx,txt,maxW);
-    arr.forEach(line=>{ctx.fillText(line,x,yy);yy+=lineH});
-    return yy;
-  };
-
-  defs.forEach(([key,label])=>{
-    const items=data[key]||[];if(!items.length)return;
-
+  const drawCategory=(label)=>{
     ctx.fillStyle="#2f2b28";
     ctx.font='800 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-    ctx.fillText(label,left,y);
-    y+=48;
+    ctx.fillText(label,left,y);y+=48;
+  };
+  const ensureSpace=(need,label=null)=>{
+    if(y+need<=bottomLimit)return;
+    newPage();
+    if(label)drawCategory(label);
+  };
+  const drawItemSegment=(segment,key)=>{
+    const item=segment.item,cuts=segment.cuts,continued=segment.continued,last=segment.last;
+    const cardH=segment.height;
+    roundRectFill(left,y,contentW,cardH,18,"#fbfaf8","#e9e3de");
 
-    items.forEach(item=>{
-      const cardH=orderExportItemHeight(item);
-      roundRectFill(left,y,contentW,cardH,18,"#fbfaf8","#e9e3de");
+    let cy=y+28;
+    const innerL=left+24,innerR=right-24;
 
-      let cy=y+26;
-      const innerL=left+24,innerR=right-24;
-
-      // Header
+    // クロスは品番が主役。
+    // それ以外は「種類名を小さく薄く / 品番を大きく濃く」。
+    if(key==="wall"){
       ctx.fillStyle="#332f2c";
-      ctx.font='800 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.font='800 24px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`${item.name}${continued?"（続き）":""}`,innerL,cy);
+      cy+=38;
+    }else if(item.product){
+      ctx.fillStyle="#8a817a";
+      ctx.font='700 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
       ctx.fillText(item.name,innerL,cy);
+      cy+=27;
+      ctx.fillStyle="#332f2c";
+      ctx.font='800 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`${item.product}${continued?"（続き）":""}`,innerL,cy);
+      cy+=40;
+    }else{
+      ctx.fillStyle="#332f2c";
+      ctx.font='800 24px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`${item.name}${continued?"（続き）":""}`,innerL,cy);
+      cy+=38;
+    }
 
-      if(item.product){
-        ctx.fillStyle="#7c746e";
-        ctx.font='700 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        ctx.fillText(item.product,innerL,cy+28);
-        cy+=56;
-      }else{
-        cy+=34;
-      }
+    ctx.strokeStyle="#ece6e1";
+    ctx.beginPath();ctx.moveTo(innerL,cy);ctx.lineTo(innerR,cy);ctx.stroke();
+    cy+=22;
 
-      ctx.strokeStyle="#ece6e1";
-      ctx.beginPath();ctx.moveTo(innerL,cy);ctx.lineTo(innerR,cy);ctx.stroke();
-      cy+=20;
+    if(item.mode==="cuts"){
+      const useCuts=cuts||item.cuts||[];
+      const colGap=28,colW=(innerR-innerL-colGap)/2;
+      const rows=Math.ceil(useCuts.length/2);
+      ctx.fillStyle="#45403c";
+      ctx.font='750 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
 
-      if(item.mode==="cuts"){
-        // 2-column checklist for cut lengths
-        const cuts=item.cuts||[];
-        const colGap=28,colW=(innerR-innerL-colGap)/2;
-        const rows=Math.ceil(cuts.length/2);
-
-        ctx.fillStyle="#45403c";
-        ctx.font='750 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-
-        for(let i=0;i<cuts.length;i++){
-          const row=Math.floor(i/2),col=i%2;
-          const x=innerL+col*(colW+colGap);
-          const yy=cy+row*48;
-          const cut=cuts[i];
-          const len=orderFmtNum(cut.orderLength),cnt=orderFmtNum(cut.orderCount);
-
-          // checkbox
-          ctx.strokeStyle="#6c645e";ctx.lineWidth=2;
-          ctx.strokeRect(x,yy-17,20,20);
-
-          ctx.fillStyle="#45403c";
-          ctx.fillText(`${len}${cut.lengthUnit||"m"} × ${cnt}${cut.countUnit||"本"}`,x+34,yy);
-        }
-        cy+=rows*48+4;
-      }else{
-        // Main order quantity
+      for(let i=0;i<useCuts.length;i++){
+        const row=Math.floor(i/2),col=i%2;
+        const x=innerL+col*(colW+colGap);
+        const yy=cy+row*48;
+        const cut=useCuts[i];
+        const len=orderFmtNum(cut.orderLength),cnt=orderFmtNum(cut.orderCount);
         ctx.strokeStyle="#6c645e";ctx.lineWidth=2;
-        ctx.strokeRect(innerL,cy-17,22,22);
-        ctx.fillStyle="#3e3935";
-        ctx.font='800 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        ctx.fillText(item.qtyText||"",innerL+38,cy+1);
-        cy+=48;
+        ctx.strokeRect(x,yy-17,20,20);
+        ctx.fillStyle="#45403c";
+        ctx.fillText(`${len}${cut.lengthUnit||"m"} × ${cnt}${cut.countUnit||"本"}`,x+34,yy);
       }
+      cy+=rows*48+6;
+    }else{
+      ctx.strokeStyle="#6c645e";ctx.lineWidth=2;
+      ctx.strokeRect(innerL,cy-17,22,22);
+      ctx.fillStyle="#3e3935";
+      ctx.font='800 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(item.qtyText||"",innerL+38,cy+1);
+      cy+=49;
+    }
 
-      // Room(s)
+    // 部屋名・補足は分割カードの最後だけ表示
+    if(last){
       if(item.mode==="wall"&&Array.isArray(item.roomTotals)&&item.roomTotals.length){
         const chips=item.roomTotals.map(x=>`${x.room} ${orderFmtNum(x.qty)}m`);
-        let cx=innerL;
-        let rowY=cy;
+        let cx=innerL,rowY=cy;
         ctx.font='700 15px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
         chips.forEach(chip=>{
           const tw=ctx.measureText(chip).width+28;
           if(cx+tw>innerR){cx=innerL;rowY+=34}
           roundRectFill(cx,rowY-19,tw,28,9,"#f0ece8");
-          ctx.fillStyle="#5d554f";
-          ctx.fillText(chip,cx+14,rowY);
+          ctx.fillStyle="#5d554f";ctx.fillText(chip,cx+14,rowY);
           cx+=tw+10;
         });
         cy=rowY+30;
@@ -3704,25 +3721,43 @@ function buildOrderExportCanvas(siteObj=state){
         if(roomText){
           ctx.fillStyle="#5d554f";
           ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-          roundRectFill(innerL,cy-19,Math.min(innerR-innerL,ctx.measureText(roomText).width+30),29,9,"#f0ece8");
-          ctx.fillText(roomText,innerL+15,cy);
-          cy+=36;
+          const rw=Math.min(innerR-innerL,ctx.measureText(roomText).width+30);
+          roundRectFill(innerL,cy-19,rw,29,9,"#f0ece8");
+          ctx.fillText(roomText,innerL+15,cy);cy+=36;
         }
       }
-
       if(item.detail){
         ctx.fillStyle="#8a817a";
         ctx.font='600 15px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        cy=drawWrapped(item.detail,innerL,cy,innerR-innerL,23)+3;
+        wrapCanvasText(ctx,item.detail,innerR-innerL).forEach(line=>{ctx.fillText(line,innerL,cy);cy+=23});
       }
+    }
+    y+=cardH+18;
+  };
 
-      y+=cardH+18;
+  newPage();
+
+  defs.forEach(([key,label])=>{
+    const items=data[key]||[];if(!items.length)return;
+    ensureSpace(70);
+    drawCategory(label);
+
+    items.forEach(item=>{
+      const segments=orderExportSegments(item);
+      segments.forEach((segment,idx)=>{
+        // カード単位でページ跨ぎを防止。
+        ensureSpace(segment.height+18,label);
+        drawItemSegment(segment,key);
+      });
     });
-
     y+=8;
   });
 
-  return c;
+  return pages;
+}
+function buildOrderExportCanvas(siteObj=state){
+  const pages=buildOrderExportCanvases(siteObj);
+  return pages.length===1?pages[0]:combineCanvasesVertically(pages);
 }
 function combineCanvasesVertically(canvases){
   const valid=canvases.filter(Boolean);if(!valid.length)return null;
@@ -3755,7 +3790,8 @@ async function buildSelectedExportCanvases(parts,siteObj=state){
   if(parts.includes("photo"))canvases.push(...await buildPhotoExportCanvases(siteObj));
   if(parts.includes("memo")&&String(siteObj.memo||"").trim())canvases.push(buildMemoExportCanvas(siteObj));
   if(parts.includes("order")){
-    const od=collectOrderData(siteObj);if(["wall","floor","sheet","other"].some(k=>(od[k]||[]).length))canvases.push(buildOrderExportCanvas(siteObj));
+    const od=collectOrderData(siteObj);
+    if(["wall","floor","sheet","other"].some(k=>(od[k]||[]).length))canvases.push(...buildOrderExportCanvases(siteObj));
   }
   return canvases;
 }
@@ -3984,7 +4020,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.6.9",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
