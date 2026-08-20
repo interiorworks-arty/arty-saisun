@@ -48,7 +48,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .finish-order-label{font-size:11px;font-weight:800;color:#766f69;margin-bottom:6px}
 .finish-order-list{display:flex;flex-direction:column;gap:6px}
 .finish-order-row{display:grid;grid-template-columns:auto 1fr auto auto 1fr auto auto;gap:6px;align-items:center}.finish-order-drag{border:0;background:transparent;color:#aaa29c;font-size:20px;font-weight:900;padding:6px 4px;touch-action:none;cursor:grab;user-select:none}.finish-order-drag:active{cursor:grabbing}.finish-order-row.drag-target{outline:2px solid #a89d95;outline-offset:2px;border-radius:10px}
-.finish-order-row .num-btn{width:100%;border:1px solid #ddd6d1;border-radius:10px;background:#fff;padding:9px 8px;font-size:15px;text-align:center;color:var(--ink)}
+.finish-order-row .num-btn{width:100%;border:1px solid #ddd6d1;border-radius:10px;background:#fff;padding:9px 8px;font-size:15px;text-align:left;color:var(--ink)}
 .finish-order-row .cut-unit{border:1px solid #ddd6d1;border-radius:10px;background:#fff;padding:9px 12px;font-size:15px;font-weight:800;color:var(--ink);min-width:58px}
 .finish-order-row .length-unit{border:1px solid #ddd6d1;border-radius:10px;background:#fff;padding:9px 12px;font-size:15px;font-weight:800;color:var(--ink);min-width:58px}
 .finish-type-edit{border:0;background:#eee9e5;color:#665f59;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:800;margin-right:4px}
@@ -628,9 +628,33 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .order-item-head{align-items:flex-start}
   .order-item-qty-button{font-size:13px;padding:7px 8px}
 }
+
+/* 入力ページ：入力する数値は左寄せ */
+.finish-order-row .num-btn,
+.finish-num-button,
+.finish-num-input{
+  text-align:left !important;
+}
+
+/* 発注ページ：編集できる数値は右寄せ */
+.order-item-qty-button,
+.order-cut-length,
+.order-cut-count{
+  text-align:right !important;
+  font-variant-numeric:tabular-nums;
+}
+.order-cut-length{
+  border:0;border-radius:8px;background:#eeeae7;color:#3f3935;
+  min-width:72px;padding:7px 9px;font-size:13px;font-weight:900
+}
+.order-cut-length.changed{background:#ddd6d1}
+.order-cut-edit-row{justify-content:flex-start}
+.order-cut-edit-row .order-cut-unit-label{
+  font-size:12px;color:#6f6761;font-weight:800
+}
 </style>
 </head>
-<body data-build="v1.6.4">
+<body data-build="v1.6.5">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1859,6 +1883,7 @@ function orderHasOverride(siteObj,key){
   if(!ov)return false;
   if(ov.qty!==undefined&&String(ov.qty).trim()!=="")return true;
   if(ov.cutCounts&&Object.values(ov.cutCounts).some(v=>String(v).trim()!==""))return true;
+  if(ov.cutLengths&&Object.values(ov.cutLengths).some(v=>String(v).trim()!==""))return true;
   return false;
 }
 function orderCutSig(c){
@@ -1981,19 +2006,21 @@ function collectOrderData(siteObj=state){
       if(g.mode==="cuts"){
         g.cuts.sort((a,b)=>(Number(a.length)||0)-(Number(b.length)||0));
         g.cuts=g.cuts.map(x=>{
-          const sig=orderCutSig(x),autoCount=Number(x.count)||0;
-          const raw=ov?.cutCounts?.[sig];
-          const changed=raw!==undefined&&String(raw).trim()!=="";
-          const orderCount=changed?(Number(raw)||0):autoCount;
-          if(changed)hasOverride=true;
-          return {...x,sig,autoCount,orderCount,changed};
+          const sig=orderCutSig(x),autoCount=Number(x.count)||0,autoLength=Number(x.length)||0;
+          const rawCount=ov?.cutCounts?.[sig],rawLength=ov?.cutLengths?.[sig];
+          const countChanged=rawCount!==undefined&&String(rawCount).trim()!=="";
+          const lengthChanged=rawLength!==undefined&&String(rawLength).trim()!=="";
+          const orderCount=countChanged?(Number(rawCount)||0):autoCount;
+          const orderLength=lengthChanged?(Number(rawLength)||0):autoLength;
+          if(countChanged||lengthChanged)hasOverride=true;
+          return {...x,sig,autoCount,autoLength,orderCount,orderLength,countChanged,lengthChanged,changed:countChanged||lengthChanged};
         });
         autoQtyText=g.cuts.length?g.cuts.map(x=>{
-          const len=Number(x.length)||0,cu=x.countUnit||"本";
+          const len=Number(x.autoLength)||0,cu=x.countUnit||"本";
           return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(x.autoCount)}${cu}`:`${orderFmtNum(x.autoCount)}${cu}`;
         }).join(" / "):"発注数量未入力";
         qtyText=g.cuts.length?g.cuts.map(x=>{
-          const len=Number(x.length)||0,cu=x.countUnit||"本";
+          const len=Number(x.orderLength)||0,cu=x.countUnit||"本";
           return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(x.orderCount)}${cu}`:`${orderFmtNum(x.orderCount)}${cu}`;
         }).join(" / "):"発注数量未入力";
       }else if(g.mode==="tilecase"){
@@ -2025,7 +2052,7 @@ function collectOrderData(siteObj=state){
 }
 function renderOrderPage(){
   const area=$("#orderPageArea");if(!area)return;
-  area.innerHTML='<div class="order-page-note">採寸・入力値はそのまま保持。発注ページだけ実際の発注数量に変更できます。</div>';
+  area.innerHTML='<div class="order-page-note">採寸・入力値はそのまま保持。発注ページだけ実際の発注寸法・数量に変更できます。</div>';
   const wrap=document.createElement("div");wrap.className="order-page";
   const data=collectOrderData(state);
   const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
@@ -2051,8 +2078,8 @@ function renderOrderPage(){
       }
 
       d.innerHTML=`<div class="order-item-head"><div><div class="order-item-name">${esc(item.name)}</div>${item.product?`<div class="order-item-product">${esc(item.product)}</div>`:""}</div>${qtyHtml}</div>
-        <div class="order-edit-row"><span class="order-auto-label">自動：${esc(item.autoQtyText||item.qtyText||"")}</span>${changed?`<button type="button" class="order-reset">自動値に戻す</button>`:""}</div>
-        ${item.mode==="cuts"?`<div class="order-cut-edit-list">${(item.cuts||[]).map(c=>`<div class="order-cut-edit-row" data-cut-sig="${esc(c.sig)}"><span class="order-cut-len">${esc(`${orderFmtNum(c.length)}${c.lengthUnit||"m"} ×`)}</span><button type="button" class="order-cut-count${c.changed?" changed":""}">${esc(orderFmtNum(c.orderCount))}</button><span class="order-cut-unit">${esc(c.countUnit||"本")}</span><span class="order-auto-label">自動 ${esc(orderFmtNum(c.autoCount))}</span></div>`).join("")}</div>`:""}
+        ${changed?`<div class="order-edit-row"><button type="button" class="order-reset">元に戻す</button></div>`:""}
+        ${item.mode==="cuts"?`<div class="order-cut-edit-list">${(item.cuts||[]).map(c=>`<div class="order-cut-edit-row" data-cut-sig="${esc(c.sig)}"><button type="button" class="order-cut-length${c.lengthChanged?" changed":""}">${esc(orderFmtNum(c.orderLength))}</button><span class="order-cut-unit-label">${esc(c.lengthUnit||"m")}</span><span class="order-cut-unit-label">×</span><button type="button" class="order-cut-count${c.countChanged?" changed":""}">${esc(orderFmtNum(c.orderCount))}</button><span class="order-cut-unit">${esc(c.countUnit||"本")}</span></div>`).join("")}</div>`:""}
         ${item.detail?`<div class="order-item-detail">${esc(item.detail)}</div>`:""}${roomText?`<div class="order-item-detail">${esc(roomText)}</div>`:""}`;
 
       const reset=d.querySelector(".order-reset");
@@ -2060,15 +2087,27 @@ function renderOrderPage(){
 
       if(item.mode==="cuts"){
         d.querySelectorAll(".order-cut-edit-row").forEach((row,idx)=>{
-          const cut=item.cuts[idx],btn=row.querySelector(".order-cut-count");
-          bindTapOnly(btn,e=>{
+          const cut=item.cuts[idx],lenBtn=row.querySelector(".order-cut-length"),countBtn=row.querySelector(".order-cut-count");
+
+          bindTapOnly(lenBtn,e=>{
+            const ov=editableOrderOverride(item.orderKey);
+            if(!ov.cutLengths||typeof ov.cutLengths!=="object")ov.cutLengths={};
+            if(ov.cutLengths[cut.sig]===undefined)ov.cutLengths[cut.sig]=String(orderFmtNum(cut.orderLength));
+            showGenericNumberKeypad(lenBtn,ov.cutLengths,cut.sig,"発注寸法",()=>{
+              const v=String(ov.cutLengths[cut.sig]||"");
+              lenBtn.textContent=v||orderFmtNum(cut.autoLength);
+              lenBtn.classList.toggle("changed",v.trim()!=="");
+            },e,()=>{hideMeasureKeypad();renderOrderPage()});
+          });
+
+          bindTapOnly(countBtn,e=>{
             const ov=editableOrderOverride(item.orderKey);
             if(!ov.cutCounts||typeof ov.cutCounts!=="object")ov.cutCounts={};
             if(ov.cutCounts[cut.sig]===undefined)ov.cutCounts[cut.sig]=String(orderFmtNum(cut.orderCount));
-            showGenericNumberKeypad(btn,ov.cutCounts,cut.sig,"発注数量",()=>{
+            showGenericNumberKeypad(countBtn,ov.cutCounts,cut.sig,"発注数量",()=>{
               const v=String(ov.cutCounts[cut.sig]||"");
-              btn.textContent=v||orderFmtNum(cut.autoCount);
-              btn.classList.toggle("changed",v.trim()!=="");
+              countBtn.textContent=v||orderFmtNum(cut.autoCount);
+              countBtn.classList.toggle("changed",v.trim()!=="");
             },e,()=>{hideMeasureKeypad();renderOrderPage()});
           });
         });
@@ -3704,7 +3743,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.6.4",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.6.5",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
