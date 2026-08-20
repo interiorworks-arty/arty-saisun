@@ -602,9 +602,35 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   cursor:grab
 }
 .photo-room-title-line .photo-room-move:active{cursor:grabbing}
+
+.order-item-head{gap:12px}
+.order-item-qty-button{
+  border:0;border-radius:9px;background:#eeeae7;color:#3f3935;
+  padding:8px 11px;font-size:15px;font-weight:900;white-space:nowrap
+}
+.order-item-qty-button.changed{background:#ddd6d1;color:#2f2b28}
+.order-edit-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
+.order-auto-label{font-size:11px;color:#8b837d;font-weight:700}
+.order-reset{
+  border:0;border-radius:8px;background:#f0ece9;color:#786f69;
+  padding:6px 8px;font-size:10px;font-weight:800
+}
+.order-cut-edit-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.order-cut-edit-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.order-cut-edit-row .order-cut-len{font-size:12px;font-weight:800;color:#5f5751;min-width:62px}
+.order-cut-count{
+  border:0;border-radius:8px;background:#eeeae7;color:#3f3935;
+  min-width:58px;padding:7px 9px;font-size:13px;font-weight:900
+}
+.order-cut-count.changed{background:#ddd6d1}
+.order-cut-unit{font-size:12px;color:#6f6761;font-weight:800}
+@media(max-width:600px){
+  .order-item-head{align-items:flex-start}
+  .order-item-qty-button{font-size:13px;padding:7px 8px}
+}
 </style>
 </head>
-<body data-build="v1.6.3">
+<body data-build="v1.6.4">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1819,6 +1845,35 @@ function orderDisplayIdentity(item){
   if(product)return {name:item.type||"商品",product};
   return null;
 }
+
+function ensureOrderOverrides(siteObj=state){
+  if(!siteObj.orderOverrides||typeof siteObj.orderOverrides!=="object"||Array.isArray(siteObj.orderOverrides))siteObj.orderOverrides={};
+  return siteObj.orderOverrides;
+}
+function orderOverrideFor(siteObj,key){
+  const all=ensureOrderOverrides(siteObj);
+  return all[key]||null;
+}
+function orderHasOverride(siteObj,key){
+  const ov=orderOverrideFor(siteObj,key);
+  if(!ov)return false;
+  if(ov.qty!==undefined&&String(ov.qty).trim()!=="")return true;
+  if(ov.cutCounts&&Object.values(ov.cutCounts).some(v=>String(v).trim()!==""))return true;
+  return false;
+}
+function orderCutSig(c){
+  return [orderFmtNum(c.length),c.lengthUnit||"m",c.countUnit||"本"].join("|");
+}
+function resetOrderOverride(key){
+  const all=ensureOrderOverrides(state);
+  delete all[key];
+  save();renderOrderPage();
+}
+function editableOrderOverride(key){
+  const all=ensureOrderOverrides(state);
+  if(!all[key])all[key]={};
+  return all[key];
+}
 function collectOrderData(siteObj=state){
   const groups={wall:[],floor:[],sheet:[],other:[]};
 
@@ -1834,7 +1889,16 @@ function collectOrderData(siteObj=state){
     g.qty+=t.withR;
     g.rooms.push(`${r.name} ${sec.name}：${fmt(t.withR)}`);
   }));
-  groups.wall=[...wallMap.values()].map(x=>({...x,qtyText:fmt(x.qty)}));
+  groups.wall=[...wallMap.values()].map(x=>{
+    const orderKey=`wall|${String(x.name||"").toLowerCase()}`;
+    const autoOrderValue=Math.round((Number(x.qty)||0)*100)/100;
+    const ov=orderOverrideFor(siteObj,orderKey);
+    const hasOverride=ov&&ov.qty!==undefined&&String(ov.qty).trim()!=="";
+    const orderValue=hasOverride?(Number(ov.qty)||0):autoOrderValue;
+    return {...x,mode:"wall",orderKey,autoOrderValue,orderValue,orderUnit:"m",
+      autoQtyText:`${orderFmtNum(autoOrderValue)}m`,
+      qtyText:`${orderFmtNum(orderValue)}m`,hasOverride:!!hasOverride};
+  });
 
   ensureFinishRooms(siteObj);
   const finishMap={floor:new Map(),sheet:new Map(),other:new Map()};
@@ -1882,7 +1946,7 @@ function collectOrderData(siteObj=state){
 
     const key=[id.name,id.product,item.type||"",keyExtra].join("|").toLowerCase();
     if(!finishMap[page].has(key)){
-      finishMap[page].set(key,{...id,type:item.type||"",mode,keyExtra,qtyNum:0,unit,detail:"",cuts:[],rooms:[]});
+      finishMap[page].set(key,{...id,type:item.type||"",mode,keyExtra,orderKey:`${page}|${key}`,qtyNum:0,unit,detail:"",cuts:[],rooms:[]});
     }
     const g=finishMap[page].get(key);
     g.rooms.push(r.name);
@@ -1911,23 +1975,49 @@ function collectOrderData(siteObj=state){
 
   ["floor","sheet","other"].forEach(page=>{
     groups[page]=[...finishMap[page].values()].map(g=>{
-      let qtyText="",detail=g.detail||"";
+      let qtyText="",detail=g.detail||"",autoQtyText="",orderValue=null,autoOrderValue=null,orderUnit="",hasOverride=false;
+      const ov=orderOverrideFor(siteObj,g.orderKey);
+
       if(g.mode==="cuts"){
         g.cuts.sort((a,b)=>(Number(a.length)||0)-(Number(b.length)||0));
+        g.cuts=g.cuts.map(x=>{
+          const sig=orderCutSig(x),autoCount=Number(x.count)||0;
+          const raw=ov?.cutCounts?.[sig];
+          const changed=raw!==undefined&&String(raw).trim()!=="";
+          const orderCount=changed?(Number(raw)||0):autoCount;
+          if(changed)hasOverride=true;
+          return {...x,sig,autoCount,orderCount,changed};
+        });
+        autoQtyText=g.cuts.length?g.cuts.map(x=>{
+          const len=Number(x.length)||0,cu=x.countUnit||"本";
+          return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(x.autoCount)}${cu}`:`${orderFmtNum(x.autoCount)}${cu}`;
+        }).join(" / "):"発注数量未入力";
         qtyText=g.cuts.length?g.cuts.map(x=>{
-          const len=Number(x.length)||0,count=Number(x.count)||0;
-          const cu=x.countUnit||"本";return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(count)}${cu}`:`${orderFmtNum(count)}${cu}`;
+          const len=Number(x.length)||0,cu=x.countUnit||"本";
+          return len>0?`${orderFmtNum(len)}${x.lengthUnit||"m"}×${orderFmtNum(x.orderCount)}${cu}`:`${orderFmtNum(x.orderCount)}${cu}`;
         }).join(" / "):"発注数量未入力";
       }else if(g.mode==="tilecase"){
-        qtyText=g.casePer>0&&g.qtyNum>0?`${Math.ceil(g.qtyNum/g.casePer)}ケース`:"発注数量未入力";
+        autoOrderValue=g.casePer>0&&g.qtyNum>0?Math.ceil(g.qtyNum/g.casePer):0;orderUnit="ケース";
+        const raw=ov?.qty;hasOverride=raw!==undefined&&String(raw).trim()!=="";
+        orderValue=hasOverride?(Number(raw)||0):autoOrderValue;
+        autoQtyText=autoOrderValue>0?`${orderFmtNum(autoOrderValue)}ケース`:"発注数量未入力";
+        qtyText=orderValue>0?`${orderFmtNum(orderValue)}ケース`:"発注数量未入力";
         detail=`施工 ${orderFmtNum(g.qtyNum)}㎡${g.casePer?` / 1ケース ${orderFmtNum(g.casePer)}㎡`:""}`;
       }else if(g.mode==="basecase"){
-        qtyText=g.casePer>0&&g.qtyNum>0?`${Math.ceil(g.qtyNum/g.casePer)}ケース`:"発注数量未入力";
+        autoOrderValue=g.casePer>0&&g.qtyNum>0?Math.ceil(g.qtyNum/g.casePer):0;orderUnit="ケース";
+        const raw=ov?.qty;hasOverride=raw!==undefined&&String(raw).trim()!=="";
+        orderValue=hasOverride?(Number(raw)||0):autoOrderValue;
+        autoQtyText=autoOrderValue>0?`${orderFmtNum(autoOrderValue)}ケース`:"発注数量未入力";
+        qtyText=orderValue>0?`${orderFmtNum(orderValue)}ケース`:"発注数量未入力";
         detail=`採寸 ${orderFmtNum(g.qtyNum)}m${g.casePer?` / 1ケース ${orderFmtNum(g.casePer)}m`:""}`;
       }else{
-        qtyText=g.qtyNum>0?`${orderFmtNum(g.qtyNum)}${g.unit}`:"数量未入力";
+        autoOrderValue=Number(g.qtyNum)||0;orderUnit=g.unit||"";
+        const raw=ov?.qty;hasOverride=raw!==undefined&&String(raw).trim()!=="";
+        orderValue=hasOverride?(Number(raw)||0):autoOrderValue;
+        autoQtyText=autoOrderValue>0?`${orderFmtNum(autoOrderValue)}${orderUnit}`:"数量未入力";
+        qtyText=orderValue>0?`${orderFmtNum(orderValue)}${orderUnit}`:"数量未入力";
       }
-      return {...g,qtyText,detail};
+      return {...g,qtyText,autoQtyText,detail,orderValue,autoOrderValue,orderUnit,hasOverride};
     });
   });
 
@@ -1935,7 +2025,7 @@ function collectOrderData(siteObj=state){
 }
 function renderOrderPage(){
   const area=$("#orderPageArea");if(!area)return;
-  area.innerHTML='<div class="order-page-note">現調で入力した品番・商品名から自動反映</div>';
+  area.innerHTML='<div class="order-page-note">採寸・入力値はそのまま保持。発注ページだけ実際の発注数量に変更できます。</div>';
   const wrap=document.createElement("div");wrap.className="order-page";
   const data=collectOrderData(state);
   const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
@@ -1947,10 +2037,54 @@ function renderOrderPage(){
     any=true;
     const g=document.createElement("div");g.className="order-group";
     g.innerHTML=`<div class="order-group-title">${label}</div>`;
+
     items.forEach(item=>{
       const d=document.createElement("div");d.className="order-item";
       const roomText=[...new Set(item.rooms||[])].join(" / ");
-      d.innerHTML=`<div class="order-item-head"><div><div class="order-item-name">${esc(item.name)}</div>${item.product?`<div class="order-item-product">${esc(item.product)}</div>`:""}</div><div class="order-item-qty">${esc(item.qtyText||"")}</div></div>${item.detail?`<div class="order-item-detail">${esc(item.detail)}</div>`:""}${roomText?`<div class="order-item-detail">${esc(roomText)}</div>`:""}`;
+      const changed=!!item.hasOverride;
+
+      let qtyHtml="";
+      if(item.mode==="cuts"){
+        qtyHtml=`<div class="order-item-qty">${esc(item.qtyText||"")}</div>`;
+      }else{
+        qtyHtml=`<button type="button" class="order-item-qty-button${changed?" changed":""}">${esc(item.qtyText||"")}</button>`;
+      }
+
+      d.innerHTML=`<div class="order-item-head"><div><div class="order-item-name">${esc(item.name)}</div>${item.product?`<div class="order-item-product">${esc(item.product)}</div>`:""}</div>${qtyHtml}</div>
+        <div class="order-edit-row"><span class="order-auto-label">自動：${esc(item.autoQtyText||item.qtyText||"")}</span>${changed?`<button type="button" class="order-reset">自動値に戻す</button>`:""}</div>
+        ${item.mode==="cuts"?`<div class="order-cut-edit-list">${(item.cuts||[]).map(c=>`<div class="order-cut-edit-row" data-cut-sig="${esc(c.sig)}"><span class="order-cut-len">${esc(`${orderFmtNum(c.length)}${c.lengthUnit||"m"} ×`)}</span><button type="button" class="order-cut-count${c.changed?" changed":""}">${esc(orderFmtNum(c.orderCount))}</button><span class="order-cut-unit">${esc(c.countUnit||"本")}</span><span class="order-auto-label">自動 ${esc(orderFmtNum(c.autoCount))}</span></div>`).join("")}</div>`:""}
+        ${item.detail?`<div class="order-item-detail">${esc(item.detail)}</div>`:""}${roomText?`<div class="order-item-detail">${esc(roomText)}</div>`:""}`;
+
+      const reset=d.querySelector(".order-reset");
+      if(reset)reset.onclick=()=>resetOrderOverride(item.orderKey);
+
+      if(item.mode==="cuts"){
+        d.querySelectorAll(".order-cut-edit-row").forEach((row,idx)=>{
+          const cut=item.cuts[idx],btn=row.querySelector(".order-cut-count");
+          bindTapOnly(btn,e=>{
+            const ov=editableOrderOverride(item.orderKey);
+            if(!ov.cutCounts||typeof ov.cutCounts!=="object")ov.cutCounts={};
+            if(ov.cutCounts[cut.sig]===undefined)ov.cutCounts[cut.sig]=String(orderFmtNum(cut.orderCount));
+            showGenericNumberKeypad(btn,ov.cutCounts,cut.sig,"発注数量",()=>{
+              const v=String(ov.cutCounts[cut.sig]||"");
+              btn.textContent=v||orderFmtNum(cut.autoCount);
+              btn.classList.toggle("changed",v.trim()!=="");
+            },e,()=>{hideMeasureKeypad();renderOrderPage()});
+          });
+        });
+      }else{
+        const btn=d.querySelector(".order-item-qty-button");
+        bindTapOnly(btn,e=>{
+          const ov=editableOrderOverride(item.orderKey);
+          if(ov.qty===undefined)ov.qty=String(orderFmtNum(item.orderValue));
+          showGenericNumberKeypad(btn,ov,"qty","発注数量",()=>{
+            const v=String(ov.qty||"");
+            btn.textContent=(v.trim()!==""?`${orderFmtNum(Number(v)||0)}${item.orderUnit||""}`:item.autoQtyText);
+            btn.classList.toggle("changed",v.trim()!=="");
+          },e,()=>{hideMeasureKeypad();renderOrderPage()});
+        });
+      }
+
       g.appendChild(d);
     });
     wrap.appendChild(g);
@@ -1961,7 +2095,6 @@ function renderOrderPage(){
   }
   area.appendChild(wrap);
 }
-
 
 const PHOTO_DB_NAME="gencho-photo-db-v1",PHOTO_STORE="photos";
 let photoTargetRoom="共通";
@@ -3571,7 +3704,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.6.3",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.6.4",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{

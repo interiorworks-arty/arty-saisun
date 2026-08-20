@@ -1,4 +1,4 @@
-const CACHE="gencho-v163-20260820-site-header-id-guard";
+const CACHE="gencho-v164-20260820-order-override";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
