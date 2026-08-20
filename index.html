@@ -711,9 +711,36 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   background:#f3efec;border-radius:8px;padding:5px 8px;
   font-size:11px;font-weight:800;color:#5d554f
 }
+
+.finish-aux-wrap{
+  margin-top:7px;padding:8px 9px;border-radius:10px;background:#f3efec;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap
+}
+.finish-aux-label{
+  font-size:10px;color:#817973;font-weight:800;white-space:nowrap
+}
+.finish-aux-mode{
+  border:1px solid #d9d2cd;border-radius:9px;background:#fff;color:#514a45;
+  padding:7px 8px;font-size:12px;font-weight:800
+}
+.finish-aux-fields{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0
+}
+.finish-aux-prefix,.finish-aux-op{
+  font-size:13px;color:#665e58;font-weight:900;white-space:nowrap
+}
+.finish-aux-num{
+  border:0;border-radius:8px;background:#fff;color:#3f3935;
+  min-width:64px;padding:7px 9px;font-size:13px;font-weight:900;text-align:left
+}
+.finish-aux-num.empty{color:#b2aaa4;font-weight:700}
+@media(max-width:600px){
+  .finish-aux-wrap{align-items:flex-start}
+  .finish-aux-fields{width:100%}
+}
 </style>
 </head>
-<body data-build="v1.7.0">
+<body data-build="v1.7.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1352,9 +1379,58 @@ const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random()
 const blank=()=>({id:uid(),value:""});
 const newSec=name=>({id:uid(),name,product:"",repeat:"",hRepeat:"",measures:[blank()]});
 const FINISH_TYPES=["CF","フロアタイル","ソフト巾木","リアテック","ダイノック","その他床材"];
-const newFinishMaterial=(type,kind=type,page=finishPageFromKind(kind))=>({id:uid(),type,kind,page,product:"",area:"",orderQty:"",saleMode:"case",caseSqm:"",pieces:"",qty:"",unit:"m",itemName:"",orderCuts:[],caseMeters:""});
+const newFinishMaterial=(type,kind=type,page=finishPageFromKind(kind))=>({
+  id:uid(),type,kind,page,product:"",area:"",orderQty:"",saleMode:"case",caseSqm:"",pieces:"",qty:"",unit:"m",itemName:"",orderCuts:[],caseMeters:"",
+  auxMode:(page==="sheet"||kind==="CF"||kind==="長尺")?"repeat":kind==="フロアタイル"?"size":"none",
+  auxV:"",auxH:"",auxValue:""
+});
 const newRoom=name=>({id:uid(),name,sections:[],finishMaterials:[],memo:""});
 const newFinishRoom=(name,page=null)=>({id:uid(),name,finishMaterials:[],memo:"",pages:page?[page]:[]});
+
+function defaultFinishAuxMode(item){
+  const page=item.page||finishPageFromKind(item.kind||item.type);
+  const kind=item.kind||item.type;
+  if(page==="sheet"||kind==="CF"||kind==="長尺")return "repeat";
+  if(kind==="フロアタイル")return "size";
+  return "none";
+}
+function ensureFinishAux(item){
+  if(!item)return;
+  if(!["none","repeat","size","single"].includes(item.auxMode))item.auxMode=defaultFinishAuxMode(item);
+  if(item.auxV==null)item.auxV="";
+  if(item.auxH==null)item.auxH="";
+  if(item.auxValue==null)item.auxValue="";
+}
+function finishAuxText(item){
+  ensureFinishAux(item);
+  if(item.auxMode==="repeat"){
+    const a=String(item.auxV||"").trim(),b=String(item.auxH||"").trim();
+    return [a?`↕︎${a}`:"",b?`↔︎${b}`:""].filter(Boolean).join("　");
+  }
+  if(item.auxMode==="size"){
+    const a=String(item.auxV||"").trim(),b=String(item.auxH||"").trim();
+    if(a&&b)return `${a} × ${b}`;
+    if(a)return `縦 ${a}`;
+    if(b)return `横 ${b}`;
+    return "";
+  }
+  if(item.auxMode==="single")return String(item.auxValue||"").trim();
+  return "";
+}
+function finishAuxFieldsHtml(item){
+  ensureFinishAux(item);
+  const num=(cls,val,ph)=>`<button type="button" class="finish-aux-num ${cls}${val?"":" empty"}">${esc(val||ph)}</button>`;
+  if(item.auxMode==="repeat"){
+    return `<span class="finish-aux-prefix">↕︎</span>${num("aux-v",item.auxV,"数値")}<span class="finish-aux-prefix">↔︎</span>${num("aux-h",item.auxH,"数値")}`;
+  }
+  if(item.auxMode==="size"){
+    return `<span class="finish-aux-prefix">縦</span>${num("aux-v",item.auxV,"数値")}<span class="finish-aux-op">×</span><span class="finish-aux-prefix">横</span>${num("aux-h",item.auxH,"数値")}`;
+  }
+  if(item.auxMode==="single"){
+    return num("aux-value",item.auxValue,"数値");
+  }
+  return "";
+}
 function ensureFinishRooms(siteObj=state){
   if(!Array.isArray(siteObj.finishRooms))siteObj.finishRooms=[];
   siteObj.finishRooms.forEach(r=>{
@@ -1364,7 +1440,7 @@ function ensureFinishRooms(siteObj=state){
       if(!x.page)x.page=finishPageFromKind(x.kind);
       if(!Array.isArray(x.orderCuts))x.orderCuts=[];
       x.orderCuts.forEach(c=>{if(!c.lengthUnit)c.lengthUnit="m";if(!c.countUnit)c.countUnit="本"});
-      if(x.caseMeters==null)x.caseMeters="";
+      if(x.caseMeters==null)x.caseMeters="";ensureFinishAux(x);
     });
     if(!Array.isArray(r.pages))r.pages=[];
     r.finishMaterials.forEach(x=>{const pg=x.page||finishPageFromKind(x.kind||x.type);if(pg&&!r.pages.includes(pg))r.pages.push(pg)});
@@ -1375,7 +1451,7 @@ function ensureFinishRooms(siteObj=state){
 function ensureRoomExtras(r){
   if(!r)return;
   if(!Array.isArray(r.finishMaterials))r.finishMaterials=[];
-  r.finishMaterials.forEach(x=>{if(!x.kind)x.kind=FINISH_TYPES.includes(x.type)?x.type:"その他床材";if(!x.page)x.page=finishPageFromKind(x.kind);if(!Array.isArray(x.orderCuts))x.orderCuts=[];x.orderCuts.forEach(c=>{if(!c.lengthUnit)c.lengthUnit="m";if(!c.countUnit)c.countUnit="本"});if(x.caseMeters==null)x.caseMeters=""});
+  r.finishMaterials.forEach(x=>{if(!x.kind)x.kind=FINISH_TYPES.includes(x.type)?x.type:"その他床材";if(!x.page)x.page=finishPageFromKind(x.kind);if(!Array.isArray(x.orderCuts))x.orderCuts=[];x.orderCuts.forEach(c=>{if(!c.lengthUnit)c.lengthUnit="m";if(!c.countUnit)c.countUnit="本"});if(x.caseMeters==null)x.caseMeters="";ensureFinishAux(x)});
   if(typeof r.memo!=="string")r.memo="";
 }
 function finishFmtNumber(n){
@@ -1809,6 +1885,16 @@ function renderFinishMaterial(r,item){
     ${kind==="その他床材"?`<div class="finish-product-row" style="grid-template-columns:1fr"><input class="finish-name-input" value="${esc(item.itemName||"")}" placeholder="商品名（例：エンド見切り シルバー）"></div><div class="finish-suggestions item-suggestions"></div>`:""}
     <div class="finish-product-row"${kind==="その他床材"?' style="grid-template-columns:1fr"':""}><button type="button" class="finish-product-button product-button${item.product?"":" empty"}">${esc(item.product||"品番")}</button>${kind==="その他床材"?"":`<button class="finish-register register-product"${item.product?"":" disabled"}>品番登録</button>`}</div>
     <div class="finish-suggestions product-suggestions"></div>
+    <div class="finish-aux-wrap">
+      <span class="finish-aux-label">表示</span>
+      <select class="finish-aux-mode">
+        <option value="none"${item.auxMode==="none"?" selected":""}>なし</option>
+        <option value="repeat"${item.auxMode==="repeat"?" selected":""}>リピート</option>
+        <option value="size"${item.auxMode==="size"?" selected":""}>サイズ</option>
+        <option value="single"${item.auxMode==="single"?" selected":""}>数値</option>
+      </select>
+      <div class="finish-aux-fields">${finishAuxFieldsHtml(item)}</div>
+    </div>
     <div class="finish-fields">${fields}</div>
     ${kind==="その他床材"?`<div class="finish-full-product-actions"><button type="button" class="open-full-products">登録商品</button><button type="button" class="save-full-product">この商品を登録</button></div>`:""}
     ${hasRollOrders?`<div class="finish-order-block"><div class="finish-order-label">発注寸法（m × 本数）</div><div class="finish-order-list"></div><button type="button" class="add-order-row">＋ 発注寸法を追加</button><div class="finish-order-total">発注合計：<span></span></div></div>`:""}
@@ -1830,6 +1916,20 @@ function renderFinishMaterial(r,item){
   if(openFull)openFull.onclick=()=>openFinishFullProductMaster(item);
   if(saveFull)saveFull.onclick=()=>{if(registerFinishFullProduct(item)){alert("商品を登録しました");render()}};
   renderFinishSuggestions(d.querySelector(".product-suggestions"),item,"product");
+
+  const auxMode=d.querySelector(".finish-aux-mode");
+  if(auxMode)auxMode.onchange=()=>{item.auxMode=auxMode.value;save();render()};
+  const bindAux=(sel,key,label)=>{
+    const b=d.querySelector(sel);if(!b)return;
+    bindTapOnly(b,e=>showGenericNumberKeypad(b,item,key,label,()=>{
+      const v=String(item[key]||"");
+      b.textContent=v||"数値";
+      b.classList.toggle("empty",!v);
+    },e));
+  };
+  bindAux(".aux-v","auxV",item.auxMode==="repeat"?"↕︎リピート":item.auxMode==="size"?"縦サイズ":"数値");
+  bindAux(".aux-h","auxH",item.auxMode==="repeat"?"↔︎リピート":item.auxMode==="size"?"横サイズ":"数値");
+  bindAux(".aux-value","auxValue","数値");
 
   if(kind==="その他床材"){
     const ni=d.querySelector(".finish-name-input");
@@ -3515,6 +3615,7 @@ function finishItemExportLines(item){
   const kind=item.kind||item.type,lines=[];
   const identity=[String(item.itemName||"").trim(),String(item.product||"").trim()].filter(Boolean).join("　");
   lines.push(identity||item.type||"商品");
+  const aux=finishAuxText(item);if(aux)lines.push(aux);
   if(kind==="CF"||kind==="リアテック"||kind==="ダイノック"){
     if(item.area)lines.push(`施工 ${item.area}㎡`);
     const cuts=(item.orderCuts||[]).filter(x=>x.length&&x.count);
@@ -4020,7 +4121,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
