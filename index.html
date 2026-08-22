@@ -738,9 +738,20 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .finish-aux-wrap{align-items:flex-start}
   .finish-aux-fields{width:100%}
 }
+
+.photo-stage-tabs{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:7px;
+  margin:0 0 12px;padding:4px;background:#eee9e5;border-radius:13px
+}
+.photo-stage-tab{
+  border:0;border-radius:10px;background:transparent;color:#716963;
+  padding:10px 6px;font-size:14px;font-weight:900
+}
+.photo-stage-tab.active{background:#fff;color:#403a36;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.photo-stage-note{font-size:11px;color:#8a817a;margin:-4px 2px 10px}
 </style>
 </head>
-<body data-build="v1.7.1">
+<body data-build="v1.7.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2344,7 +2355,12 @@ function renderOrderPage(){
 }
 
 const PHOTO_DB_NAME="gencho-photo-db-v1",PHOTO_STORE="photos";
-let photoTargetRoom="共通";
+const PHOTO_STAGES=["before","during","after"];
+const PHOTO_STAGE_LABELS={before:"施工前",during:"施工中",after:"施工後"};
+let activePhotoStage="before";
+let photoTargetRoom="共通",photoTargetStage="before";
+function photoStageOf(rec){return PHOTO_STAGES.includes(rec?.stage)?rec.stage:"before"}
+function photoStageLabel(stage){return PHOTO_STAGE_LABELS[stage]||PHOTO_STAGE_LABELS.before}
 function openPhotoDB(){
   return new Promise((resolve,reject)=>{
     const req=indexedDB.open(PHOTO_DB_NAME,1);
@@ -2489,31 +2505,31 @@ function videoThumbnailBlob(blob){
     v.src=url;v.load();
   });
 }
-async function addPhotoFiles(files,roomName){
+async function addPhotoFiles(files,roomName,stage=activePhotoStage){
   const arr=[...files].filter(f=>{
     const t=String(f?.type||"").toLowerCase();
     return f&&(t.startsWith("image/")||t.startsWith("video/"));
   });
   if(!arr.length)return;
-  const existing=(await photoDbAllForSite(state.id)).filter(p=>p.roomName===roomName);
+  const existing=(await photoDbAllForSite(state.id)).filter(p=>p.roomName===roomName&&photoStageOf(p)===stage);
   let order=existing.length?Math.max(...existing.map(x=>Number(x.order)||0))+1:1;
   for(const file of arr){
     try{
       const isVideo=String(file.type||"").toLowerCase().startsWith("video/");
       if(isVideo){
         const thumbBlob=await videoThumbnailBlob(file);
-        await photoDbPut({id:uid(),siteId:state.id,roomName,blob:file,thumbBlob,mediaType:"video",mimeType:file.type||"video/mp4",note:"",order:order++,createdAt:Date.now()});
+        await photoDbPut({id:uid(),siteId:state.id,roomName,stage,blob:file,thumbBlob,mediaType:"video",mimeType:file.type||"video/mp4",note:"",order:order++,createdAt:Date.now()});
       }else{
         const blob=await compressPhotoFile(file);
-        await photoDbPut({id:uid(),siteId:state.id,roomName,blob,mediaType:"image",mimeType:"image/jpeg",note:"",order:order++,createdAt:Date.now()});
+        await photoDbPut({id:uid(),siteId:state.id,roomName,stage,blob,mediaType:"image",mimeType:"image/jpeg",note:"",order:order++,createdAt:Date.now()});
       }
     }catch(e){console.error(e);alert("写真・動画の追加に失敗したものがあります")}
   }
   if(activeWorkPage==="photo")await renderPhotoPage();
 }
-async function reorderPhoto(roomName,fromId,toId){
+async function reorderPhoto(roomName,fromId,toId,stage=activePhotoStage){
   if(fromId===toId)return;
-  const all=await photoDbAllForSite(state.id),room=all.filter(p=>p.roomName===roomName);
+  const all=await photoDbAllForSite(state.id),room=all.filter(p=>p.roomName===roomName&&photoStageOf(p)===stage);
   const from=room.findIndex(x=>x.id===fromId),to=room.findIndex(x=>x.id===toId);
   if(from<0||to<0||from===to)return;
   const [m]=room.splice(from,1);room.splice(to,0,m);
@@ -2587,8 +2603,23 @@ async function renderPhotoPage(){
     if(state.id!==renderSiteId)return;
     const rooms=photoRoomNamesFromSite(state,photos);
     const wrap=document.createElement("div");wrap.className="photo-page";
+
+    const stageTabs=document.createElement("div");stageTabs.className="photo-stage-tabs";
+    PHOTO_STAGES.forEach(stage=>{
+      const b=document.createElement("button");b.type="button";b.className="photo-stage-tab"+(stage===activePhotoStage?" active":"");
+      b.textContent=photoStageLabel(stage);
+      b.onclick=()=>{if(activePhotoStage===stage)return;activePhotoStage=stage;clearPhotoSelection();renderPhotoPage()};
+      stageTabs.appendChild(b);
+    });
+    wrap.appendChild(stageTabs);
+
+    const stageNote=document.createElement("div");stageNote.className="photo-stage-note";
+    stageNote.textContent=`${photoStageLabel(activePhotoStage)}の写真・動画`;
+    wrap.appendChild(stageNote);
+
     rooms.forEach(roomName=>{
-      const roomPhotos=photos.filter(p=>p.roomName===roomName);
+      const allRoomPhotos=photos.filter(p=>p.roomName===roomName);
+      const roomPhotos=allRoomPhotos.filter(p=>photoStageOf(p)===activePhotoStage);
       const imageCount=roomPhotos.filter(x=>mediaTypeOf(x)==="image").length;
       const videoCount=roomPhotos.length-imageCount;
       const selecting=photoSelectRoom===roomName;
@@ -2613,11 +2644,11 @@ async function renderPhotoPage(){
         <div class="photo-grid"></div>
         ${selecting?`<div class="photo-select-bottom"><button type="button" class="photo-select-delete photo-select-delete-bottom">選択した${selectedCount}件を削除</button></div>`:""}`;
 
-      card.querySelector(".photo-camera").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoCameraInput");inp.value="";inp.click()};
-      card.querySelector(".video-camera").onclick=()=>{photoTargetRoom=roomName;const inp=$("#videoCameraInput");inp.value="";inp.click()};
-      card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
-      card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName);
-      card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName);
+      card.querySelector(".photo-camera").onclick=()=>{photoTargetRoom=roomName;photoTargetStage=activePhotoStage;const inp=$("#photoCameraInput");inp.value="";inp.click()};
+      card.querySelector(".video-camera").onclick=()=>{photoTargetRoom=roomName;photoTargetStage=activePhotoStage;const inp=$("#videoCameraInput");inp.value="";inp.click()};
+      card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;photoTargetStage=activePhotoStage;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
+      card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName,activePhotoStage);
+      card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName,activePhotoStage);
 
       const roomEdit=card.querySelector(".photo-room-edit");
       if(roomEdit)roomEdit.onclick=async()=>{
@@ -2626,8 +2657,8 @@ async function renderPhotoPage(){
 
       const roomRemove=card.querySelector(".photo-room-remove");
       if(roomRemove)roomRemove.onclick=async()=>{
-        if(roomPhotos.length){
-          alert("この部屋には写真・動画があります。先に写真・動画を削除してください。");
+        if(allRoomPhotos.length){
+          alert("この部屋には写真・動画があります。施工前・施工中・施工後の写真・動画を先に削除してください。");
           return;
         }
         if(confirm(`「${photoRoomDisplayName(roomName,state)}」を写真・動画ページから削除しますか？\n※クロス・床・シートなど他ページの部屋は削除されません。`)){
@@ -2752,7 +2783,7 @@ async function renderPhotoPage(){
           const up=async()=>{
             target?.classList.remove("drag-target");
             drag.removeEventListener("pointermove",move);drag.removeEventListener("pointerup",up);drag.removeEventListener("pointercancel",up);
-            if(targetId)await reorderPhoto(roomName,rec.id,targetId);
+            if(targetId)await reorderPhoto(roomName,rec.id,targetId,activePhotoStage);
           };
           drag.addEventListener("pointermove",move);drag.addEventListener("pointerup",up);drag.addEventListener("pointercancel",up);
         };
@@ -2772,72 +2803,81 @@ function imageFromBlob(blob){
     img.onload=()=>resolve({img,url});img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("PHOTO_LOAD"))};img.src=url;
   });
 }
-async function buildPhotoExportCanvases(siteObj=state,roomFilter=null){
+async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilter=null){
   const media=await photoDbAllForSite(siteObj.id);if(!media.length)return [];
-  const rooms=(roomFilter?[roomFilter]:photoRoomNamesFromSite(siteObj,media)).filter(n=>media.some(p=>p.roomName===n)),out=[];
-  const perPage=6;
-  const pageHeight=1700;
-  const rowH=430,gap=28,imgH=310;
+  const stages=stageFilter?[stageFilter]:PHOTO_STAGES.filter(stage=>media.some(p=>photoStageOf(p)===stage));
+  const out=[];
+  const perPage=6,pageHeight=1700,rowH=430,gap=28,imgH=310;
 
-  for(const roomName of rooms){
-    const list=media.filter(p=>p.roomName===roomName);
-    const pageCount=Math.ceil(list.length/perPage);
-    for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
-      const chunk=list.slice(pageIndex*perPage,(pageIndex+1)*perPage);
-      const displayRoom=photoRoomDisplayName(roomName,siteObj);
-      const subtitle=pageCount>1?`${displayRoom}　${pageIndex+1}/${pageCount}`:displayRoom;
-      const base=exportCanvasBase("写真・動画",subtitle,pageHeight),{c,ctx,pad,width}=base;
-      const y=base.y,colW=(width-pad*2-gap-50)/2;
+  for(const stage of stages){
+    const stageMedia=media.filter(p=>photoStageOf(p)===stage);
+    if(!stageMedia.length)continue;
+    const rooms=(roomFilter?[roomFilter]:photoRoomNamesFromSite(siteObj,media)).filter(n=>stageMedia.some(p=>p.roomName===n));
 
-      for(let i=0;i<chunk.length;i++){
-        const col=i%2,row=Math.floor(i/2),x=pad+25+col*(colW+gap),top=y+row*rowH,rec=chunk[i];
-        const isVideo=mediaTypeOf(rec)==="video";
-        const previewBlob=isVideo?(rec.thumbBlob||null):rec.blob;
-        ctx.fillStyle="#eeeae7";ctx.fillRect(x,top,colW,imgH);
-        if(previewBlob){
-          try{
-            const {img,url}=await imageFromBlob(previewBlob);
-            const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
-            const scale=Math.min(colW/iw,imgH/ih),dw=iw*scale,dh=ih*scale;
-            ctx.drawImage(img,x+(colW-dw)/2,top+(imgH-dh)/2,dw,dh);URL.revokeObjectURL(url);
-          }catch{}
+    for(const roomName of rooms){
+      const list=stageMedia.filter(p=>p.roomName===roomName);
+      const pageCount=Math.ceil(list.length/perPage);
+      for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
+        const chunk=list.slice(pageIndex*perPage,(pageIndex+1)*perPage);
+        const displayRoom=photoRoomDisplayName(roomName,siteObj);
+        const baseSub=`${photoStageLabel(stage)}　${displayRoom}`;
+        const subtitle=pageCount>1?`${baseSub}　${pageIndex+1}/${pageCount}`:baseSub;
+        const base=exportCanvasBase("写真・動画",subtitle,pageHeight),{c,ctx,pad,width}=base;
+        const y=base.y,colW=(width-pad*2-gap-50)/2;
+
+        for(let i=0;i<chunk.length;i++){
+          const col=i%2,row=Math.floor(i/2),x=pad+25+col*(colW+gap),top=y+row*rowH,rec=chunk[i];
+          const isVideo=mediaTypeOf(rec)==="video";
+          const previewBlob=isVideo?(rec.thumbBlob||null):rec.blob;
+          ctx.fillStyle="#eeeae7";ctx.fillRect(x,top,colW,imgH);
+          if(previewBlob){
+            try{
+              const {img,url}=await imageFromBlob(previewBlob);
+              const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+              const scale=Math.min(colW/iw,imgH/ih),dw=iw*scale,dh=ih*scale;
+              ctx.drawImage(img,x+(colW-dw)/2,top+(imgH-dh)/2,dw,dh);URL.revokeObjectURL(url);
+            }catch{}
+          }
+          if(isVideo){
+            ctx.fillStyle="rgba(0,0,0,.68)";roundedRect(ctx,x+12,top+12,105,34,17,"rgba(0,0,0,.68)");
+            ctx.fillStyle="#fff";ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+            ctx.fillText("🎥 動画",x+28,top+35);
+          }
+          if(rec.note){
+            ctx.fillStyle="#5e5751";ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+            const lines=wrapCanvasText(ctx,rec.note,colW-8).slice(0,3);
+            lines.forEach((line,li)=>ctx.fillText(line,x+4,top+imgH+27+li*23));
+          }
         }
-        if(isVideo){
-          ctx.fillStyle="rgba(0,0,0,.68)";roundedRect(ctx,x+12,top+12,105,34,17,"rgba(0,0,0,.68)");
-          ctx.fillStyle="#fff";ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-          ctx.fillText("🎥 動画",x+28,top+35);
-        }
-        if(rec.note){
-          ctx.fillStyle="#5e5751";ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-          const lines=wrapCanvasText(ctx,rec.note,colW-8).slice(0,3);
-          lines.forEach((line,li)=>ctx.fillText(line,x+4,top+imgH+27+li*23));
-        }
+        out.push(c);
       }
-      out.push(c);
     }
   }
   return out;
 }
-async function exportPhotoRoomImage(roomName){
+async function exportPhotoRoomImage(roomName,stage=activePhotoStage){
   try{
-    const canvases=await buildPhotoExportCanvases(state,roomName);
-    if(!canvases.length){alert("この部屋に写真・動画がありません");return}
+    const canvases=await buildPhotoExportCanvases(state,roomName,stage);
+    if(!canvases.length){alert(`この部屋の${photoStageLabel(stage)}に写真・動画がありません`);return}
     const canvas=combineCanvasesVertically(canvases);
-    const displayRoom=photoRoomDisplayName(roomName,state);const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_写真・動画.png`;
+    const displayRoom=photoRoomDisplayName(roomName,state);
+    const stageLabel=photoStageLabel(stage);
+    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_${sanitizeFilename(stageLabel)}_写真・動画.png`;
     const file=await canvasToPngFile(canvas,fn);
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} 写真・動画`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} ${stageLabel} 写真・動画`);
   }catch(e){console.error(e);alert("画像作成に失敗しました")}
 }
-async function exportPhotoRoomPdf(roomName){
+async function exportPhotoRoomPdf(roomName,stage=activePhotoStage){
   try{
-    const canvases=await buildPhotoExportCanvases(state,roomName);
-    if(!canvases.length){alert("この部屋に写真・動画がありません");return}
+    const canvases=await buildPhotoExportCanvases(state,roomName,stage);
+    if(!canvases.length){alert(`この部屋の${photoStageLabel(stage)}に写真・動画がありません`);return}
     const images=[];
     for(const canvas of canvases)images.push(await canvasToJpegInfo(canvas));
     const blob=makePdfFromJpegs(images);
-    const displayRoom=photoRoomDisplayName(roomName,state);const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_写真・動画.pdf`;
+    const displayRoom=photoRoomDisplayName(roomName,state),stageLabel=photoStageLabel(stage);
+    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_${sanitizeFilename(stageLabel)}_写真・動画.pdf`;
     const file=new File([blob],fn,{type:"application/pdf"});
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${roomName} 写真・動画 PDF`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} ${stageLabel} 写真・動画 PDF`);
   }catch(e){console.error(e);alert("PDF作成に失敗しました")}
 }
 
@@ -4121,7 +4161,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -4366,9 +4406,9 @@ updateSectionSheetMode();
 $("#manageSections").onclick=()=>{manageSections=!manageSections;renderSectionChoices()};
 $("#resetSections").onclick=()=>{if(confirm("区分候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){savedSections=[];deletedSections=[];sectionOrder=[...CATS];saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();renderSectionChoices()}};
 $("#closeSection").onclick=()=>closeSectionSheet();$("#addCustomSection").onclick=()=>{let n=$("#customSection").value.trim(),r=room();if(n&&r){addUniqueText(SECTION_MASTER_KEY,savedSections,n);if(!sectionOrder.includes(n)){sectionOrder.push(n);saveSectionOrder()}renderSectionChoices();const editing=getEditingSection();if(editing){editing.name=n}else{r.sections.push(newSec(n))}$("#customSection").value="";save();closeSectionSheet();render()}};
-$("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom)};
-$("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom)};
-$("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom)};
+$("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
+$("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
+$("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
 $("#siteName").oninput=save;$("#siteDate").onchange=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
 $("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
