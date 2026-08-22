@@ -768,18 +768,26 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-file-head button{border:0;border-radius:8px;background:#ebe6e2;color:#625a54;padding:6px 8px;font-size:11px;font-weight:800}
 .memo-file-head button.delete{color:#a06d68}
 .memo-image-preview{display:block;width:100%;height:auto;max-height:680px;object-fit:contain;background:#f0ece9}
-.memo-pdf-preview-wrap{position:relative;width:100%;height:min(72vh,760px);min-height:430px;overflow:hidden;background:#eeeae7}
-.memo-pdf-preview{display:block;border:0;background:#eeeae7;width:150%;height:150%;transform:scale(.6666667);transform-origin:top left}
+.memo-pdf-preview-wrap{
+  position:relative;width:100%;overflow:hidden;background:#eeeae7;
+  min-height:320px;max-height:760px
+}
+.memo-pdf-preview{
+  display:block;border:0;background:#eeeae7;
+  width:var(--pdf-inner-scale,200%);
+  height:var(--pdf-inner-scale,200%);
+  transform:scale(var(--pdf-outer-scale,.5));
+  transform-origin:top left
+}
 .memo-pdf-fallback{padding:18px;text-align:center;color:#766f69;font-size:12px}
 .memo-empty-files{font-size:12px;color:#99908a;padding:6px 2px}
 @media(max-width:600px){
-  .memo-pdf-preview-wrap{height:min(62vh,520px);min-height:360px}
-  .memo-pdf-preview{width:165%;height:165%;transform:scale(.6060606)}
+  .memo-pdf-preview-wrap{min-height:280px;max-height:520px}
   .memo-image-preview{max-height:520px}
 }
 </style>
 </head>
-<body data-build="v1.7.5">
+<body data-build="v1.7.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2097,6 +2105,44 @@ async function memoDbDelete(id){
     tx.onerror=()=>{db.close();reject(tx.error)};
   });
 }
+async function detectPdfPageRatio(blob){
+  try{
+    const buf=await blob.slice(0,512*1024).arrayBuffer();
+    const bytes=new Uint8Array(buf);
+    let s="";
+    // PDF objects are mostly ASCII around MediaBox/CropBox. Read enough for first page metadata.
+    const chunk=32768;
+    for(let i=0;i<bytes.length;i+=chunk){
+      s+=String.fromCharCode(...bytes.subarray(i,Math.min(bytes.length,i+chunk)));
+    }
+    const boxRe=/(?:\/MediaBox|\/CropBox)\s*\[\s*([+-]?\d*\.?\d+)\s+([+-]?\d*\.?\d+)\s+([+-]?\d*\.?\d+)\s+([+-]?\d*\.?\d+)\s*\]/g;
+    let m;
+    while((m=boxRe.exec(s))){
+      const x1=Number(m[1]),y1=Number(m[2]),x2=Number(m[3]),y2=Number(m[4]);
+      const w=Math.abs(x2-x1),h=Math.abs(y2-y1);
+      if(w>10&&h>10)return {ratio:w/h,width:w,height:h,landscape:w>h};
+    }
+  }catch(e){console.warn("PDF page size detect failed",e)}
+  return {ratio:1.414,width:842,height:595,landscape:true};
+}
+async function configureMemoPdfPreview(frame,wrap,blob){
+  const info=await detectPdfPageRatio(blob);
+  // 横長ほど強く縮小。A3/A4など物理サイズではなくページ比率に合わせる。
+  let outer=info.landscape?0.46:0.56;
+  if(info.ratio>1.65)outer=0.43;
+  if(info.ratio<0.8)outer=0.58;
+  const inner=(100/outer).toFixed(2)+"%";
+  wrap.style.setProperty("--pdf-outer-scale",String(outer));
+  wrap.style.setProperty("--pdf-inner-scale",inner);
+
+  // 表示枠も元PDFの縦横比に合わせる。極端な比率は見やすい範囲に制限。
+  const ratio=Math.max(.62,Math.min(2.2,info.ratio||1.414));
+  const available=Math.min(720,Math.max(300,wrap.getBoundingClientRect().width||700));
+  let h=available/ratio;
+  if(info.landscape)h=Math.max(320,Math.min(520,h+110));
+  else h=Math.max(430,Math.min(720,h+120));
+  wrap.style.height=Math.round(h)+"px";
+}
 function clearMemoObjectUrls(){
   memoObjectUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch{}});
   memoObjectUrls=[];
@@ -2208,8 +2254,10 @@ async function renderMemoPage(){
       const preview=card.querySelector(".memo-file-preview");
       if(isPdf){
         preview.innerHTML=`<div class="memo-pdf-preview-wrap"><iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe></div>`;
+        const wrap=preview.querySelector(".memo-pdf-preview-wrap");
         const frame=preview.querySelector("iframe");
         frame.src=url;
+        configureMemoPdfPreview(frame,wrap,rec.blob);
       }else{
         preview.innerHTML=`<img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}">`;
         preview.querySelector("img").src=url;
@@ -4376,7 +4424,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.5",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.6",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
