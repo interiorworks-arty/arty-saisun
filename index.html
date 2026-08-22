@@ -749,9 +749,35 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 .photo-stage-tab.active{background:#fff;color:#403a36;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .photo-stage-note{font-size:11px;color:#8a817a;margin:-4px 2px 10px}
+
+.memo-pages-toolbar{display:flex;gap:7px;align-items:center;margin:0 0 10px;overflow-x:auto;padding-bottom:2px}
+.memo-page-tab{flex:0 0 auto;border:0;border-radius:10px;background:#eee9e5;color:#665f59;padding:9px 12px;font-size:13px;font-weight:900;white-space:nowrap}
+.memo-page-tab.active{background:var(--accent);color:#fff}
+.memo-page-add{flex:0 0 auto;border:0;border-radius:10px;background:#e7e1dd;color:#514a45;padding:9px 12px;font-size:13px;font-weight:900}
+.memo-page-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.memo-page-actions button{border:0;border-radius:9px;background:#eee9e5;color:#5d554f;padding:8px 10px;font-size:12px;font-weight:800}
+.memo-page-actions .danger{color:#a06d68}
+.memo-drawing-block{margin-top:12px;padding-top:12px;border-top:1px solid #e7e1dc}
+.memo-drawing-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.memo-drawing-title{font-size:13px;font-weight:900;color:#514a45}
+.memo-drawing-add{border:0;border-radius:9px;background:#e9e4e0;color:#514a45;padding:8px 10px;font-size:12px;font-weight:900}
+.memo-file-list{display:flex;flex-direction:column;gap:10px}
+.memo-file-card{border:1px solid #e2dcd7;border-radius:12px;background:#fff;overflow:hidden}
+.memo-file-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f7f4f2}
+.memo-file-name{flex:1;min-width:0;font-size:12px;font-weight:800;color:#514a45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memo-file-head button{border:0;border-radius:8px;background:#ebe6e2;color:#625a54;padding:6px 8px;font-size:11px;font-weight:800}
+.memo-file-head button.delete{color:#a06d68}
+.memo-image-preview{display:block;width:100%;height:auto;max-height:680px;object-fit:contain;background:#f0ece9}
+.memo-pdf-preview{display:block;width:100%;height:650px;border:0;background:#eeeae7}
+.memo-pdf-fallback{padding:18px;text-align:center;color:#766f69;font-size:12px}
+.memo-empty-files{font-size:12px;color:#99908a;padding:6px 2px}
+@media(max-width:600px){
+  .memo-pdf-preview{height:430px}
+  .memo-image-preview{max-height:520px}
+}
 </style>
 </head>
-<body data-build="v1.7.2">
+<body data-build="v1.7.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -859,6 +885,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 <input id="photoCameraInput" class="photo-hidden-input" type="file" accept="image/*" capture="environment">
 <input id="videoCameraInput" class="photo-hidden-input" type="file" accept="video/*" capture="environment">
 <input id="photoLibraryInput" class="photo-hidden-input" type="file" accept="image/*,video/*" multiple>
+<input id="memoDrawingInput" class="photo-hidden-input" type="file" accept="image/*,application/pdf,.pdf" multiple>
 <div id="photoLightbox" class="photo-lightbox"><button type="button" id="photoLightboxClose" class="photo-lightbox-close">×</button><img id="photoLightboxImage" alt=""><video id="photoLightboxVideo" controls playsinline style="display:none"></video></div>
 <div class="bottom"><div class="bottom-inner"><button id="editBtn" class="primary">採寸</button><button id="calcBtn">計算</button></div></div>
 
@@ -971,7 +998,7 @@ function localDateYmd(d=new Date()){
   return `${y}-${m}-${day}`;
 }
 function makeSite(name=""){
-  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",memoPages:[],status:"active",createdAt:Date.now(),updatedAt:Date.now()}
 }
 function loadSites(){
   try{
@@ -2017,15 +2044,185 @@ function renderFinishArea(card,r){
 }
 
 
-function renderMemoPage(){
+
+let activeMemoPageId=null,memoDrawingTargetPageId=null,memoObjectUrls=[];
+
+function ensureMemoPages(siteObj=state){
+  if(!Array.isArray(siteObj.memoPages))siteObj.memoPages=[];
+  if(!siteObj.memoPages.length){
+    siteObj.memoPages=[{id:"memo-"+uid(),title:"メモ1",text:String(siteObj.memo||"")}];
+  }
+  siteObj.memoPages.forEach((p,i)=>{
+    if(!p.id)p.id="memo-"+uid();
+    if(typeof p.title!=="string"||!p.title.trim())p.title=`メモ${i+1}`;
+    if(typeof p.text!=="string")p.text="";
+  });
+  if(!siteObj.memoPages.some(p=>p.id===activeMemoPageId))activeMemoPageId=siteObj.memoPages[0]?.id||null;
+  // 旧1ページメモとの互換用。最初のページを従来 memo にも同期。
+  siteObj.memo=siteObj.memoPages[0]?.text||"";
+  return siteObj.memoPages;
+}
+function activeMemoPage(siteObj=state){
+  ensureMemoPages(siteObj);
+  return siteObj.memoPages.find(p=>p.id===activeMemoPageId)||siteObj.memoPages[0]||null;
+}
+async function memoDbAllForSite(siteId){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(MEMO_FILE_STORE,"readonly");
+    const st=tx.objectStore(MEMO_FILE_STORE);
+    const idx=st.index("siteId"),req=idx.getAll(siteId);
+    req.onsuccess=()=>resolve((req.result||[]).sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)));
+    req.onerror=()=>reject(req.error);
+    tx.oncomplete=()=>db.close();
+  });
+}
+async function memoDbPut(rec){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(MEMO_FILE_STORE,"readwrite");
+    tx.objectStore(MEMO_FILE_STORE).put(rec);
+    tx.oncomplete=()=>{db.close();resolve(true)};
+    tx.onerror=()=>{db.close();reject(tx.error)};
+  });
+}
+async function memoDbDelete(id){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(MEMO_FILE_STORE,"readwrite");
+    tx.objectStore(MEMO_FILE_STORE).delete(id);
+    tx.oncomplete=()=>{db.close();resolve(true)};
+    tx.onerror=()=>{db.close();reject(tx.error)};
+  });
+}
+function clearMemoObjectUrls(){
+  memoObjectUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch{}});
+  memoObjectUrls=[];
+}
+async function addMemoDrawingFiles(files,pageId){
+  const arr=[...files].filter(f=>{
+    const t=String(f?.type||"").toLowerCase();
+    return f&&(t.startsWith("image/")||t==="application/pdf"||String(f.name||"").toLowerCase().endsWith(".pdf"));
+  });
+  if(!arr.length)return;
+  const existing=(await memoDbAllForSite(state.id)).filter(x=>x.memoPageId===pageId);
+  let order=existing.length?Math.max(...existing.map(x=>Number(x.order)||0))+1:1;
+  for(const file of arr){
+    try{
+      const isPdf=String(file.type||"").toLowerCase()==="application/pdf"||String(file.name||"").toLowerCase().endsWith(".pdf");
+      let blob=file,mimeType=isPdf?"application/pdf":(file.type||"image/jpeg");
+      if(!isPdf)blob=await compressPhotoFile(file,2000,.9);
+      await memoDbPut({
+        id:"memo-file-"+uid(),siteId:state.id,memoPageId:pageId,
+        blob,mimeType,isPdf,fileName:file.name|| (isPdf?"図面.pdf":"図面画像"),
+        order:order++,createdAt:Date.now()
+      });
+    }catch(e){console.error(e);alert("図面・画像の追加に失敗したものがあります")}
+  }
+  if(activeWorkPage==="memo")await renderMemoPage();
+}
+async function deleteMemoPage(pageId){
+  ensureMemoPages(state);
+  if(state.memoPages.length<=1){alert("メモページは1ページ残してください");return}
+  const files=(await memoDbAllForSite(state.id)).filter(x=>x.memoPageId===pageId);
+  if(!confirm(`このメモページを削除しますか？${files.length?`\n添付している図面・画像 ${files.length}件も削除されます。`:""}`))return;
+  for(const f of files)await memoDbDelete(f.id);
+  state.memoPages=state.memoPages.filter(p=>p.id!==pageId);
+  activeMemoPageId=state.memoPages[0]?.id||null;
+  ensureMemoPages(state);save();renderMemoPage();
+}
+async function renderMemoPage(){
   const area=$("#memoPageArea");if(!area)return;
-  if(typeof state.memo!=="string")state.memo="";
-  area.innerHTML=`<div class="memo-page"><div class="memo-page-head"><div class="memo-page-title">メモ</div><div class="memo-page-note">自動保存</div></div><textarea id="siteMemo" class="memo-grid" placeholder="ここに自由に入力"></textarea></div>`;
-  const ta=$("#siteMemo");
-  ta.value=state.memo||"";
-  ta.oninput=()=>{state.memo=ta.value;save()};
-  // メモだけは端末標準キーボードをそのまま使う
+  const renderSiteId=state.id;
+  ensureMemoPages(state);
+  clearMemoObjectUrls();
+
+  const pages=state.memoPages;
+  const current=activeMemoPage(state);
+  area.innerHTML="";
+
+  const tabs=document.createElement("div");tabs.className="memo-pages-toolbar";
+  pages.forEach(pg=>{
+    const b=document.createElement("button");b.type="button";
+    b.className="memo-page-tab"+(pg.id===current?.id?" active":"");
+    b.textContent=pg.title;
+    b.onclick=()=>{activeMemoPageId=pg.id;renderMemoPage()};
+    tabs.appendChild(b);
+  });
+  const add=document.createElement("button");add.type="button";add.className="memo-page-add";add.textContent="＋ ページ";
+  add.onclick=()=>{
+    ensureMemoPages(state);
+    const n=state.memoPages.length+1,pg={id:"memo-"+uid(),title:`メモ${n}`,text:""};
+    state.memoPages.push(pg);activeMemoPageId=pg.id;save();renderMemoPage();
+  };
+  tabs.appendChild(add);area.appendChild(tabs);
+
+  if(!current)return;
+
+  const page=document.createElement("div");page.className="memo-page";
+  page.innerHTML=`<div class="memo-page-head"><div class="memo-page-title">${esc(current.title)}</div><div class="memo-page-note">自動保存</div></div>
+    <div class="memo-page-actions">
+      <button type="button" class="memo-rename">ページ名編集</button>
+      <button type="button" class="memo-delete-page danger">ページ削除</button>
+    </div>
+    <textarea id="siteMemo" class="memo-grid" placeholder="ここに自由に入力"></textarea>
+    <div class="memo-drawing-block">
+      <div class="memo-drawing-head"><div class="memo-drawing-title">図面・画像</div><button type="button" class="memo-drawing-add">＋ 図面・画像を追加</button></div>
+      <div class="memo-file-list"><div class="memo-empty-files">図面・画像はまだありません</div></div>
+    </div>`;
+  area.appendChild(page);
+
+  const ta=$("#siteMemo");ta.value=current.text||"";
+  ta.oninput=()=>{
+    current.text=ta.value;
+    if(state.memoPages[0]?.id===current.id)state.memo=current.text;
+    save();
+  };
   ta.onfocus=()=>{hideMeasureKeypad();hideProductKeypad()};
+
+  page.querySelector(".memo-rename").onclick=()=>{
+    const n=prompt("ページ名を編集",current.title);
+    if(n!==null&&n.trim()){current.title=n.trim();save();renderMemoPage()}
+  };
+  page.querySelector(".memo-delete-page").onclick=()=>deleteMemoPage(current.id);
+  page.querySelector(".memo-drawing-add").onclick=()=>{
+    memoDrawingTargetPageId=current.id;
+    const inp=$("#memoDrawingInput");inp.value="";inp.click();
+  };
+
+  try{
+    const all=await memoDbAllForSite(renderSiteId);
+    if(state.id!==renderSiteId||activeMemoPageId!==current.id)return;
+    const files=all.filter(x=>x.memoPageId===current.id);
+    const list=page.querySelector(".memo-file-list");list.innerHTML="";
+    if(!files.length){list.innerHTML='<div class="memo-empty-files">図面・画像はまだありません</div>';return}
+
+    files.forEach(rec=>{
+      const card=document.createElement("div");card.className="memo-file-card";
+      const isPdf=rec.isPdf||String(rec.mimeType||"").toLowerCase()==="application/pdf";
+      card.innerHTML=`<div class="memo-file-head"><div class="memo-file-name">${esc(rec.fileName|| (isPdf?"図面.pdf":"図面画像"))}</div><button type="button" class="memo-file-open">開く</button><button type="button" class="memo-file-delete delete">削除</button></div>
+        <div class="memo-file-preview"></div>`;
+      const url=URL.createObjectURL(rec.blob);memoObjectUrls.push(url);
+      const preview=card.querySelector(".memo-file-preview");
+      if(isPdf){
+        preview.innerHTML=`<iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe>`;
+        preview.querySelector("iframe").src=url;
+      }else{
+        preview.innerHTML=`<img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}">`;
+        preview.querySelector("img").src=url;
+      }
+      card.querySelector(".memo-file-open").onclick=()=>window.open(url,"_blank");
+      card.querySelector(".memo-file-delete").onclick=async()=>{
+        if(!confirm(`「${rec.fileName||"図面"}」を削除しますか？`))return;
+        await memoDbDelete(rec.id);renderMemoPage();
+      };
+      list.appendChild(card);
+    });
+  }catch(e){
+    console.error(e);
+    const list=page.querySelector(".memo-file-list");
+    if(list)list.innerHTML='<div class="memo-empty-files">図面・画像の読み込みに失敗しました</div>';
+  }
 }
 function orderFmtNum(n){
   const x=Number(n)||0;
@@ -2354,7 +2551,7 @@ function renderOrderPage(){
   area.appendChild(wrap);
 }
 
-const PHOTO_DB_NAME="gencho-photo-db-v1",PHOTO_STORE="photos";
+const PHOTO_DB_NAME="gencho-photo-db-v1",PHOTO_STORE="photos",MEMO_FILE_STORE="memoFiles";
 const PHOTO_STAGES=["before","during","after"];
 const PHOTO_STAGE_LABELS={before:"施工前",during:"施工中",after:"施工後"};
 let activePhotoStage="before";
@@ -2363,12 +2560,17 @@ function photoStageOf(rec){return PHOTO_STAGES.includes(rec?.stage)?rec.stage:"b
 function photoStageLabel(stage){return PHOTO_STAGE_LABELS[stage]||PHOTO_STAGE_LABELS.before}
 function openPhotoDB(){
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open(PHOTO_DB_NAME,1);
+    const req=indexedDB.open(PHOTO_DB_NAME,2);
     req.onupgradeneeded=()=>{
       const db=req.result;
       if(!db.objectStoreNames.contains(PHOTO_STORE)){
         const st=db.createObjectStore(PHOTO_STORE,{keyPath:"id"});
         st.createIndex("siteId","siteId",{unique:false});
+      }
+      if(!db.objectStoreNames.contains(MEMO_FILE_STORE)){
+        const ms=db.createObjectStore(MEMO_FILE_STORE,{keyPath:"id"});
+        ms.createIndex("siteId","siteId",{unique:false});
+        ms.createIndex("memoPageId","memoPageId",{unique:false});
       }
     };
     req.onsuccess=()=>resolve(req.result);
@@ -3696,18 +3898,28 @@ function buildFinishExportCanvas(page,siteObj=state){
   });
   return c;
 }
-function buildMemoExportCanvas(siteObj=state){
-  const memo=String(siteObj.memo||"").trim();
-  const base=exportCanvasBase("メモ","",Math.max(900,350+Math.max(1,memo.length/28)*36));
-  const {c,ctx,pad,width}=base;let y=base.y;
-  ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillStyle="#4d4742";
-  const paragraphs=(memo||"（メモなし）").split("\n");
-  paragraphs.forEach(p=>{
-    const lines=wrapCanvasText(ctx,p||" ",width-pad*2-90);
-    lines.forEach(line=>{ctx.fillText(line,pad+45,y);y+=34});
-    y+=8;
+function buildMemoExportCanvases(siteObj=state){
+  ensureMemoPages(siteObj);
+  const out=[];
+  (siteObj.memoPages||[]).forEach(pg=>{
+    const memo=String(pg.text||"").trim();
+    if(!memo)return;
+    const base=exportCanvasBase("メモ",pg.title||"",Math.max(900,350+Math.max(1,memo.length/28)*36));
+    const {c,ctx,pad,width}=base;let y=base.y;
+    ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillStyle="#4d4742";
+    const paragraphs=(memo||"（メモなし）").split("\n");
+    paragraphs.forEach(p=>{
+      const lines=wrapCanvasText(ctx,p||" ",width-pad*2-90);
+      lines.forEach(line=>{ctx.fillText(line,pad+45,y);y+=34});
+      y+=8;
+    });
+    out.push(c);
   });
-  return c;
+  return out;
+}
+function buildMemoExportCanvas(siteObj=state){
+  const arr=buildMemoExportCanvases(siteObj);
+  return arr.length<=1?(arr[0]||null):combineCanvasesVertically(arr);
 }
 function orderLineText(item){
   const name=item.product?`${item.name}　${item.product}`:item.name;
@@ -3929,7 +4141,7 @@ async function buildSelectedExportCanvases(parts,siteObj=state){
   if(parts.includes("sheet")&&finishExportItems("sheet",siteObj).length)canvases.push(buildFinishExportCanvas("sheet",siteObj));
   if(parts.includes("other")&&finishExportItems("other",siteObj).length)canvases.push(buildFinishExportCanvas("other",siteObj));
   if(parts.includes("photo"))canvases.push(...await buildPhotoExportCanvases(siteObj));
-  if(parts.includes("memo")&&String(siteObj.memo||"").trim())canvases.push(buildMemoExportCanvas(siteObj));
+  if(parts.includes("memo"))canvases.push(...buildMemoExportCanvases(siteObj));
   if(parts.includes("order")){
     const od=collectOrderData(siteObj);
     if(["wall","floor","sheet","other"].some(k=>(od[k]||[]).length))canvases.push(...buildOrderExportCanvases(siteObj));
@@ -4068,7 +4280,7 @@ function fmtDate(ts){
   const d=new Date(ts);
   return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
-function siteHasData(s){return !!(s.siteName||String(s.memo||"").trim()||s.rooms?.some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim())))||s.finishRooms?.some(r=>(r.finishMaterials||[]).length))}
+function siteHasData(s){return !!(s.siteName||String(s.memo||"").trim()||s.memoPages?.some(p=>String(p.text||"").trim())||s.rooms?.some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim())))||s.finishRooms?.some(r=>(r.finishMaterials||[]).length))}
 function siteRepeatTotal(s){
   let total=0;
   (s?.rooms||[]).forEach(r=>{
@@ -4161,7 +4373,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -4211,7 +4423,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
@@ -4409,6 +4621,7 @@ $("#closeSection").onclick=()=>closeSectionSheet();$("#addCustomSection").onclic
 $("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
 $("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
 $("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
+$("#memoDrawingInput").onchange=e=>{const files=e.target.files;if(files?.length&&memoDrawingTargetPageId)addMemoDrawingFiles(files,memoDrawingTargetPageId)};
 $("#siteName").oninput=save;$("#siteDate").onchange=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
 $("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
