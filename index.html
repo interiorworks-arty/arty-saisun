@@ -939,7 +939,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-editor-viewport{z-index:1}
 </style>
 </head>
-<body data-build="v1.9.3">
+<body data-build="v1.9.4">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5016,7 +5016,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.9.3",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.9.4",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
