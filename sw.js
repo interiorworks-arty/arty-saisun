@@ -1,4 +1,4 @@
-const CACHE="gencho-v184-20260823-doc-only-large";
+const CACHE="gencho-v185-20260823-pdf-ink-stable";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

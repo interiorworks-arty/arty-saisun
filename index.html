@@ -776,8 +776,8 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-file-head button.delete{color:#a06d68}
 .memo-image-preview{display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:transparent}
 .memo-pdf-preview-wrap{
-  position:relative;width:100%;overflow:hidden;background:transparent;
-  min-height:min(78vh,980px);max-height:none
+  position:relative;width:100%;overflow:hidden;background:#fff;
+  min-height:560px;max-height:none
 }
 .memo-pdf-preview{
   display:block;border:0;background:#eeeae7;
@@ -791,7 +791,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-file-preview{width:100%;overflow:hidden;background:transparent}
 @media(max-width:600px){
   .memo-drawing-block{width:calc(100vw - 16px)}
-  .memo-pdf-preview-wrap{min-height:68vh;max-height:none}
+  .memo-pdf-preview-wrap{min-height:460px;max-height:none}
   .memo-image-preview{max-height:520px}
 }
 
@@ -831,7 +831,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.8.4">
+<body data-build="v1.8.5">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2177,6 +2177,8 @@ function memoInkDrawStroke(ctx,stroke,w,h){
 function memoInkDrawLiveSegment(canvas,stroke,fromIndex){
   if(!canvas||!stroke||!stroke.points||stroke.points.length<2)return;
   const rect=canvas.getBoundingClientRect();
+  const drawW=Math.max(1,canvas.clientWidth||canvas.offsetWidth||rect.width);
+  const drawH=Math.max(1,canvas.clientHeight||canvas.offsetHeight||rect.height);
   const dpr=Math.min(1.5,window.devicePixelRatio||1);
   const ctx=canvas.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -2185,23 +2187,23 @@ function memoInkDrawLiveSegment(canvas,stroke,fromIndex){
   if(stroke.tool==="eraser"){
     ctx.globalCompositeOperation="destination-out";
     ctx.strokeStyle="rgba(0,0,0,1)";
-    ctx.lineWidth=(stroke.width||14)*Math.max(.65,rect.width/800);
+    ctx.lineWidth=(stroke.width||14)*Math.max(.65,drawW/800);
   }else{
     ctx.globalCompositeOperation="source-over";
     ctx.strokeStyle=stroke.color||"#d32f2f";
-    ctx.lineWidth=(stroke.width||4)*Math.max(.65,rect.width/800);
+    ctx.lineWidth=(stroke.width||4)*Math.max(.65,drawW/800);
   }
   const pts=stroke.points;
   const i=Math.max(1,fromIndex);
   ctx.beginPath();
-  ctx.moveTo(pts[i-1].x*rect.width,pts[i-1].y*rect.height);
+  ctx.moveTo(pts[i-1].x*drawW,pts[i-1].y*drawH);
   for(let n=i;n<pts.length;n++){
     const a=pts[n-1],b=pts[n];
-    const mx=(a.x+b.x)*rect.width/2,my=(a.y+b.y)*rect.height/2;
-    ctx.quadraticCurveTo(a.x*rect.width,a.y*rect.height,mx,my);
+    const mx=(a.x+b.x)*drawW/2,my=(a.y+b.y)*drawH/2;
+    ctx.quadraticCurveTo(a.x*drawW,a.y*drawH,mx,my);
   }
   const last=pts[pts.length-1];
-  ctx.lineTo(last.x*rect.width,last.y*rect.height);
+  ctx.lineTo(last.x*drawW,last.y*drawH);
   ctx.stroke();
   ctx.restore();
 }
@@ -2240,12 +2242,14 @@ function memoInkMaybeSnapLine(stroke,canvas){
 function renderMemoInk(canvas,fileId){
   if(!canvas)return;
   const rect=canvas.getBoundingClientRect();
+  const drawW=Math.max(1,canvas.clientWidth||canvas.offsetWidth||rect.width);
+  const drawH=Math.max(1,canvas.clientHeight||canvas.offsetHeight||rect.height);
   const dpr=Math.min(1.5,window.devicePixelRatio||1);
-  const w=Math.max(1,Math.round(rect.width*dpr)),h=Math.max(1,Math.round(rect.height*dpr));
+  const w=Math.max(1,Math.round(drawW*dpr)),h=Math.max(1,Math.round(drawH*dpr));
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
-  const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,rect.width,rect.height);
+  const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,drawW,drawH);
   const rec=memoInkRecord(fileId);
-  rec.strokes.forEach(s=>memoInkDrawStroke(ctx,s,rect.width,rect.height));
+  rec.strokes.forEach(s=>memoInkDrawStroke(ctx,s,drawW,drawH));
 }
 function bindMemoInkCanvas(canvas,fileId,card){
   if(!canvas||canvas.dataset.inkBound==="1")return;
@@ -2546,34 +2550,24 @@ async function detectPdfPageRatio(blob){
 }
 async function configureMemoPdfPreview(frame,wrap,blob){
   const info=await detectPdfPageRatio(blob);
-  // 初期表示は「紙全体」ではなく、GoodNotes寄りに“紙を大きく”見せる。
-  let outer=info.landscape?1.1:1.02;
-  if(info.ratio>1.65)outer=1.18;
-  if(info.ratio<0.8)outer=.96;
+  // 手書き座標を守るため、PDF内部の表示比率は固定。
+  // v1.8.3以前に描いた線と同じ基準へ戻す。
+  let outer=info.landscape?0.72:0.78;
+  if(info.ratio>1.65)outer=0.68;
+  if(info.ratio<0.8)outer=0.82;
   const inner=(100/outer).toFixed(2)+"%";
   wrap.style.setProperty("--pdf-outer-scale",String(outer));
   wrap.style.setProperty("--pdf-inner-scale",inner);
-  wrap.dataset.defaultScale=info.landscape?"1.28":"1.18";
 
   const ratio=Math.max(.62,Math.min(2.2,info.ratio||1.414));
   const width=Math.max(300,wrap.getBoundingClientRect().width||1000);
   let h=width/ratio;
   if(info.landscape){
-    h=Math.max(620,Math.min(1100,h+120));
+    h=Math.max(560,Math.min(900,h+180));
   }else{
-    h=Math.max(920,Math.min(1600,h+90));
+    h=Math.max(760,Math.min(1300,h+180));
   }
   wrap.style.height=Math.round(h)+"px";
-}
-function setMemoPreviewDefaultView(fileId,stage,viewport,boost){
-  if(!stage||!viewport)return;
-  const v=memoInkView(fileId);
-  if(v._userAdjusted)return;
-  if(!v._initialized){
-    v.scale=Math.max(1,Math.min(4,Number(boost)||1));
-    v.x=0;v.y=0;v._initialized=true;
-  }
-  clampMemoInkView(stage,viewport,fileId);
 }
 function clearMemoObjectUrls(){
   memoObjectUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch{}});
@@ -2705,16 +2699,12 @@ async function renderMemoPage(){
         preview.innerHTML=`<div class="memo-ink-stage"><div class="memo-pdf-preview-wrap"><iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe></div><canvas class="memo-ink-canvas"></canvas></div>`;
         const wrap=preview.querySelector(".memo-pdf-preview-wrap");
         const frame=preview.querySelector("iframe");
-        const stage=preview.querySelector(".memo-ink-stage");
-        frame.src=url+"#view=FitH";
-        configureMemoPdfPreview(frame,wrap,rec.blob).then(()=>{
-          setMemoPreviewDefaultView(rec.id,stage,preview,wrap.dataset.defaultScale||1);
-          setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),40)
-        });
+        frame.src=url;
+        configureMemoPdfPreview(frame,wrap,rec.blob).then(()=>setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),40));
       }else{
         preview.innerHTML=`<div class="memo-ink-stage"><img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}"><canvas class="memo-ink-canvas"></canvas></div>`;
         const img=preview.querySelector("img");img.src=url;
-        img.onload=()=>{setMemoPreviewDefaultView(rec.id,preview.querySelector(".memo-ink-stage"),preview,1.08);setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),20)};
+        img.onload=()=>setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),20);
       }
       bindMemoInkCanvas(preview.querySelector(".memo-ink-canvas"),rec.id,card);
       card.querySelector(".memo-file-open").onclick=()=>window.open(url,"_blank");
@@ -4879,7 +4869,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.8.4",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.8.5",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
