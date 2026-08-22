@@ -776,22 +776,17 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-file-head button.delete{color:#a06d68}
 .memo-image-preview{display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:transparent}
 .memo-pdf-preview-wrap{
-  position:relative;width:100%;overflow:hidden;background:#fff;
-  min-height:560px;max-height:none
+  position:relative;width:100%;overflow:visible;background:transparent;
+  min-height:0;max-height:none
 }
-.memo-pdf-preview{
-  display:block;border:0;background:#eeeae7;
-  width:var(--pdf-inner-scale,200%);
-  height:var(--pdf-inner-scale,200%);
-  transform:scale(var(--pdf-outer-scale,.5));
-  transform-origin:top left
-}
+.memo-pdf-canvas-stack{display:flex;flex-direction:column;gap:14px;width:100%;align-items:center;background:transparent}
+.memo-pdf-page-canvas{display:block;width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.05)}
+.memo-pdf-loading{padding:32px 12px;text-align:center;color:#8c847e;font-size:12px}
 .memo-pdf-fallback{padding:18px;text-align:center;color:#766f69;font-size:12px}
 .memo-empty-files{font-size:12px;color:#99908a;padding:6px 2px}
 .memo-file-preview{width:100%;overflow:hidden;background:transparent}
 @media(max-width:600px){
   .memo-drawing-block{width:calc(100vw - 16px)}
-  .memo-pdf-preview-wrap{min-height:460px;max-height:none}
   .memo-image-preview{max-height:520px}
 }
 
@@ -824,14 +819,13 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   pointer-events:none;touch-action:none;background:transparent
 }
 .memo-file-card.ink-on .memo-ink-canvas{pointer-events:auto}
-.memo-file-card.ink-on .memo-pdf-preview{pointer-events:none}
 .memo-file-card.ink-on .memo-image-preview{pointer-events:none}
 .memo-ink-status{font-size:10px;color:#8b837d;margin-left:auto}
 .memo-finger-toggle.active{background:#7b736d!important;color:#fff!important}
 .memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.8.5">
+<body data-build="v1.8.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1044,6 +1038,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
     </div>
   </div>
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 const KEY="gencho-v03-data",SITES_KEY="gencho-sites-v1",CURRENT_SITE_KEY="gencho-current-site-v1",ROOM_NAMES=["玄関","廊下","洗面所","トイレ","洋室1","洋室2","洋室3","和室","キッチン","リビング","LDK","収納","WIC","SC","パントリー","階段","2階廊下"],CATS=["天","ハリ","壁","下り天","AW","CB","腰上","腰下","階段外周り","階段内周り"],$=s=>document.querySelector(s);
 
@@ -2548,26 +2543,43 @@ async function detectPdfPageRatio(blob){
   }catch(e){console.warn("PDF page size detect failed",e)}
   return {ratio:1.414,width:842,height:595,landscape:true};
 }
-async function configureMemoPdfPreview(frame,wrap,blob){
-  const info=await detectPdfPageRatio(blob);
-  // 手書き座標を守るため、PDF内部の表示比率は固定。
-  // v1.8.3以前に描いた線と同じ基準へ戻す。
-  let outer=info.landscape?0.72:0.78;
-  if(info.ratio>1.65)outer=0.68;
-  if(info.ratio<0.8)outer=0.82;
-  const inner=(100/outer).toFixed(2)+"%";
-  wrap.style.setProperty("--pdf-outer-scale",String(outer));
-  wrap.style.setProperty("--pdf-inner-scale",inner);
-
-  const ratio=Math.max(.62,Math.min(2.2,info.ratio||1.414));
-  const width=Math.max(300,wrap.getBoundingClientRect().width||1000);
-  let h=width/ratio;
-  if(info.landscape){
-    h=Math.max(560,Math.min(900,h+180));
-  }else{
-    h=Math.max(760,Math.min(1300,h+180));
+async function renderMemoPdfCanvasStack(container,blob){
+  if(!container)return;
+  container.innerHTML='<div class="memo-pdf-loading">PDFを読み込み中…</div>';
+  if(!window.pdfjsLib){
+    container.innerHTML='<div class="memo-pdf-fallback">PDF表示ライブラリを読み込めませんでした。「開く」から確認してください。</div>';
+    return false;
   }
-  wrap.style.height=Math.round(h)+"px";
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const data=new Uint8Array(await blob.arrayBuffer());
+    const pdf=await pdfjsLib.getDocument({data}).promise;
+    container.innerHTML='';
+    const cssWidth=Math.max(320,container.clientWidth||container.parentElement?.clientWidth||1000);
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+      const page=await pdf.getPage(pageNo);
+      const base=page.getViewport({scale:1});
+      const cssScale=cssWidth/base.width;
+      const renderViewport=page.getViewport({scale:cssScale*dpr});
+      const cssViewport=page.getViewport({scale:cssScale});
+      const c=document.createElement('canvas');
+      c.className='memo-pdf-page-canvas';
+      c.width=Math.ceil(renderViewport.width);
+      c.height=Math.ceil(renderViewport.height);
+      c.style.width=Math.round(cssViewport.width)+'px';
+      c.style.height=Math.round(cssViewport.height)+'px';
+      c.dataset.page=String(pageNo);
+      container.appendChild(c);
+      const ctx=c.getContext('2d',{alpha:false});
+      await page.render({canvasContext:ctx,viewport:renderViewport}).promise;
+    }
+    return true;
+  }catch(e){
+    console.error('PDF canvas render failed',e);
+    container.innerHTML='<div class="memo-pdf-fallback">PDFの表示に失敗しました。「開く」から確認してください。</div>';
+    return false;
+  }
 }
 function clearMemoObjectUrls(){
   memoObjectUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch{}});
@@ -2696,11 +2708,13 @@ async function renderMemoPage(){
       const url=URL.createObjectURL(rec.blob);memoObjectUrls.push(url);
       const preview=card.querySelector(".memo-file-preview");
       if(isPdf){
-        preview.innerHTML=`<div class="memo-ink-stage"><div class="memo-pdf-preview-wrap"><iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe></div><canvas class="memo-ink-canvas"></canvas></div>`;
-        const wrap=preview.querySelector(".memo-pdf-preview-wrap");
-        const frame=preview.querySelector("iframe");
-        frame.src=url;
-        configureMemoPdfPreview(frame,wrap,rec.blob).then(()=>setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),40));
+        preview.innerHTML=`<div class="memo-ink-stage"><div class="memo-pdf-preview-wrap"><div class="memo-pdf-canvas-stack" aria-label="${esc(rec.fileName||"PDF図面")}"></div></div><canvas class="memo-ink-canvas"></canvas></div>`;
+        const stack=preview.querySelector(".memo-pdf-canvas-stack");
+        renderMemoPdfCanvasStack(stack,rec.blob).then(()=>{
+          const stage=preview.querySelector(".memo-ink-stage");
+          const ink=preview.querySelector(".memo-ink-canvas");
+          requestAnimationFrame(()=>{renderMemoInk(ink,rec.id);clampMemoInkView(stage,preview,rec.id)});
+        });
       }else{
         preview.innerHTML=`<div class="memo-ink-stage"><img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}"><canvas class="memo-ink-canvas"></canvas></div>`;
         const img=preview.querySelector("img");img.src=url;
@@ -4869,7 +4883,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.8.5",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.8.6",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
