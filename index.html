@@ -757,11 +757,18 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-page-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .memo-page-actions button{border:0;border-radius:9px;background:#eee9e5;color:#5d554f;padding:8px 10px;font-size:12px;font-weight:800}
 .memo-page-actions .danger{color:#a06d68}
-.memo-drawing-block{margin-top:12px;padding-top:12px;border-top:1px solid #e7e1dc}
-.memo-drawing-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.memo-drawing-block{
+  margin-top:16px;padding-top:12px;border-top:1px solid #e7e1dc;
+  width:min(1240px,calc(100vw - 28px));
+  max-width:none;
+  position:relative;
+  left:50%;
+  transform:translateX(-50%);
+}
+.memo-drawing-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 4px 10px}
 .memo-drawing-title{font-size:13px;font-weight:900;color:#514a45}
 .memo-drawing-add{border:0;border-radius:9px;background:#e9e4e0;color:#514a45;padding:8px 10px;font-size:12px;font-weight:900}
-.memo-file-list{display:flex;flex-direction:column;gap:10px}
+.memo-file-list{display:flex;flex-direction:column;gap:18px;width:100%}
 .memo-file-card{border:1px solid #e2dcd7;border-radius:10px;background:#fff;overflow:hidden;margin-bottom:18px}
 .memo-file-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f7f4f2}
 .memo-file-name{flex:1;min-width:0;font-size:12px;font-weight:800;color:#514a45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -782,6 +789,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-pdf-fallback{padding:18px;text-align:center;color:#766f69;font-size:12px}
 .memo-empty-files{font-size:12px;color:#99908a;padding:6px 2px}
 @media(max-width:600px){
+  .memo-drawing-block{width:calc(100vw - 16px)}
   .memo-pdf-preview-wrap{min-height:460px;max-height:none}
   .memo-image-preview{max-height:520px}
 }
@@ -822,7 +830,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.8.2">
+<body data-build="v1.8.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2536,22 +2544,21 @@ async function detectPdfPageRatio(blob){
 }
 async function configureMemoPdfPreview(frame,wrap,blob){
   const info=await detectPdfPageRatio(blob);
-  // GoodNotes寄り：最初から1ページを大きく見せる。
-  // 横向きは画面幅いっぱい、縦向きは縦長に。用紙サイズではなく縦横比で決める。
-  let outer=info.landscape?0.56:0.66;
-  if(info.ratio>1.65)outer=0.52;
-  if(info.ratio<0.8)outer=0.70;
+  // 図面ブロックはメモ本文幅から独立。広い表示領域をそのまま使う。
+  let outer=info.landscape?0.72:0.78;
+  if(info.ratio>1.65)outer=0.68;
+  if(info.ratio<0.8)outer=0.82;
   const inner=(100/outer).toFixed(2)+"%";
   wrap.style.setProperty("--pdf-outer-scale",String(outer));
   wrap.style.setProperty("--pdf-inner-scale",inner);
 
   const ratio=Math.max(.62,Math.min(2.2,info.ratio||1.414));
-  const width=Math.max(300,wrap.getBoundingClientRect().width||700);
+  const width=Math.max(300,wrap.getBoundingClientRect().width||1000);
   let h=width/ratio;
   if(info.landscape){
-    h=Math.max(500,Math.min(760,h+260));
+    h=Math.max(560,Math.min(900,h+180));
   }else{
-    h=Math.max(720,Math.min(1050,h+260));
+    h=Math.max(760,Math.min(1300,h+180));
   }
   wrap.style.height=Math.round(h)+"px";
 }
@@ -4855,7 +4862,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.8.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.8.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{

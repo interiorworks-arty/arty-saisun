@@ -1,4 +1,4 @@
-const CACHE="gencho-v182-20260823-goodnotes-line-snap";
+const CACHE="gencho-v183-20260823-drawing-fullwidth";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
