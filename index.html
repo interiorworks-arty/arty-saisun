@@ -939,7 +939,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-editor-viewport{z-index:1}
 </style>
 </head>
-<body data-build="v1.9.1">
+<body data-build="v1.9.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4762,20 +4762,31 @@ function selectedExportTitle(parts){
 }
 async function buildSelectedExportCanvases(parts,siteObj=state){
   const canvases=[];
+  const safe=(label,fn)=>{try{const v=fn();if(Array.isArray(v))canvases.push(...v);else if(v)canvases.push(v)}catch(e){console.error(label+" export",e)}};
   if(parts.includes("wall")){
-    (siteObj.rooms||[]).filter(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))).forEach(r=>canvases.push(buildRoomImageCanvas(r,siteObj)));
-    if((siteObj.rooms||[]).some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))))canvases.push(buildSiteTotalCanvas(siteObj));
+    safe("wall",()=>{
+      const out=[];
+      (siteObj.rooms||[]).filter(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))).forEach(r=>out.push(buildRoomImageCanvas(r,siteObj)));
+      if((siteObj.rooms||[]).some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))))out.push(buildSiteTotalCanvas(siteObj));
+      return out;
+    });
   }
-  if(parts.includes("floor")&&finishExportItems("floor",siteObj).length)canvases.push(buildFinishExportCanvas("floor",siteObj));
-  if(parts.includes("sheet")&&finishExportItems("sheet",siteObj).length)canvases.push(buildFinishExportCanvas("sheet",siteObj));
-  if(parts.includes("other")&&finishExportItems("other",siteObj).length)canvases.push(buildFinishExportCanvas("other",siteObj));
-  if(parts.includes("photo"))canvases.push(...await buildPhotoExportCanvases(siteObj));
-  if(parts.includes("memo"))canvases.push(...await buildMemoExportCanvases(siteObj));
+  if(parts.includes("floor"))safe("floor",()=>finishExportItems("floor",siteObj).length?buildFinishExportCanvas("floor",siteObj):null);
+  if(parts.includes("sheet"))safe("sheet",()=>finishExportItems("sheet",siteObj).length?buildFinishExportCanvas("sheet",siteObj):null);
+  if(parts.includes("other"))safe("other",()=>finishExportItems("other",siteObj).length?buildFinishExportCanvas("other",siteObj):null);
+  if(parts.includes("photo")){
+    try{canvases.push(...await buildPhotoExportCanvases(siteObj))}catch(e){console.error("photo export",e)}
+  }
+  if(parts.includes("memo")){
+    try{canvases.push(...await buildMemoExportCanvases(siteObj))}catch(e){console.error("memo export",e)}
+  }
   if(parts.includes("order")){
-    const od=collectOrderData(siteObj);
-    if(["wall","floor","sheet","other"].some(k=>(od[k]||[]).length))canvases.push(...buildOrderExportCanvases(siteObj));
+    safe("order",()=>{
+      const od=collectOrderData(siteObj);
+      return ["wall","floor","sheet","other"].some(k=>(od[k]||[]).length)?buildOrderExportCanvases(siteObj):[];
+    });
   }
-  return canvases;
+  return canvases.filter(Boolean);
 }
 async function exportSelectedAsImage(){
   try{
@@ -4794,7 +4805,10 @@ async function exportSelectedAsPdf(){
     save();const parts=selectedExportParts();if(!parts.length){alert("出力する内容を選択してください");return}
     const canvases=await buildSelectedExportCanvases(parts,state);if(!canvases.length){alert("選択した内容に出力できるデータがありません");return}
     const images=[];
-    for(const canvas of canvases){const pages=await canvasToPdfJpegs(canvas);images.push(...pages)}
+    for(const canvas of canvases){
+      try{const pages=await canvasToPdfJpegs(canvas);images.push(...pages)}catch(err){console.error("canvas PDF convert",err)}
+    }
+    if(!images.length){alert("PDFに変換できるデータがありません");return}
     const blob=makePdfFromJpegs(images);
     const exportTitle=selectedExportTitle(parts);
     const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(exportTitle)}.pdf`,{type:"application/pdf"});
@@ -5002,7 +5016,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.9.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.9.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5482,30 +5496,44 @@ function editorShouldSnap(stroke,canvas){
 }
 function editorBindInk(canvas,fileId,pageIndex){
   let drawing=false,current=null,pointerId=null;
+  let snapTimer=0,snapReady=false;
   const redraw=()=>editorRenderInk(canvas,fileId,pageIndex);
+  const clearSnapTimer=()=>{if(snapTimer){clearTimeout(snapTimer);snapTimer=0}};
+  const armSnap=()=>{
+    clearSnapTimer();snapReady=false;
+    snapTimer=setTimeout(()=>{
+      if(!drawing||!current||current.tool==="eraser")return;
+      const pts=current.points||[];if(pts.length<2)return;
+      const r=canvas.getBoundingClientRect(),a=pts[0],b=pts[pts.length-1];
+      const direct=Math.hypot((b.x-a.x)*r.width,(b.y-a.y)*r.height);
+      let path=0;for(let i=1;i<pts.length;i++){
+        const p=pts[i-1],q=pts[i];path+=Math.hypot((q.x-p.x)*r.width,(q.y-p.y)*r.height);
+      }
+      if(direct>=22&&path<=direct*1.5)snapReady=true;
+    },280);
+  };
   const start=e=>{
     drawing=true;pointerId=e.pointerId;canvas.setPointerCapture?.(pointerId);
     const now=performance.now(),p=editorPoint(e,canvas);
     current={tool:memoEditorTool,color:memoEditorColor,
       width:memoEditorTool==="eraser"?Math.max(18,memoEditorWidth*4):memoEditorWidth,
-      points:[p],startTime:now,lastMeaningfulMove:now,endTime:now};
+      points:[p],startTime:now,endTime:now};
     editorRedo(fileId,pageIndex).length=0;
+    armSnap();
   };
   const move=e=>{
     if(!drawing||e.pointerId!==pointerId||!current)return;
     e.preventDefault();
     const r=canvas.getBoundingClientRect();
     const events=(typeof e.getCoalescedEvents==="function")?e.getCoalescedEvents():[];
-    const list=events.length?events:[e];
+    const list=events.length?events:[e];let moved=false;
     for(const ev of list){
       const p=editorPoint(ev,canvas),last=current.points[current.points.length-1];
       if(!last)continue;
       const px=Math.hypot((p.x-last.x)*r.width,(p.y-last.y)*r.height);
-      if(px>=0.55){
-        current.points.push(p);
-        if(px>=2.0)current.lastMeaningfulMove=performance.now();
-      }
+      if(px>=0.55){current.points.push(p);moved=true}
     }
+    if(moved)armSnap();
     redraw();
     const rr=canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);
     const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -5513,14 +5541,14 @@ function editorBindInk(canvas,fileId,pageIndex){
   };
   const finish=e=>{
     if(!drawing||e.pointerId!==pointerId||!current)return;
-    e.preventDefault();drawing=false;current.endTime=performance.now();
+    e.preventDefault();clearSnapTimer();drawing=false;current.endTime=performance.now();
     if(current.points.length===1)current.points.push(current.points[0]);
-    if(editorShouldSnap(current,canvas)){
+    if(snapReady&&current.tool!=="eraser"){
       current.points=[current.points[0],current.points[current.points.length-1]];
       current.snappedLine=true;
     }
     editorStrokes(fileId,pageIndex).push(current);
-    current=null;pointerId=null;save();redraw();updateMemoEditorControls();
+    current=null;pointerId=null;snapReady=false;save();redraw();updateMemoEditorControls();
   };
   canvas.addEventListener("pointerdown",e=>{
     if(e.pointerType==="pen"){e.preventDefault();start(e)}
@@ -5531,7 +5559,7 @@ function editorBindInk(canvas,fileId,pageIndex){
   });
   canvas.addEventListener("pointerup",finish);
   canvas.addEventListener("pointercancel",e=>{
-    if(drawing&&e.pointerId===pointerId){drawing=false;current=null;pointerId=null;redraw()}
+    if(drawing&&e.pointerId===pointerId){clearSnapTimer();drawing=false;current=null;pointerId=null;snapReady=false;redraw()}
   });
   let raf=0;
   new ResizeObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(redraw)}).observe(canvas.parentElement);

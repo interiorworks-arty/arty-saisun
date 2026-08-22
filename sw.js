@@ -1,4 +1,4 @@
-const CACHE="gencho-v191-20260823-controls-thumbfix";
+const CACHE="gencho-v192-20260823-export-linefix";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
