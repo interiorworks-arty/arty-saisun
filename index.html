@@ -934,9 +934,12 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .memo-editor-tools button{padding:6px 7px}
   .memo-editor-hint{display:none}
 }
+
+.memo-editor-top,.memo-editor-bottom{position:relative;z-index:220}
+.memo-editor-viewport{z-index:1}
 </style>
 </head>
-<body data-build="v1.9.0">
+<body data-build="v1.9.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4524,7 +4527,7 @@ async function buildMemoExportCanvases(siteObj=state){
             const c=document.createElement("canvas");c.width=Math.ceil(view.width);c.height=Math.ceil(view.height);
             const ctx=c.getContext("2d");await page.render({canvasContext:ctx,viewport:view}).promise;
             const strokes=(memoEditorInkRec(f.id).pageStrokes?.[i-1]||[]);
-            strokes.forEach(s=>editorDrawStroke(ctx,s,c.width,c.height));
+            if(strokes.length)editorCompositeStrokes(ctx,strokes,0,0,c.width,c.height);
             out.push(c);
           }
         }catch(e){console.error("memo PDF export",e)}
@@ -4534,7 +4537,8 @@ async function buildMemoExportCanvases(siteObj=state){
           const max=1600,sc=Math.min(1,max/bmp.width);
           const c=document.createElement("canvas");c.width=Math.max(1,Math.round(bmp.width*sc));c.height=Math.max(1,Math.round(bmp.height*sc));
           const ctx=c.getContext("2d");ctx.drawImage(bmp,0,0,c.width,c.height);
-          (memoEditorInkRec(f.id).pageStrokes?.[0]||[]).forEach(s=>editorDrawStroke(ctx,s,c.width,c.height));
+          const strokes=(memoEditorInkRec(f.id).pageStrokes?.[0]||[]);
+          if(strokes.length)editorCompositeStrokes(ctx,strokes,0,0,c.width,c.height);
           out.push(c);
         }catch(e){console.error("memo image export",e)}
       }
@@ -4998,7 +5002,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.9.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.9.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5444,6 +5448,15 @@ function editorDrawStroke(ctx,s,w,h){
   }
   ctx.stroke();ctx.restore();
 }
+
+function editorCompositeStrokes(baseCtx,strokes,x,y,w,h){
+  if(!baseCtx||!strokes||!strokes.length||w<=0||h<=0)return;
+  const layer=document.createElement("canvas");
+  layer.width=Math.max(1,Math.round(w));layer.height=Math.max(1,Math.round(h));
+  const lctx=layer.getContext("2d");
+  strokes.forEach(s=>editorDrawStroke(lctx,s,layer.width,layer.height));
+  baseCtx.drawImage(layer,x,y,w,h);
+}
 function editorRenderInk(canvas,fileId,pageIndex){
   if(!canvas)return;
   const r=canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);
@@ -5654,6 +5667,7 @@ async function renderMemoEditorFile(){
   updateMemoEditorControls();
 }
 async function openMemoEditor(fileId){
+  bindMemoEditorControls();
   const pg=activeMemoPage(state);if(!pg)return;
   const all=await memoDbAllForSite(state.id);
   memoEditorFiles=all.filter(x=>x.memoPageId===pg.id);
@@ -5703,7 +5717,8 @@ function bindMemoEditorControls(){
   $("#memoEditorRedo").onclick=redoMemoEditor;
   $("#memoEditorReset").onclick=resetMemoEditorView;
 }
-bindMemoEditorControls();
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bindMemoEditorControls,{once:true});
+else bindMemoEditorControls();
 
 async function drawMemoThumb(canvas,rec,isPdf){
   try{
@@ -5727,9 +5742,7 @@ async function drawMemoThumb(canvas,rec,isPdf){
       ctx.fillStyle="#fff";ctx.fillRect(rx,ry,rw,rh);ctx.drawImage(img,rx,ry,rw,rh);
     }
     const strokes=(memoEditorInkRec(rec.id).pageStrokes?.[0]||[]);
-    if(strokes.length){
-      ctx.save();ctx.translate(rx,ry);strokes.forEach(s=>editorDrawStroke(ctx,s,rw,rh));ctx.restore();
-    }
+    if(strokes.length)editorCompositeStrokes(ctx,strokes,rx,ry,rw,rh);
   }catch(e){console.warn("thumb",e)}
 }
 </script>
