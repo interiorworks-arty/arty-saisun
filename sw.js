@@ -1,4 +1,4 @@
-const CACHE="gencho-v180-20260823-pencil-response";
+const CACHE="gencho-v181-20260823-pencil-scroll-lock";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
