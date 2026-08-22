@@ -768,16 +768,18 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-file-head button{border:0;border-radius:8px;background:#ebe6e2;color:#625a54;padding:6px 8px;font-size:11px;font-weight:800}
 .memo-file-head button.delete{color:#a06d68}
 .memo-image-preview{display:block;width:100%;height:auto;max-height:680px;object-fit:contain;background:#f0ece9}
-.memo-pdf-preview{display:block;width:100%;height:min(72vh,760px);min-height:430px;border:0;background:#eeeae7;overflow:hidden}
+.memo-pdf-preview-wrap{position:relative;width:100%;height:min(72vh,760px);min-height:430px;overflow:hidden;background:#eeeae7}
+.memo-pdf-preview{display:block;border:0;background:#eeeae7;width:150%;height:150%;transform:scale(.6666667);transform-origin:top left}
 .memo-pdf-fallback{padding:18px;text-align:center;color:#766f69;font-size:12px}
 .memo-empty-files{font-size:12px;color:#99908a;padding:6px 2px}
 @media(max-width:600px){
-  .memo-pdf-preview{height:min(62vh,520px);min-height:360px}
+  .memo-pdf-preview-wrap{height:min(62vh,520px);min-height:360px}
+  .memo-pdf-preview{width:165%;height:165%;transform:scale(.6060606)}
   .memo-image-preview{max-height:520px}
 }
 </style>
 </head>
-<body data-build="v1.7.4">
+<body data-build="v1.7.5">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2095,11 +2097,6 @@ async function memoDbDelete(id){
     tx.onerror=()=>{db.close();reject(tx.error)};
   });
 }
-function memoPdfPreviewUrl(url){
-  // iPad/Safariなどの内蔵PDFビューアに「1ページ全体を表示」を指示する。
-  // 対応ビューアでは横向き・縦向きとも初期表示をFitにする。
-  return `${url}#page=1&view=Fit&zoom=page-fit`;
-}
 function clearMemoObjectUrls(){
   memoObjectUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch{}});
   memoObjectUrls=[];
@@ -2210,10 +2207,9 @@ async function renderMemoPage(){
       const url=URL.createObjectURL(rec.blob);memoObjectUrls.push(url);
       const preview=card.querySelector(".memo-file-preview");
       if(isPdf){
-        preview.innerHTML=`<iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe>`;
+        preview.innerHTML=`<div class="memo-pdf-preview-wrap"><iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe></div>`;
         const frame=preview.querySelector("iframe");
-        frame.src=memoPdfPreviewUrl(url);
-        frame.setAttribute("scrolling","no");
+        frame.src=url;
       }else{
         preview.innerHTML=`<img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}">`;
         preview.querySelector("img").src=url;
@@ -4380,7 +4376,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.4",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.5",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{

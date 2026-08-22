@@ -1,4 +1,4 @@
-const CACHE="gencho-v174-20260822-pdf-fit-preview";
+const CACHE="gencho-v175-20260822-pdf-scaled-preview";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
