@@ -1,4 +1,4 @@
-const CACHE="gencho-v183-20260823-drawing-fullwidth";
+const CACHE="gencho-v184-20260823-doc-only-large";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
