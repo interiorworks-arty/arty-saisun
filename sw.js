@@ -1,4 +1,4 @@
-const CACHE="gencho-v194-20260823-finish-export-label-cleanup";
+const CACHE="gencho-v195-20260823-line-hold-timer";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
