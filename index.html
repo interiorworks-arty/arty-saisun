@@ -939,7 +939,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-editor-viewport{z-index:1}
 </style>
 </head>
-<body data-build="v1.9.2">
+<body data-build="v1.9.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2341,7 +2341,7 @@ function memoInkMaybeSnapLine(stroke,canvas){
   // 最後の約0.35秒ほぼ動いていなければ「止めた」と判定。
   const endTime=stroke.endTime||performance.now();
   const holdMs=endTime-(stroke.lastMoveTime||endTime);
-  if(holdMs<320)return false;
+  if(holdMs<1000)return false;
 
   stroke.points=[first,last];
   stroke.snappedLine=true;
@@ -2388,7 +2388,7 @@ function bindMemoInkCanvas(canvas,fileId,card){
     const u=card.querySelector(".memo-ink-undo"),r=card.querySelector(".memo-ink-redo");
     if(u)u.disabled=!rec.strokes.length;if(r)r.disabled=!rec.redo.length;
     const s=card.querySelector(".memo-ink-status");
-    if(s)s.textContent=!memoInkMode?"OFF：通常操作 / 線末で少し止めると直線":(memoFingerDraw?"指1本=描画 / 指2本=拡大・移動 / 止めると直線":"Pencil=描画固定 / 指1本=スクロール / 指2本=拡大・移動 / 止めると直線");
+    if(s)s.textContent=!memoInkMode?"OFF：通常操作 / 線末で1秒1秒止めると直線":(memoFingerDraw?"指1本=描画 / 指2本=拡大・移動 / 1秒止めると直線":"Pencil=描画固定 / 指1本=スクロール / 指2本=拡大・移動 / 1秒止めると直線");
   };
   card._updateInkControls=updateCard;
 
@@ -4458,14 +4458,14 @@ function finishItemExportLines(item){
   if(kind==="CF"||kind==="リアテック"||kind==="ダイノック"){
     if(item.area)lines.push(`施工 ${item.area}㎡`);
     const cuts=(item.orderCuts||[]).filter(x=>x.length&&x.count);
-    if(cuts.length)lines.push(`発注 ${cuts.map(x=>`${x.length}${x.lengthUnit||"m"}×${x.count}${x.countUnit||"本"}`).join(" / ")}`);
+    if(cuts.length)lines.push(`${cuts.map(x=>`${x.length}${x.lengthUnit||"m"}×${x.count}${x.countUnit||"本"}`).join(" / ")}`);
   }else if(kind==="フロアタイル"){
     if(item.area)lines.push(`施工 ${item.area}㎡`);
-    if(item.saleMode==="loose"){if(item.pieces)lines.push(`発注 ${item.pieces}枚`)}
-    else if(item.area&&item.caseSqm)lines.push(`発注 ${Math.ceil(Number(item.area)/Number(item.caseSqm))}ケース（${item.caseSqm}㎡/ケース）`);
+    if(item.saleMode==="loose"){if(item.pieces)lines.push(`${item.pieces}枚`)}
+    else if(item.area&&item.caseSqm)lines.push(`${Math.ceil(Number(item.area)/Number(item.caseSqm))}ケース（${item.caseSqm}㎡/ケース）`);
   }else if(kind==="ソフト巾木"){
     if(item.qty)lines.push(`採寸 ${item.qty}m`);
-    if(item.qty&&item.caseMeters)lines.push(`発注 ${Math.ceil(Number(item.qty)/Number(item.caseMeters))}ケース（${item.caseMeters}m/ケース）`);
+    if(item.qty&&item.caseMeters)lines.push(`${Math.ceil(Number(item.qty)/Number(item.caseMeters))}ケース（${item.caseMeters}m/ケース）`);
   }else{
     const cuts=(item.orderCuts||[]).filter(x=>(Number(x.length)||0)>0||(Number(x.count)||0)>0);
     if(cuts.length)lines.push(cuts.map(x=>{
@@ -5016,7 +5016,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.9.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.9.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5492,7 +5492,7 @@ function editorShouldSnap(stroke,canvas){
   }
   if(path>direct*1.38)return false;
   const hold=(stroke.endTime||performance.now())-(stroke.lastMeaningfulMove||stroke.startTime||0);
-  return hold>=260;
+  return hold>=1000;
 }
 function editorBindInk(canvas,fileId,pageIndex){
   let drawing=false,current=null,pointerId=null;
