@@ -812,9 +812,10 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-annotatable .memo-pdf-preview-wrap{position:relative;z-index:1}
 .memo-ink-canvas{
   position:absolute;inset:0;width:100%;height:100%;z-index:5;
-  pointer-events:none;touch-action:none;background:transparent
+  pointer-events:none;touch-action:pan-y;background:transparent
 }
 .memo-file-card.ink-on .memo-ink-canvas{pointer-events:auto}
+.memo-file-card.ink-on.finger-draw .memo-ink-canvas{touch-action:none}
 .memo-file-card.ink-on .memo-pdf-preview{pointer-events:none}
 .memo-file-card.ink-on .memo-image-preview{pointer-events:none}
 .memo-ink-status{font-size:10px;color:#8b837d;margin-left:auto}
@@ -822,7 +823,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.7.8">
+<body data-build="v1.7.9">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2186,6 +2187,7 @@ function bindMemoInkCanvas(canvas,fileId,card){
   const redraw=()=>renderMemoInk(canvas,fileId);
   const updateCard=()=>{
     card.classList.toggle("ink-on",memoInkMode);
+    card.classList.toggle("finger-draw",memoInkMode&&memoFingerDraw);
     const toggle=card.querySelector(".memo-ink-toggle");
     if(toggle){toggle.classList.toggle("active",memoInkMode);toggle.textContent=memoInkMode?"手書きON":"手書きOFF"}
     const finger=card.querySelector(".memo-finger-toggle");
@@ -2201,7 +2203,7 @@ function bindMemoInkCanvas(canvas,fileId,card){
     const u=card.querySelector(".memo-ink-undo"),r=card.querySelector(".memo-ink-redo");
     if(u)u.disabled=!rec.strokes.length;if(r)r.disabled=!rec.redo.length;
     const s=card.querySelector(".memo-ink-status");
-    if(s)s.textContent=!memoInkMode?"OFF：通常操作":(memoFingerDraw?"指1本=描画 / 指2本=拡大":"Pencil=描画 / 指=移動・拡大");
+    if(s)s.textContent=!memoInkMode?"OFF：通常操作":(memoFingerDraw?"指1本=描画 / 指2本=拡大・移動":"Pencil=描画 / 指1本=スクロール / 指2本=拡大・移動");
   };
   card._updateInkControls=updateCard;
 
@@ -2249,10 +2251,12 @@ function bindMemoInkCanvas(canvas,fileId,card){
       const dist=Math.hypot(b.x-a.x,b.y-a.y)||1;
       const oldScale=g.startScale;
       const newScale=Math.max(1,Math.min(4,oldScale*(dist/g.startDist)));
-      const cx=g.centerX,cy=g.centerY;
+      const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;
+      const ratio=newScale/oldScale;
       v.scale=newScale;
-      v.x=cx-(cx-g.startX)*(newScale/oldScale);
-      v.y=cy-(cy-g.startY)*(newScale/oldScale);
+      // 2本指の中心移動も同時に反映して、拡大中の図面移動も可能にする。
+      v.x=cx-(g.centerX-g.startX)*ratio;
+      v.y=cy-(g.centerY-g.startY)*ratio;
     }else if(gesture.type==="pan"){
       const g=gesture,pt=arr[0];
       v.x=g.startX+(pt.x-g.startPX);
@@ -2264,9 +2268,8 @@ function bindMemoInkCanvas(canvas,fileId,card){
   canvas.addEventListener("pointerdown",e=>{
     if(!memoInkMode)return;
     if(e.pointerType==="mouse"&&e.button!==0)return;
-    e.preventDefault();
-
     if(e.pointerType==="pen"){
+      e.preventDefault();
       startStroke(e);
       return;
     }
@@ -2276,14 +2279,18 @@ function bindMemoInkCanvas(canvas,fileId,card){
       canvas.setPointerCapture?.(e.pointerId);
 
       if(touches.size>=2){
+        e.preventDefault();
         if(drawing&&current)cancelStroke();
         beginGesture();
         return;
       }
       if(memoFingerDraw){
+        e.preventDefault();
         startStroke(e);
       }else{
-        beginGesture();
+        // Pencilモードでは指1本はページの通常スクロールに渡す。
+        // 2本指になった時だけ図面の拡大・移動を開始する。
+        gesture=null;
       }
     }
   });
@@ -2312,7 +2319,8 @@ function bindMemoInkCanvas(canvas,fileId,card){
         const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
         memoInkDrawStroke(ctx,current,rect.width,rect.height);
       }else if(!memoFingerDraw&&touches.size===1){
-        e.preventDefault();updateGesture();
+        // 指1本はブラウザの縦スクロールに任せる。
+        gesture=null;
       }
     }
   });
@@ -2324,8 +2332,7 @@ function bindMemoInkCanvas(canvas,fileId,card){
     if(e.pointerType==="touch"){
       if(drawing&&e.pointerId===drawPointerId&&touches.size<=1)finishStroke(e);
       touches.delete(e.pointerId);
-      if(touches.size===1&&!memoFingerDraw)beginGesture();
-      else if(touches.size<2)gesture=null;
+      if(touches.size<2)gesture=null;
     }
   });
   canvas.addEventListener("pointercancel",e=>{
@@ -4746,7 +4753,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.8",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.9",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
