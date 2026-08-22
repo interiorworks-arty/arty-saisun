@@ -1,4 +1,4 @@
-const CACHE="gencho-v177-20260822-memo-handwriting";
+const CACHE="gencho-v178-20260823-pencil-finger-split";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

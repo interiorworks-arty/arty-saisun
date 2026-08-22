@@ -806,20 +806,23 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-ink-color[data-color="#1976d2"]{background:#1976d2!important}
 .memo-ink-color[data-color="#2e7d32"]{background:#2e7d32!important}
 .memo-ink-width{min-width:34px}
-.memo-annotatable{position:relative;background:#f0ece9}
+.memo-annotatable{position:relative;background:#f0ece9;overflow:hidden}
+.memo-ink-stage{position:relative;transform-origin:0 0;will-change:transform}
 .memo-annotatable .memo-image-preview{position:relative;z-index:1}
 .memo-annotatable .memo-pdf-preview-wrap{position:relative;z-index:1}
 .memo-ink-canvas{
   position:absolute;inset:0;width:100%;height:100%;z-index:5;
-  pointer-events:none;touch-action:pan-y;background:transparent
+  pointer-events:none;touch-action:none;background:transparent
 }
-.memo-file-card.ink-on .memo-ink-canvas{pointer-events:auto;touch-action:none}
+.memo-file-card.ink-on .memo-ink-canvas{pointer-events:auto}
 .memo-file-card.ink-on .memo-pdf-preview{pointer-events:none}
 .memo-file-card.ink-on .memo-image-preview{pointer-events:none}
 .memo-ink-status{font-size:10px;color:#8b837d;margin-left:auto}
+.memo-finger-toggle.active{background:#7b736d!important;color:#fff!important}
+.memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.7.7">
+<body data-build="v1.7.8">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2088,7 +2091,33 @@ function renderFinishArea(card,r){
 
 
 let activeMemoPageId=null,memoDrawingTargetPageId=null,memoObjectUrls=[];
-let memoInkMode=false,memoInkTool="pen",memoInkColor="#d32f2f",memoInkWidth=4;
+let memoInkMode=false,memoFingerDraw=false,memoInkTool="pen",memoInkColor="#d32f2f",memoInkWidth=4;
+const memoInkViews=new Map();
+function memoInkView(fileId){
+  if(!memoInkViews.has(fileId))memoInkViews.set(fileId,{scale:1,x:0,y:0});
+  return memoInkViews.get(fileId);
+}
+function applyMemoInkView(stage,fileId){
+  if(!stage)return;
+  const v=memoInkView(fileId);
+  stage.style.transform=`translate(${v.x}px,${v.y}px) scale(${v.scale})`;
+}
+function clampMemoInkView(stage,viewport,fileId){
+  if(!stage||!viewport)return;
+  const v=memoInkView(fileId);
+  v.scale=Math.max(1,Math.min(4,v.scale||1));
+  const baseW=stage.offsetWidth||viewport.clientWidth||1;
+  const baseH=stage.offsetHeight||viewport.clientHeight||1;
+  const vw=viewport.clientWidth||baseW, vh=viewport.clientHeight||baseH;
+  const maxX=Math.max(0,baseW*v.scale-vw), maxY=Math.max(0,baseH*v.scale-vh);
+  v.x=Math.min(0,Math.max(-maxX,v.x||0));
+  v.y=Math.min(0,Math.max(-maxY,v.y||0));
+  applyMemoInkView(stage,fileId);
+}
+function refreshMemoInkCards(){
+  document.querySelectorAll(".memo-file-card").forEach(c=>c._updateInkControls?.());
+}
+
 function ensureMemoInk(siteObj=state){
   if(!siteObj.memoInk||typeof siteObj.memoInk!=="object"||Array.isArray(siteObj.memoInk))siteObj.memoInk={};
   return siteObj.memoInk;
@@ -2148,60 +2177,186 @@ function renderMemoInk(canvas,fileId){
 function bindMemoInkCanvas(canvas,fileId,card){
   if(!canvas||canvas.dataset.inkBound==="1")return;
   canvas.dataset.inkBound="1";
-  let drawing=false,current=null,pointerId=null;
+  const viewport=card.querySelector(".memo-file-preview");
+  const stage=card.querySelector(".memo-ink-stage");
+  let drawing=false,current=null,drawPointerId=null;
+  const touches=new Map();
+  let gesture=null;
 
   const redraw=()=>renderMemoInk(canvas,fileId);
   const updateCard=()=>{
     card.classList.toggle("ink-on",memoInkMode);
     const toggle=card.querySelector(".memo-ink-toggle");
     if(toggle){toggle.classList.toggle("active",memoInkMode);toggle.textContent=memoInkMode?"手書きON":"手書きOFF"}
+    const finger=card.querySelector(".memo-finger-toggle");
+    if(finger){
+      finger.classList.toggle("active",memoFingerDraw);
+      finger.textContent=memoFingerDraw?"指描画ON":"指描画OFF";
+      finger.disabled=!memoInkMode;
+    }
     card.querySelectorAll(".memo-ink-tool").forEach(b=>b.classList.toggle("active",b.dataset.tool===memoInkTool));
     card.querySelectorAll(".memo-ink-color").forEach(b=>b.classList.toggle("active",b.dataset.color===memoInkColor));
     card.querySelectorAll(".memo-ink-width").forEach(b=>b.classList.toggle("active",Number(b.dataset.width)===Number(memoInkWidth)));
     const rec=memoInkRecord(fileId);
     const u=card.querySelector(".memo-ink-undo"),r=card.querySelector(".memo-ink-redo");
     if(u)u.disabled=!rec.strokes.length;if(r)r.disabled=!rec.redo.length;
+    const s=card.querySelector(".memo-ink-status");
+    if(s)s.textContent=!memoInkMode?"OFF：通常操作":(memoFingerDraw?"指1本=描画 / 指2本=拡大":"Pencil=描画 / 指=移動・拡大");
+  };
+  card._updateInkControls=updateCard;
+
+  const startStroke=e=>{
+    drawing=true;drawPointerId=e.pointerId;
+    canvas.setPointerCapture?.(e.pointerId);
+    current={tool:memoInkTool,color:memoInkColor,width:memoInkTool==="eraser"?Math.max(16,memoInkWidth*4):memoInkWidth,points:[memoInkPoint(e,canvas)]};
+    memoInkRecord(fileId).redo=[];
+  };
+  const cancelStroke=()=>{
+    drawing=false;current=null;drawPointerId=null;redraw();
+  };
+  const finishStroke=e=>{
+    if(!drawing||e.pointerId!==drawPointerId||!current)return;
+    e.preventDefault();
+    drawing=false;
+    if(current.points.length===1)current.points.push(current.points[0]);
+    const rec=memoInkRecord(fileId);rec.strokes.push(current);rec.redo=[];
+    current=null;drawPointerId=null;save();redraw();updateCard();
+  };
+  const touchArray=()=>[...touches.values()];
+  const beginGesture=()=>{
+    const arr=touchArray();
+    if(!arr.length)return;
+    const v=memoInkView(fileId);
+    if(arr.length>=2){
+      const a=arr[0],b=arr[1];
+      gesture={
+        type:"pinch",
+        startDist:Math.hypot(b.x-a.x,b.y-a.y)||1,
+        startScale:v.scale,
+        startX:v.x,startY:v.y,
+        centerX:(a.x+b.x)/2,centerY:(a.y+b.y)/2
+      };
+    }else{
+      gesture={type:"pan",startPX:arr[0].x,startPY:arr[0].y,startX:v.x,startY:v.y};
+    }
+  };
+  const updateGesture=()=>{
+    const arr=touchArray(); if(!arr.length||!gesture)return;
+    const v=memoInkView(fileId);
+    if(arr.length>=2){
+      if(gesture.type!=="pinch")beginGesture();
+      const g=gesture,a=arr[0],b=arr[1];
+      const dist=Math.hypot(b.x-a.x,b.y-a.y)||1;
+      const oldScale=g.startScale;
+      const newScale=Math.max(1,Math.min(4,oldScale*(dist/g.startDist)));
+      const cx=g.centerX,cy=g.centerY;
+      v.scale=newScale;
+      v.x=cx-(cx-g.startX)*(newScale/oldScale);
+      v.y=cy-(cy-g.startY)*(newScale/oldScale);
+    }else if(gesture.type==="pan"){
+      const g=gesture,pt=arr[0];
+      v.x=g.startX+(pt.x-g.startPX);
+      v.y=g.startY+(pt.y-g.startPY);
+    }
+    clampMemoInkView(stage,viewport,fileId);
   };
 
   canvas.addEventListener("pointerdown",e=>{
     if(!memoInkMode)return;
     if(e.pointerType==="mouse"&&e.button!==0)return;
     e.preventDefault();
-    drawing=true;pointerId=e.pointerId;canvas.setPointerCapture?.(pointerId);
-    current={tool:memoInkTool,color:memoInkColor,width:memoInkTool==="eraser"?Math.max(16,memoInkWidth*4):memoInkWidth,points:[memoInkPoint(e,canvas)]};
-    const rec=memoInkRecord(fileId);rec.redo=[];
-  });
-  canvas.addEventListener("pointermove",e=>{
-    if(!drawing||e.pointerId!==pointerId||!current)return;
-    e.preventDefault();current.points.push(memoInkPoint(e,canvas));
-    const rec=memoInkRecord(fileId);
-    renderMemoInk(canvas,fileId);
-    const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
-    const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-    memoInkDrawStroke(ctx,current,rect.width,rect.height);
-  });
-  const finish=e=>{
-    if(!drawing||e.pointerId!==pointerId||!current)return;
-    e.preventDefault();drawing=false;
-    if(current.points.length===1)current.points.push(current.points[0]);
-    const rec=memoInkRecord(fileId);rec.strokes.push(current);rec.redo=[];current=null;pointerId=null;
-    save();redraw();updateCard();
-  };
-  canvas.addEventListener("pointerup",finish);
-  canvas.addEventListener("pointercancel",e=>{if(drawing&&e.pointerId===pointerId){drawing=false;current=null;pointerId=null;redraw()}});
 
-  const ro=new ResizeObserver(()=>redraw());ro.observe(canvas.parentElement||canvas);
+    if(e.pointerType==="pen"){
+      startStroke(e);
+      return;
+    }
+    if(e.pointerType==="touch"){
+      const r=viewport.getBoundingClientRect();
+      touches.set(e.pointerId,{x:e.clientX-r.left,y:e.clientY-r.top});
+      canvas.setPointerCapture?.(e.pointerId);
+
+      if(touches.size>=2){
+        if(drawing&&current)cancelStroke();
+        beginGesture();
+        return;
+      }
+      if(memoFingerDraw){
+        startStroke(e);
+      }else{
+        beginGesture();
+      }
+    }
+  });
+
+  canvas.addEventListener("pointermove",e=>{
+    if(!memoInkMode)return;
+    if(e.pointerType==="pen"&&drawing&&e.pointerId===drawPointerId&&current){
+      e.preventDefault();current.points.push(memoInkPoint(e,canvas));
+      redraw();
+      const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
+      const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+      memoInkDrawStroke(ctx,current,rect.width,rect.height);
+      return;
+    }
+    if(e.pointerType==="touch"){
+      const r=viewport.getBoundingClientRect();
+      if(touches.has(e.pointerId))touches.set(e.pointerId,{x:e.clientX-r.left,y:e.clientY-r.top});
+      if(touches.size>=2){
+        e.preventDefault();
+        if(drawing&&current)cancelStroke();
+        updateGesture();
+      }else if(memoFingerDraw&&drawing&&e.pointerId===drawPointerId&&current){
+        e.preventDefault();current.points.push(memoInkPoint(e,canvas));
+        redraw();
+        const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
+        const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+        memoInkDrawStroke(ctx,current,rect.width,rect.height);
+      }else if(!memoFingerDraw&&touches.size===1){
+        e.preventDefault();updateGesture();
+      }
+    }
+  });
+
+  canvas.addEventListener("pointerup",e=>{
+    if(e.pointerType==="pen"){
+      finishStroke(e);return;
+    }
+    if(e.pointerType==="touch"){
+      if(drawing&&e.pointerId===drawPointerId&&touches.size<=1)finishStroke(e);
+      touches.delete(e.pointerId);
+      if(touches.size===1&&!memoFingerDraw)beginGesture();
+      else if(touches.size<2)gesture=null;
+    }
+  });
+  canvas.addEventListener("pointercancel",e=>{
+    if(e.pointerType==="touch")touches.delete(e.pointerId);
+    if(drawing&&e.pointerId===drawPointerId)cancelStroke();
+    if(!touches.size)gesture=null;
+  });
+
+  const ro=new ResizeObserver(()=>{redraw();clampMemoInkView(stage,viewport,fileId)});
+  ro.observe(stage||canvas.parentElement||canvas);
 
   const toggle=card.querySelector(".memo-ink-toggle");
-  if(toggle)toggle.onclick=()=>{memoInkMode=!memoInkMode;document.querySelectorAll(".memo-file-card").forEach(c=>c.classList.toggle("ink-on",memoInkMode));updateCard()};
-  card.querySelectorAll(".memo-ink-tool").forEach(b=>b.onclick=()=>{memoInkTool=b.dataset.tool;updateCard()});
-  card.querySelectorAll(".memo-ink-color").forEach(b=>b.onclick=()=>{memoInkColor=b.dataset.color;memoInkTool="pen";updateCard()});
-  card.querySelectorAll(".memo-ink-width").forEach(b=>b.onclick=()=>{memoInkWidth=Number(b.dataset.width)||4;updateCard()});
+  if(toggle)toggle.onclick=()=>{
+    memoInkMode=!memoInkMode;
+    if(!memoInkMode){memoFingerDraw=false;cancelStroke();touches.clear();gesture=null}
+    refreshMemoInkCards();
+  };
+  const finger=card.querySelector(".memo-finger-toggle");
+  if(finger)finger.onclick=()=>{memoFingerDraw=!memoFingerDraw;cancelStroke();touches.clear();gesture=null;refreshMemoInkCards()};
+  card.querySelectorAll(".memo-ink-tool").forEach(b=>b.onclick=()=>{memoInkTool=b.dataset.tool;refreshMemoInkCards()});
+  card.querySelectorAll(".memo-ink-color").forEach(b=>b.onclick=()=>{memoInkColor=b.dataset.color;memoInkTool="pen";refreshMemoInkCards()});
+  card.querySelectorAll(".memo-ink-width").forEach(b=>b.onclick=()=>{memoInkWidth=Number(b.dataset.width)||4;refreshMemoInkCards()});
   const undo=card.querySelector(".memo-ink-undo");
-  if(undo)undo.onclick=()=>{const rec=memoInkRecord(fileId);if(rec.strokes.length){rec.redo.push(rec.strokes.pop());save();redraw();updateCard()}};
+  if(undo)undo.onclick=()=>{const rec=memoInkRecord(fileId);if(rec.strokes.length){rec.redo.push(rec.strokes.pop());save();redraw();refreshMemoInkCards()}};
   const redo=card.querySelector(".memo-ink-redo");
-  if(redo)redo.onclick=()=>{const rec=memoInkRecord(fileId);if(rec.redo.length){rec.strokes.push(rec.redo.pop());save();redraw();updateCard()}};
-  updateCard();setTimeout(redraw,50);
+  if(redo)redo.onclick=()=>{const rec=memoInkRecord(fileId);if(rec.redo.length){rec.strokes.push(rec.redo.pop());save();redraw();refreshMemoInkCards()}};
+  const reset=card.querySelector(".memo-zoom-reset");
+  if(reset)reset.onclick=()=>{memoInkViews.set(fileId,{scale:1,x:0,y:0});applyMemoInkView(stage,fileId)};
+
+  applyMemoInkView(stage,fileId);
+  updateCard();setTimeout(()=>{redraw();clampMemoInkView(stage,viewport,fileId)},50);
 }
 
 
@@ -2399,6 +2554,7 @@ async function renderMemoPage(){
       card.innerHTML=`<div class="memo-file-head"><div class="memo-file-name">${esc(rec.fileName|| (isPdf?"図面.pdf":"図面画像"))}</div><button type="button" class="memo-file-open">開く</button><button type="button" class="memo-file-delete delete">削除</button></div>
         <div class="memo-ink-toolbar">
           <button type="button" class="memo-ink-toggle">手書きOFF</button>
+          <button type="button" class="memo-finger-toggle">指描画OFF</button>
           <button type="button" class="memo-ink-tool" data-tool="pen">ペン</button>
           <button type="button" class="memo-ink-tool" data-tool="eraser">消しゴム</button>
           <button type="button" class="memo-ink-color" data-color="#222222" aria-label="黒"></button>
@@ -2410,19 +2566,20 @@ async function renderMemoPage(){
           <button type="button" class="memo-ink-width" data-width="8">太</button>
           <button type="button" class="memo-ink-undo">↶</button>
           <button type="button" class="memo-ink-redo">↷</button>
-          <span class="memo-ink-status">ONで指/Pencil描画</span>
+          <button type="button" class="memo-zoom-reset">等倍</button>
+          <span class="memo-ink-status">OFF：通常操作</span>
         </div>
         <div class="memo-file-preview memo-annotatable"></div>`;
       const url=URL.createObjectURL(rec.blob);memoObjectUrls.push(url);
       const preview=card.querySelector(".memo-file-preview");
       if(isPdf){
-        preview.innerHTML=`<div class="memo-pdf-preview-wrap"><iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe></div><canvas class="memo-ink-canvas"></canvas>`;
+        preview.innerHTML=`<div class="memo-ink-stage"><div class="memo-pdf-preview-wrap"><iframe class="memo-pdf-preview" title="${esc(rec.fileName||"PDF図面")}"></iframe></div><canvas class="memo-ink-canvas"></canvas></div>`;
         const wrap=preview.querySelector(".memo-pdf-preview-wrap");
         const frame=preview.querySelector("iframe");
         frame.src=url;
         configureMemoPdfPreview(frame,wrap,rec.blob).then(()=>setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),40));
       }else{
-        preview.innerHTML=`<img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}"><canvas class="memo-ink-canvas"></canvas>`;
+        preview.innerHTML=`<div class="memo-ink-stage"><img class="memo-image-preview" alt="${esc(rec.fileName||"図面画像")}"><canvas class="memo-ink-canvas"></canvas></div>`;
         const img=preview.querySelector("img");img.src=url;
         img.onload=()=>setTimeout(()=>renderMemoInk(preview.querySelector(".memo-ink-canvas"),rec.id),20);
       }
@@ -4589,7 +4746,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.7",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.7.8",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
