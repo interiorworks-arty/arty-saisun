@@ -1,4 +1,4 @@
-const CACHE="gencho-v196-20260823-ink-persistence-line-monitor";
+const CACHE="gencho-v197-20260823-line-endpoint-lock";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

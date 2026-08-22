@@ -939,7 +939,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-editor-viewport{z-index:1}
 </style>
 </head>
-<body data-build="v1.9.6">
+<body data-build="v1.9.7">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5016,7 +5016,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.9.6",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.9.7",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5508,7 +5508,7 @@ function editorRenderInk(canvas,fileId,pageIndex){
 function editorBindInk(canvas,fileId,pageIndex){
   let drawing=false,current=null,pointerId=null;
   let monitorId=0,straightReady=false;
-  let stableAnchor=null,stableSince=0,latestPoint=null;
+  let stableAnchor=null,stableSince=0,latestPoint=null,straightEndPoint=null;
   const redraw=()=>editorRenderInk(canvas,fileId,pageIndex);
 
   const stopMonitor=()=>{if(monitorId){clearInterval(monitorId);monitorId=0}};
@@ -5519,19 +5519,42 @@ function editorBindInk(canvas,fileId,pageIndex){
       const r=canvas.getBoundingClientRect();
       const first=current.points[0];
       const direct=Math.hypot((latestPoint.x-first.x)*r.width,(latestPoint.y-first.y)*r.height);
-      if(direct<24){stableAnchor={...latestPoint};stableSince=performance.now();straightReady=false;return}
-      const now=performance.now();
-      if(!stableAnchor){stableAnchor={...latestPoint};stableSince=now;return}
-      const drift=Math.hypot((latestPoint.x-stableAnchor.x)*r.width,(latestPoint.y-stableAnchor.y)*r.height);
-      if(drift>8){
-        stableAnchor={...latestPoint};stableSince=now;straightReady=false;current.straightReady=false;return;
+      if(direct<24){
+        stableAnchor={...latestPoint};stableSince=performance.now();
+        straightReady=false;straightEndPoint=null;
+        return;
       }
+
+      const now=performance.now();
+      if(!stableAnchor){
+        stableAnchor={...latestPoint};stableSince=now;
+        return;
+      }
+
+      const drift=Math.hypot(
+        (latestPoint.x-stableAnchor.x)*r.width,
+        (latestPoint.y-stableAnchor.y)*r.height
+      );
+
+      if(drift>8){
+        stableAnchor={...latestPoint};stableSince=now;
+        straightReady=false;straightEndPoint=null;
+        current.straightReady=false;
+        return;
+      }
+
       if(!straightReady && now-stableSince>=1000){
-        straightReady=true;current.straightReady=true;
+        // 1秒止まった「その瞬間」の座標を終点として固定。
+        // 以降、Pencilの微細な揺れではこの終点を動かさない。
+        straightReady=true;
+        straightEndPoint={...latestPoint};
+        current.straightReady=true;
+
         redraw();
         const rr=canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);
-        const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-        const preview={...current,points:[current.points[0],latestPoint]};
+        const ctx=canvas.getContext("2d");
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        const preview={...current,points:[current.points[0],straightEndPoint]};
         editorDrawStroke(ctx,preview,rr.width,rr.height);
       }
     },100);
@@ -5540,10 +5563,16 @@ function editorBindInk(canvas,fileId,pageIndex){
   const start=e=>{
     drawing=true;pointerId=e.pointerId;canvas.setPointerCapture?.(pointerId);
     const p=editorPoint(e,canvas),now=performance.now();
-    current={tool:memoEditorTool,color:memoEditorColor,
+    current={
+      tool:memoEditorTool,color:memoEditorColor,
       width:memoEditorTool==="eraser"?Math.max(18,memoEditorWidth*4):memoEditorWidth,
-      points:[p],startTime:now};
-    latestPoint={...p};stableAnchor={...p};stableSince=now;straightReady=false;
+      points:[p],startTime:now
+    };
+    latestPoint={...p};
+    stableAnchor={...p};
+    stableSince=now;
+    straightReady=false;
+    straightEndPoint=null;
     editorRedo(fileId,pageIndex).length=0;
     startMonitor();
   };
@@ -5551,57 +5580,113 @@ function editorBindInk(canvas,fileId,pageIndex){
   const move=e=>{
     if(!drawing||e.pointerId!==pointerId||!current)return;
     e.preventDefault();
+
     const r=canvas.getBoundingClientRect();
     const events=(typeof e.getCoalescedEvents==="function")?e.getCoalescedEvents():[];
     const list=events.length?events:[e];
+
     for(const ev of list){
       const p=editorPoint(ev,canvas),last=current.points[current.points.length-1];
       latestPoint={...p};
       if(!last)continue;
-      const px=Math.hypot((p.x-last.x)*r.width,(p.y-last.y)*r.height);
+
+      const px=Math.hypot(
+        (p.x-last.x)*r.width,
+        (p.y-last.y)*r.height
+      );
       if(px>=0.55)current.points.push(p);
     }
+
+    // 直線確定後に8pxを超えて動かした場合は、
+    // 「続きを描きたい」と判断して直線確定を解除する。
+    if(straightReady && straightEndPoint && latestPoint){
+      const d=Math.hypot(
+        (latestPoint.x-straightEndPoint.x)*r.width,
+        (latestPoint.y-straightEndPoint.y)*r.height
+      );
+      if(d>8){
+        straightReady=false;
+        straightEndPoint=null;
+        current.straightReady=false;
+        stableAnchor={...latestPoint};
+        stableSince=performance.now();
+      }
+    }
+
     redraw();
     const rr=canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);
-    const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-    if(straightReady&&latestPoint){
-      const preview={...current,points:[current.points[0],latestPoint]};
+    const ctx=canvas.getContext("2d");
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    if(straightReady&&straightEndPoint){
+      const preview={...current,points:[current.points[0],straightEndPoint]};
       editorDrawStroke(ctx,preview,rr.width,rr.height);
-    }else editorDrawStroke(ctx,current,rr.width,rr.height);
+    }else{
+      editorDrawStroke(ctx,current,rr.width,rr.height);
+    }
   };
 
   const finish=e=>{
     if(!drawing||e.pointerId!==pointerId||!current)return;
-    e.preventDefault();stopMonitor();drawing=false;
+    e.preventDefault();
+    stopMonitor();
+    drawing=false;
+
     if(current.points.length===1)current.points.push(current.points[0]);
-    if(latestPoint){
-      const last=current.points[current.points.length-1];
-      if(!last||last.x!==latestPoint.x||last.y!==latestPoint.y)current.points.push({...latestPoint});
-    }
-    if(straightReady&&current.tool!=="eraser"){
-      current.points=[current.points[0],current.points[current.points.length-1]];
+
+    if(straightReady && straightEndPoint && current.tool!=="eraser"){
+      // 終点は「1秒静止が成立した瞬間」に固定した座標を使う。
+      current.points=[current.points[0],straightEndPoint];
       current.snappedLine=true;
+    }else if(latestPoint){
+      const last=current.points[current.points.length-1];
+      if(!last||last.x!==latestPoint.x||last.y!==latestPoint.y){
+        current.points.push({...latestPoint});
+      }
     }
+
     editorStrokes(fileId,pageIndex).push(current);
-    current=null;pointerId=null;latestPoint=null;stableAnchor=null;stableSince=0;straightReady=false;
-    persistMemoEditorInk(fileId);redraw();updateMemoEditorControls();
+    current=null;pointerId=null;
+    latestPoint=null;stableAnchor=null;straightEndPoint=null;
+    stableSince=0;straightReady=false;
+
+    persistMemoEditorInk(fileId);
+    redraw();
+    updateMemoEditorControls();
   };
 
   canvas.addEventListener("pointerdown",e=>{
-    if(e.pointerType==="pen"){e.preventDefault();start(e)}
-    else if(e.pointerType==="touch"&&memoEditorFingerDraw){e.preventDefault();start(e)}
-  });
-  canvas.addEventListener("pointermove",e=>{
-    if(e.pointerType==="pen"||(e.pointerType==="touch"&&memoEditorFingerDraw))move(e)
-  });
-  canvas.addEventListener("pointerup",finish);
-  canvas.addEventListener("pointercancel",e=>{
-    if(drawing&&e.pointerId===pointerId){
-      stopMonitor();drawing=false;current=null;pointerId=null;latestPoint=null;stableAnchor=null;straightReady=false;redraw()
+    if(e.pointerType==="pen"){
+      e.preventDefault();start(e)
+    }else if(e.pointerType==="touch"&&memoEditorFingerDraw){
+      e.preventDefault();start(e)
     }
   });
+
+  canvas.addEventListener("pointermove",e=>{
+    if(e.pointerType==="pen"||(e.pointerType==="touch"&&memoEditorFingerDraw)){
+      move(e)
+    }
+  });
+
+  canvas.addEventListener("pointerup",finish);
+
+  canvas.addEventListener("pointercancel",e=>{
+    if(drawing&&e.pointerId===pointerId){
+      stopMonitor();
+      drawing=false;current=null;pointerId=null;
+      latestPoint=null;stableAnchor=null;straightEndPoint=null;
+      stableSince=0;straightReady=false;
+      redraw()
+    }
+  });
+
   let raf=0;
-  new ResizeObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(redraw)}).observe(canvas.parentElement);
+  new ResizeObserver(()=>{
+    cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(redraw)
+  }).observe(canvas.parentElement);
+
   setTimeout(redraw,50);
 }
 function applyMemoEditorView(){
