@@ -823,7 +823,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.7.9">
+<body data-build="v1.8.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2165,10 +2165,47 @@ function memoInkDrawStroke(ctx,stroke,w,h){
   }
   ctx.restore();
 }
+
+function memoInkDrawLiveSegment(canvas,stroke,fromIndex){
+  if(!canvas||!stroke||!stroke.points||stroke.points.length<2)return;
+  const rect=canvas.getBoundingClientRect();
+  const dpr=Math.min(1.5,window.devicePixelRatio||1);
+  const ctx=canvas.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.save();
+  ctx.lineCap="round";ctx.lineJoin="round";
+  if(stroke.tool==="eraser"){
+    ctx.globalCompositeOperation="destination-out";
+    ctx.strokeStyle="rgba(0,0,0,1)";
+    ctx.lineWidth=(stroke.width||14)*Math.max(.65,rect.width/800);
+  }else{
+    ctx.globalCompositeOperation="source-over";
+    ctx.strokeStyle=stroke.color||"#d32f2f";
+    ctx.lineWidth=(stroke.width||4)*Math.max(.65,rect.width/800);
+  }
+  const pts=stroke.points;
+  const i=Math.max(1,fromIndex);
+  ctx.beginPath();
+  ctx.moveTo(pts[i-1].x*rect.width,pts[i-1].y*rect.height);
+  for(let n=i;n<pts.length;n++){
+    const a=pts[n-1],b=pts[n];
+    const mx=(a.x+b.x)*rect.width/2,my=(a.y+b.y)*rect.height/2;
+    ctx.quadraticCurveTo(a.x*rect.width,a.y*rect.height,mx,my);
+  }
+  const last=pts[pts.length-1];
+  ctx.lineTo(last.x*rect.width,last.y*rect.height);
+  ctx.stroke();
+  ctx.restore();
+}
+function memoInkEventPoints(e,canvas){
+  const events=(typeof e.getCoalescedEvents==="function")?e.getCoalescedEvents():[];
+  const src=events&&events.length?events:[e];
+  return src.map(ev=>memoInkPoint(ev,canvas));
+}
 function renderMemoInk(canvas,fileId){
   if(!canvas)return;
   const rect=canvas.getBoundingClientRect();
-  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const dpr=Math.min(1.5,window.devicePixelRatio||1);
   const w=Math.max(1,Math.round(rect.width*dpr)),h=Math.max(1,Math.round(rect.height*dpr));
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
   const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,rect.width,rect.height);
@@ -2298,11 +2335,14 @@ function bindMemoInkCanvas(canvas,fileId,card){
   canvas.addEventListener("pointermove",e=>{
     if(!memoInkMode)return;
     if(e.pointerType==="pen"&&drawing&&e.pointerId===drawPointerId&&current){
-      e.preventDefault();current.points.push(memoInkPoint(e,canvas));
-      redraw();
-      const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
-      const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-      memoInkDrawStroke(ctx,current,rect.width,rect.height);
+      e.preventDefault();
+      const before=current.points.length;
+      const pts=memoInkEventPoints(e,canvas);
+      for(const pt of pts){
+        const last=current.points[current.points.length-1];
+        if(!last||Math.abs(pt.x-last.x)>.00015||Math.abs(pt.y-last.y)>.00015)current.points.push(pt);
+      }
+      if(current.points.length>before)memoInkDrawLiveSegment(canvas,current,before);
       return;
     }
     if(e.pointerType==="touch"){
@@ -2313,11 +2353,14 @@ function bindMemoInkCanvas(canvas,fileId,card){
         if(drawing&&current)cancelStroke();
         updateGesture();
       }else if(memoFingerDraw&&drawing&&e.pointerId===drawPointerId&&current){
-        e.preventDefault();current.points.push(memoInkPoint(e,canvas));
-        redraw();
-        const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
-        const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-        memoInkDrawStroke(ctx,current,rect.width,rect.height);
+        e.preventDefault();
+        const before=current.points.length;
+        const pts=memoInkEventPoints(e,canvas);
+        for(const pt of pts){
+          const last=current.points[current.points.length-1];
+          if(!last||Math.abs(pt.x-last.x)>.00015||Math.abs(pt.y-last.y)>.00015)current.points.push(pt);
+        }
+        if(current.points.length>before)memoInkDrawLiveSegment(canvas,current,before);
       }else if(!memoFingerDraw&&touches.size===1){
         // 指1本はブラウザの縦スクロールに任せる。
         gesture=null;
@@ -2341,7 +2384,11 @@ function bindMemoInkCanvas(canvas,fileId,card){
     if(!touches.size)gesture=null;
   });
 
-  const ro=new ResizeObserver(()=>{redraw();clampMemoInkView(stage,viewport,fileId)});
+  let inkResizeRaf=0;
+  const ro=new ResizeObserver(()=>{
+    cancelAnimationFrame(inkResizeRaf);
+    inkResizeRaf=requestAnimationFrame(()=>{redraw();clampMemoInkView(stage,viewport,fileId)});
+  });
   ro.observe(stage||canvas.parentElement||canvas);
 
   const toggle=card.querySelector(".memo-ink-toggle");
@@ -4753,7 +4800,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.7.9",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.8.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
