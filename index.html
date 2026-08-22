@@ -762,15 +762,15 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-drawing-title{font-size:13px;font-weight:900;color:#514a45}
 .memo-drawing-add{border:0;border-radius:9px;background:#e9e4e0;color:#514a45;padding:8px 10px;font-size:12px;font-weight:900}
 .memo-file-list{display:flex;flex-direction:column;gap:10px}
-.memo-file-card{border:1px solid #e2dcd7;border-radius:12px;background:#fff;overflow:hidden}
+.memo-file-card{border:1px solid #e2dcd7;border-radius:10px;background:#fff;overflow:hidden;margin-bottom:18px}
 .memo-file-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f7f4f2}
 .memo-file-name{flex:1;min-width:0;font-size:12px;font-weight:800;color:#514a45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .memo-file-head button{border:0;border-radius:8px;background:#ebe6e2;color:#625a54;padding:6px 8px;font-size:11px;font-weight:800}
 .memo-file-head button.delete{color:#a06d68}
-.memo-image-preview{display:block;width:100%;height:auto;max-height:680px;object-fit:contain;background:#f0ece9}
+.memo-image-preview{display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:#f0ece9}
 .memo-pdf-preview-wrap{
   position:relative;width:100%;overflow:hidden;background:#eeeae7;
-  min-height:320px;max-height:760px
+  min-height:560px;max-height:none
 }
 .memo-pdf-preview{
   display:block;border:0;background:#eeeae7;
@@ -782,7 +782,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-pdf-fallback{padding:18px;text-align:center;color:#766f69;font-size:12px}
 .memo-empty-files{font-size:12px;color:#99908a;padding:6px 2px}
 @media(max-width:600px){
-  .memo-pdf-preview-wrap{min-height:280px;max-height:520px}
+  .memo-pdf-preview-wrap{min-height:460px;max-height:none}
   .memo-image-preview{max-height:520px}
 }
 
@@ -822,7 +822,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-zoom-reset{white-space:nowrap}
 </style>
 </head>
-<body data-build="v1.8.1">
+<body data-build="v1.8.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2201,6 +2201,33 @@ function memoInkEventPoints(e,canvas){
   const src=events&&events.length?events:[e];
   return src.map(ev=>memoInkPoint(ev,canvas));
 }
+
+function memoInkDistance(a,b,w,h){
+  return Math.hypot((b.x-a.x)*w,(b.y-a.y)*h);
+}
+function memoInkMaybeSnapLine(stroke,canvas){
+  const pts=stroke?.points||[];
+  if(pts.length<2||stroke.tool==="eraser")return false;
+  const rect=canvas.getBoundingClientRect();
+  const first=pts[0],last=pts[pts.length-1];
+  const direct=memoInkDistance(first,last,rect.width,rect.height);
+  if(direct<24)return false;
+
+  // 線が大きく曲がっていない時だけ候補にする。
+  let path=0;
+  for(let i=1;i<pts.length;i++)path+=memoInkDistance(pts[i-1],pts[i],rect.width,rect.height);
+  if(path>direct*1.28)return false;
+
+  // 最後の約0.35秒ほぼ動いていなければ「止めた」と判定。
+  const endTime=stroke.endTime||performance.now();
+  const holdMs=endTime-(stroke.lastMoveTime||endTime);
+  if(holdMs<320)return false;
+
+  stroke.points=[first,last];
+  stroke.snappedLine=true;
+  return true;
+}
+
 function renderMemoInk(canvas,fileId){
   if(!canvas)return;
   const rect=canvas.getBoundingClientRect();
@@ -2239,14 +2266,15 @@ function bindMemoInkCanvas(canvas,fileId,card){
     const u=card.querySelector(".memo-ink-undo"),r=card.querySelector(".memo-ink-redo");
     if(u)u.disabled=!rec.strokes.length;if(r)r.disabled=!rec.redo.length;
     const s=card.querySelector(".memo-ink-status");
-    if(s)s.textContent=!memoInkMode?"OFF：通常操作":(memoFingerDraw?"指1本=描画 / 指2本=拡大・移動":"Pencil=描画固定 / 指1本=スクロール / 指2本=拡大・移動");
+    if(s)s.textContent=!memoInkMode?"OFF：通常操作 / 線末で少し止めると直線":(memoFingerDraw?"指1本=描画 / 指2本=拡大・移動 / 止めると直線":"Pencil=描画固定 / 指1本=スクロール / 指2本=拡大・移動 / 止めると直線");
   };
   card._updateInkControls=updateCard;
 
   const startStroke=e=>{
     drawing=true;drawPointerId=e.pointerId;
     canvas.setPointerCapture?.(e.pointerId);
-    current={tool:memoInkTool,color:memoInkColor,width:memoInkTool==="eraser"?Math.max(16,memoInkWidth*4):memoInkWidth,points:[memoInkPoint(e,canvas)]};
+    const now=performance.now();
+    current={tool:memoInkTool,color:memoInkColor,width:memoInkTool==="eraser"?Math.max(16,memoInkWidth*4):memoInkWidth,points:[memoInkPoint(e,canvas)],startTime:now,lastMoveTime:now,endTime:now};
     memoInkRecord(fileId).redo=[];
   };
   const cancelStroke=()=>{
@@ -2256,7 +2284,9 @@ function bindMemoInkCanvas(canvas,fileId,card){
     if(!drawing||e.pointerId!==drawPointerId||!current)return;
     e.preventDefault();
     drawing=false;
+    current.endTime=performance.now();
     if(current.points.length===1)current.points.push(current.points[0]);
+    memoInkMaybeSnapLine(current,canvas);
     const rec=memoInkRecord(fileId);rec.strokes.push(current);rec.redo=[];
     current=null;drawPointerId=null;save();redraw();updateCard();
   };
@@ -2349,7 +2379,10 @@ function bindMemoInkCanvas(canvas,fileId,card){
         const last=current.points[current.points.length-1];
         if(!last||Math.abs(pt.x-last.x)>.00015||Math.abs(pt.y-last.y)>.00015)current.points.push(pt);
       }
-      if(current.points.length>before)memoInkDrawLiveSegment(canvas,current,before);
+      if(current.points.length>before){
+        current.lastMoveTime=performance.now();
+        memoInkDrawLiveSegment(canvas,current,before);
+      }
       return;
     }
     if(e.pointerType==="touch"){
@@ -2367,7 +2400,10 @@ function bindMemoInkCanvas(canvas,fileId,card){
           const last=current.points[current.points.length-1];
           if(!last||Math.abs(pt.x-last.x)>.00015||Math.abs(pt.y-last.y)>.00015)current.points.push(pt);
         }
-        if(current.points.length>before)memoInkDrawLiveSegment(canvas,current,before);
+        if(current.points.length>before){
+          current.lastMoveTime=performance.now();
+          memoInkDrawLiveSegment(canvas,current,before);
+        }
       }else if(!memoFingerDraw&&touches.size===1){
         e.preventDefault();
         gesture=null;
@@ -2500,20 +2536,23 @@ async function detectPdfPageRatio(blob){
 }
 async function configureMemoPdfPreview(frame,wrap,blob){
   const info=await detectPdfPageRatio(blob);
-  // 横長ほど強く縮小。A3/A4など物理サイズではなくページ比率に合わせる。
-  let outer=info.landscape?0.46:0.56;
-  if(info.ratio>1.65)outer=0.43;
-  if(info.ratio<0.8)outer=0.58;
+  // GoodNotes寄り：最初から1ページを大きく見せる。
+  // 横向きは画面幅いっぱい、縦向きは縦長に。用紙サイズではなく縦横比で決める。
+  let outer=info.landscape?0.56:0.66;
+  if(info.ratio>1.65)outer=0.52;
+  if(info.ratio<0.8)outer=0.70;
   const inner=(100/outer).toFixed(2)+"%";
   wrap.style.setProperty("--pdf-outer-scale",String(outer));
   wrap.style.setProperty("--pdf-inner-scale",inner);
 
-  // 表示枠も元PDFの縦横比に合わせる。極端な比率は見やすい範囲に制限。
   const ratio=Math.max(.62,Math.min(2.2,info.ratio||1.414));
-  const available=Math.min(720,Math.max(300,wrap.getBoundingClientRect().width||700));
-  let h=available/ratio;
-  if(info.landscape)h=Math.max(320,Math.min(520,h+110));
-  else h=Math.max(430,Math.min(720,h+120));
+  const width=Math.max(300,wrap.getBoundingClientRect().width||700);
+  let h=width/ratio;
+  if(info.landscape){
+    h=Math.max(500,Math.min(760,h+260));
+  }else{
+    h=Math.max(720,Math.min(1050,h+260));
+  }
   wrap.style.height=Math.round(h)+"px";
 }
 function clearMemoObjectUrls(){
@@ -2637,7 +2676,7 @@ async function renderMemoPage(){
           <button type="button" class="memo-ink-undo">↶</button>
           <button type="button" class="memo-ink-redo">↷</button>
           <button type="button" class="memo-zoom-reset">等倍</button>
-          <span class="memo-ink-status">OFF：通常操作</span>
+          <span class="memo-ink-status">OFF：通常操作 / 線末で少し止めると直線</span>
         </div>
         <div class="memo-file-preview memo-annotatable"></div>`;
       const url=URL.createObjectURL(rec.blob);memoObjectUrls.push(url);
@@ -4816,7 +4855,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.8.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"1.8.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
