@@ -1,4 +1,4 @@
-const CACHE="gencho-v234-per-page-orientation";
+const CACHE="gencho-v235-keypad-bottom-right";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
