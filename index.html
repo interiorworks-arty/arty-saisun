@@ -1071,7 +1071,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .export-drawing-empty{padding:6px 3px;font-size:12px;color:#8a817a}
 </style>
 </head>
-<body data-build="v2.3.0">
+<body data-build="v2.3.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4639,7 +4639,7 @@ function buildFinishExportCanvas(page,siteObj=state){
   });
   return c;
 }
-async function buildMemoExportCanvases(siteObj=state){
+async function buildMemoExportCanvases(siteObj=state,opts={}){
   ensureMemoPages(siteObj);
   const out=[];
   const allFiles=await memoDbAllForSite(siteObj.id);
@@ -4671,7 +4671,7 @@ async function buildMemoExportCanvases(siteObj=state){
             const c=document.createElement("canvas");c.width=Math.ceil(view.width);c.height=Math.ceil(view.height);
             const ctx=c.getContext("2d");await page.render({canvasContext:ctx,viewport:view}).promise;
             const strokes=(memoEditorInkRec(f.id).pageStrokes?.[i-1]||[]);
-            if(strokes.length)editorCompositeStrokes(ctx,strokes,0,0,c.width,c.height);
+            if(strokes.length)compositeExportInk(ctx,strokes,c.width,c.height,ink,n-1);
             out.push(c);
           }
         }catch(e){console.error("memo PDF export",e)}
@@ -4928,6 +4928,40 @@ async function renderExportDrawingChoices(){
     console.error(e);wrap.innerHTML='<div class="export-drawing-empty">図面一覧を読み込めませんでした</div>';
   }
 }
+
+function compositeExportInk(ctx,strokes,w,h,inkRec,pageIndex){
+  if(!strokes||!strokes.length)return;
+  const meta=(inkRec?.pageMeta&&inkRec.pageMeta[pageIndex])||inkRec?.meta||{};
+  const sw=Number(meta.canvasW||meta.viewW||inkRec?.canvasW||inkRec?.viewW||0);
+  const sh=Number(meta.canvasH||meta.viewH||inkRec?.canvasH||inkRec?.viewH||0);
+
+  // 現行のストロークが 0..1 正規化座標なら従来どおり。
+  let normalized=true;
+  outer: for(const s of strokes){
+    const pts=s?.points||s?.pts||[];
+    for(const pt of pts){
+      const x=Array.isArray(pt)?pt[0]:pt?.x, y=Array.isArray(pt)?pt[1]:pt?.y;
+      if(Number(x)>1.25||Number(y)>1.25){normalized=false;break outer;}
+    }
+  }
+  if(normalized){
+    editorCompositeStrokes(ctx,strokes,0,0,w,h);
+    return;
+  }
+
+  // 旧データが画面ピクセル座標の場合は、保存時表示サイズ→出力サイズへ変換。
+  if(sw>0&&sh>0){
+    ctx.save();
+    ctx.scale(w/sw,h/sh);
+    editorCompositeStrokes(ctx,strokes,0,0,sw,sh);
+    ctx.restore();
+    return;
+  }
+
+  // メタ情報のない旧データは bbox で勝手に引き伸ばさず、
+  // editorCompositeStrokes にそのまま渡す（線が短くなる副作用を避ける）。
+  editorCompositeStrokes(ctx,strokes,0,0,w,h);
+}
 async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
   if(!window.pdfjsLib)throw new Error("pdfjs not loaded");
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -4965,7 +4999,7 @@ async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
         const ctx=c.getContext("2d",{alpha:false});ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
         URL.revokeObjectURL(url);
         const strokes=ink.pageStrokes?.[0]||[];
-        if(strokes.length)editorCompositeStrokes(ctx,strokes,0,0,w,h);
+        if(strokes.length)compositeExportInk(ctx,strokes,w,h,ink,0);
         out.push(c);
       }catch(e){console.error("drawing image export",rec.fileName,e)}
     }
@@ -4990,7 +5024,7 @@ async function buildSelectedExportCanvases(parts,siteObj=state){
     try{canvases.push(...await buildPhotoExportCanvases(siteObj))}catch(e){console.error("photo export",e)}
   }
   if(parts.includes("memo")){
-    try{canvases.push(...await buildMemoExportCanvases(siteObj))}catch(e){console.error("memo export",e)}
+    try{canvases.push(...await buildMemoExportCanvases(siteObj,{excludeDrawings:true}))}catch(e){console.error("memo export",e)}
   }
   if(parts.includes("drawing")){
     try{
@@ -5234,7 +5268,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.3.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.3.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
