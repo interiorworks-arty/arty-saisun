@@ -1071,7 +1071,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .export-drawing-empty{padding:6px 3px;font-size:12px;color:#8a817a}
 </style>
 </head>
-<body data-build="v2.3.1">
+<body data-build="v2.3.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4929,39 +4929,6 @@ async function renderExportDrawingChoices(){
   }
 }
 
-function compositeExportInk(ctx,strokes,w,h,inkRec,pageIndex){
-  if(!strokes||!strokes.length)return;
-  const meta=(inkRec?.pageMeta&&inkRec.pageMeta[pageIndex])||inkRec?.meta||{};
-  const sw=Number(meta.canvasW||meta.viewW||inkRec?.canvasW||inkRec?.viewW||0);
-  const sh=Number(meta.canvasH||meta.viewH||inkRec?.canvasH||inkRec?.viewH||0);
-
-  // 現行のストロークが 0..1 正規化座標なら従来どおり。
-  let normalized=true;
-  outer: for(const s of strokes){
-    const pts=s?.points||s?.pts||[];
-    for(const pt of pts){
-      const x=Array.isArray(pt)?pt[0]:pt?.x, y=Array.isArray(pt)?pt[1]:pt?.y;
-      if(Number(x)>1.25||Number(y)>1.25){normalized=false;break outer;}
-    }
-  }
-  if(normalized){
-    editorCompositeStrokes(ctx,strokes,0,0,w,h);
-    return;
-  }
-
-  // 旧データが画面ピクセル座標の場合は、保存時表示サイズ→出力サイズへ変換。
-  if(sw>0&&sh>0){
-    ctx.save();
-    ctx.scale(w/sw,h/sh);
-    editorCompositeStrokes(ctx,strokes,0,0,sw,sh);
-    ctx.restore();
-    return;
-  }
-
-  // メタ情報のない旧データは bbox で勝手に引き伸ばさず、
-  // editorCompositeStrokes にそのまま渡す（線が短くなる副作用を避ける）。
-  editorCompositeStrokes(ctx,strokes,0,0,w,h);
-}
 async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
   if(!window.pdfjsLib)throw new Error("pdfjs not loaded");
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -4969,39 +4936,50 @@ async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
   const ids=Array.isArray(selectedIds)?new Set(selectedIds):null;
   const files=all.filter(f=>!ids||ids.has(f.id));
   const out=[];
+
   for(const rec of files){
     const isPdf=rec.isPdf||String(rec.mimeType||"").toLowerCase()==="application/pdf";
     const ink=memoEditorInkRec(rec.id);
+
     if(isPdf){
       try{
-        const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await rec.blob.arrayBuffer())}).promise;
-        for(let n=1;n<=pdf.numPages;n++){
-          const pg=await pdf.getPage(n),base=pg.getViewport({scale:1});
-          // 出力は長辺約1800pxを上限にして図面の文字を潰しにくくする。
-          const scale=Math.min(2.2,1800/Math.max(base.width,base.height));
-          const view=pg.getViewport({scale:Math.max(1,scale)});
-          const c=document.createElement("canvas");c.width=Math.ceil(view.width);c.height=Math.ceil(view.height);
-          const ctx=c.getContext("2d",{alpha:false});ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
+        // サムネ・画面キャッシュは一切使わず、保存されている元PDFを直接再描画。
+        const bytes=new Uint8Array(await rec.blob.arrayBuffer());
+        const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
+        for(let pageIndex=0;pageIndex<pdf.numPages;pageIndex++){
+          const pg=await pdf.getPage(pageIndex+1);
+          const base=pg.getViewport({scale:1});
+          const targetLong=2000;
+          const scale=Math.max(1,Math.min(2.5,targetLong/Math.max(base.width,base.height)));
+          const view=pg.getViewport({scale});
+          const c=document.createElement("canvas");
+          c.width=Math.max(1,Math.ceil(view.width));c.height=Math.max(1,Math.ceil(view.height));
+          const ctx=c.getContext("2d",{alpha:false});
+          ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
           await pg.render({canvasContext:ctx,viewport:view}).promise;
-          const strokes=ink.pageStrokes?.[n-1]||[];
+
+          // 全画面エディタと同じ 0..1 のページ正規化座標を、元PDFページ全面へそのまま重ねる。
+          const strokes=ink.pageStrokes?.[pageIndex]||[];
           if(strokes.length)editorCompositeStrokes(ctx,strokes,0,0,c.width,c.height);
           out.push(c);
         }
-      }catch(e){console.error("drawing pdf export",rec.fileName,e)}
+      }catch(e){console.error("original PDF drawing export",rec.fileName,e)}
     }else{
       try{
+        // 画像もサムネではなく元画像を直接使用。
         const url=URL.createObjectURL(rec.blob);
         const img=await new Promise((resolve,reject)=>{const x=new Image();x.onload=()=>resolve(x);x.onerror=reject;x.src=url});
-        const maxSide=1800,scale=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
-        const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
-        const h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+        const maxSide=2000,sc=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+        const w=Math.max(1,Math.round((img.naturalWidth||img.width)*sc));
+        const h=Math.max(1,Math.round((img.naturalHeight||img.height)*sc));
         const c=document.createElement("canvas");c.width=w;c.height=h;
-        const ctx=c.getContext("2d",{alpha:false});ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+        const ctx=c.getContext("2d",{alpha:false});
+        ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
         URL.revokeObjectURL(url);
         const strokes=ink.pageStrokes?.[0]||[];
-        if(strokes.length)compositeExportInk(ctx,strokes,w,h,ink,0);
+        if(strokes.length)editorCompositeStrokes(ctx,strokes,0,0,w,h);
         out.push(c);
-      }catch(e){console.error("drawing image export",rec.fileName,e)}
+      }catch(e){console.error("original image drawing export",rec.fileName,e)}
     }
   }
   return out;
@@ -5268,7 +5246,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.3.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.3.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6186,9 +6164,14 @@ async function renderMemoEditorFile(){
         const renderScale=cssScale*Math.min(2,devicePixelRatio||1);
         const renderView=pg.getViewport({scale:renderScale});
         const holder=document.createElement("div");holder.className="memo-editor-page";
-        holder.style.maxWidth=Math.round(view.width)+"px";
+        // PDF本体と手書きレイヤーを必ず同じページ座標系に固定する。
+        holder.style.setProperty("width",Math.round(view.width)+"px","important");
+        holder.style.setProperty("height",Math.round(view.height)+"px","important");
+        holder.style.setProperty("max-width","none","important");
         const c=document.createElement("canvas");c.className="memo-editor-pdf-page";c.setAttribute("draggable","false");
         c.width=Math.ceil(renderView.width);c.height=Math.ceil(renderView.height);
+        c.style.setProperty("width","100%","important");
+        c.style.setProperty("height","100%","important");
         c.style.aspectRatio=`${view.width}/${view.height}`;
         await pg.render({canvasContext:c.getContext("2d"),viewport:renderView}).promise;
         holder.appendChild(c);
