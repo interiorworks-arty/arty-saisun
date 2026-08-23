@@ -1,4 +1,4 @@
-const CACHE="gencho-v201-screen-coordinate-line";
+const CACHE="gencho-v210-ink-engine-rebuild";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

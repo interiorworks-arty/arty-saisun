@@ -961,9 +961,47 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   touch-action:none!important;
   cursor:crosshair;
 }
+
+/* ===== v2.1.0 Ink Engine Rebuild ===== */
+.memo-editor-page{
+  position:relative!important;
+  width:min(100%,1400px)!important;
+  background:#fff!important;
+  box-shadow:0 1px 5px rgba(0,0,0,.16)!important;
+  overflow:hidden!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+  -webkit-touch-callout:none!important;
+}
+.memo-editor-pdf-page,
+.memo-editor-image{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  background:#fff!important;
+  pointer-events:none!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+}
+.memo-editor-ink{
+  position:absolute!important;
+  left:0!important;top:0!important;
+  width:100%!important;height:100%!important;
+  z-index:5!important;
+  background:transparent!important;
+  pointer-events:auto!important;
+  touch-action:none!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+  -webkit-touch-callout:none!important;
+}
+.memo-editor-viewport{
+  touch-action:none!important;
+  overscroll-behavior:none!important;
+}
 </style>
 </head>
-<body data-build="v2.0.1">
+<body data-build="v2.1.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2348,28 +2386,6 @@ function memoInkEventPoints(e,canvas){
 
 function memoInkDistance(a,b,w,h){
   return Math.hypot((b.x-a.x)*w,(b.y-a.y)*h);
-}
-function memoInkMaybeSnapLine(stroke,canvas){
-  const pts=stroke?.points||[];
-  if(pts.length<2||stroke.tool==="eraser")return false;
-  const rect=canvas.getBoundingClientRect();
-  const first=pts[0],last=pts[pts.length-1];
-  const direct=memoInkDistance(first,last,rect.width,rect.height);
-  if(direct<24)return false;
-
-  // 線が大きく曲がっていない時だけ候補にする。
-  let path=0;
-  for(let i=1;i<pts.length;i++)path+=memoInkDistance(pts[i-1],pts[i],rect.width,rect.height);
-  if(path>direct*1.28)return false;
-
-  // 最後の約0.35秒ほぼ動いていなければ「止めた」と判定。
-  const endTime=stroke.endTime||performance.now();
-  const holdMs=endTime-(stroke.lastMoveTime||endTime);
-  if(holdMs<1000)return false;
-
-  stroke.points=[first,last];
-  stroke.snappedLine=true;
-  return true;
 }
 
 function renderMemoInk(canvas,fileId){
@@ -5040,7 +5056,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.0.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.1.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5439,37 +5455,24 @@ const memoEditorInkCache=new Map();
 function memoEditorInkStorageKey(fileId){return `${MEMO_EDITOR_INK_V2_PREFIX}${state.id}:${fileId}`}
 function cloneInkData(v){try{return JSON.parse(JSON.stringify(v))}catch{return v}}
 function persistMemoEditorInk(fileId){
-  const rec=memoEditorInkCache.get(fileId);if(!rec)return;
-  try{localStorage.setItem(memoEditorInkStorageKey(fileId),JSON.stringify(rec))}catch(e){console.warn("memo ink v2 save",e)}
-  // 既存バックアップ互換のため state 側にも同期。ただし表示時の正本には使わない。
-  const legacy=memoInkRecord(fileId);
-  legacy.pageStrokes=cloneInkData(rec.pageStrokes||[]);
-  legacy.pageRedo=cloneInkData(rec.pageRedo||[]);
-  legacy.editorV2=true;
+  const rec=memoEditorInkRec(fileId);
+  rec.updatedAt=Date.now();
   save();
 }
 function memoEditorInkRec(fileId){
-  if(memoEditorInkCache.has(fileId))return memoEditorInkCache.get(fileId);
-  let rec=null;
-  try{
-    const raw=localStorage.getItem(memoEditorInkStorageKey(fileId));
-    if(raw)rec=JSON.parse(raw);
-  }catch(e){console.warn("memo ink v2 load",e)}
-  if(!rec||typeof rec!=="object"){
-    const old=memoInkRecord(fileId);
-    rec={pageStrokes:[],pageRedo:[],version:2};
-    // 移行はここで1度だけ。pageStrokes があれば最優先、なければ旧 strokes を1枚目へ。
-    if(Array.isArray(old.pageStrokes)&&old.pageStrokes.some(a=>Array.isArray(a)&&a.length)){
-      rec.pageStrokes=cloneInkData(old.pageStrokes);
-    }else if(Array.isArray(old.strokes)&&old.strokes.length){
-      rec.pageStrokes[0]=cloneInkData(old.strokes);
-    }
-    if(Array.isArray(old.pageRedo))rec.pageRedo=cloneInkData(old.pageRedo);
-    try{localStorage.setItem(memoEditorInkStorageKey(fileId),JSON.stringify(rec))}catch(e){console.warn("memo ink v2 migrate",e)}
-  }
+  const rec=memoInkRecord(fileId);
   if(!Array.isArray(rec.pageStrokes))rec.pageStrokes=[];
   if(!Array.isArray(rec.pageRedo))rec.pageRedo=[];
-  memoEditorInkCache.set(fileId,rec);
+  // 旧形式は一度だけコピー。その後はpageStrokesだけを正とする。
+  if(rec.inkEngineVersion!=="2.1"){
+    if(Array.isArray(rec.strokes)&&rec.strokes.length){
+      if(!Array.isArray(rec.pageStrokes[0])||!rec.pageStrokes[0].length){
+        rec.pageStrokes[0]=rec.strokes.map(s=>JSON.parse(JSON.stringify(s)));
+      }
+    }
+    rec.inkEngineVersion="2.1";
+    rec.strokes=[]; // 旧データからの再復活を防止
+  }
   return rec;
 }
 function editorStrokes(fileId,pageIndex){
@@ -5530,79 +5533,153 @@ function editorRenderInk(canvas,fileId,pageIndex){
   editorStrokes(fileId,pageIndex).forEach(s=>editorDrawStroke(ctx,s,r.width,r.height));
 }
 function editorBindInk(canvas,fileId,pageIndex){
-  let drawing=false,current=null,pointerId=null;
-  let lineStartScreen=null,lineEndScreen=null;
-  const redraw=()=>editorRenderInk(canvas,fileId,pageIndex);
+  // v2.1.0: PDF表示・描画・保存を「ページ正規化座標(0..1)」へ統一。
+  // 描画中は差分だけ描き、pointerup時の座標再取得はしない。
+  let drawing=false;
+  let pointerId=null;
+  let current=null;
+  let lastRawPoint=null;
+  let lineStart=null;
+  let lineEnd=null;
 
-  // 直線だけは描画中、PDF正規化座標ではなく画面上の実座標で追従する。
-  const screenPoint=e=>({x:e.clientX,y:e.clientY});
-  const screenToNormalized=pt=>{
-    const r=canvas.getBoundingClientRect();
+  const pageRect=()=>canvas.getBoundingClientRect();
+
+  const normPointFromEvent=e=>{
+    const r=pageRect();
     return {
-      x:Math.max(0,Math.min(1,(pt.x-r.left)/Math.max(1,r.width))),
-      y:Math.max(0,Math.min(1,(pt.y-r.top)/Math.max(1,r.height)))
+      x:Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width))),
+      y:Math.max(0,Math.min(1,(e.clientY-r.top)/Math.max(1,r.height)))
     };
   };
-  const drawLinePreview=()=>{
-    redraw();
-    if(!current||current.tool!=="line"||!lineStartScreen||!lineEndScreen)return;
-    const r=canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);
+
+  const cssPointFromNorm=p=>{
+    const r=pageRect();
+    return {x:p.x*r.width,y:p.y*r.height};
+  };
+
+  const setupCanvas=()=>{
+    const r=pageRect();
+    const dpr=Math.min(1.5,window.devicePixelRatio||1);
+    const w=Math.max(1,Math.round(r.width*dpr));
+    const h=Math.max(1,Math.round(r.height*dpr));
+    if(canvas.width!==w||canvas.height!==h){
+      canvas.width=w;canvas.height=h;
+    }
     const ctx=canvas.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.save();
-    ctx.globalCompositeOperation="source-over";
-    ctx.strokeStyle=current.color||"#e53935";
-    ctx.lineWidth=current.width||3;
-    ctx.lineCap="round";ctx.lineJoin="round";
-    ctx.beginPath();
-    ctx.moveTo(lineStartScreen.x-r.left,lineStartScreen.y-r.top);
-    ctx.lineTo(lineEndScreen.x-r.left,lineEndScreen.y-r.top);
-    ctx.stroke();ctx.restore();
+    return {ctx,r,dpr};
   };
 
-  const startDraw=e=>{
-    drawing=true;pointerId=e.pointerId;
+  const drawStrokeFast=(ctx,stroke,r)=>{
+    const pts=stroke?.points||[];
+    if(!pts.length)return;
+    ctx.save();
+    ctx.lineCap="round";ctx.lineJoin="round";
+    if(stroke.tool==="eraser"){
+      ctx.globalCompositeOperation="destination-out";
+      ctx.strokeStyle="rgba(0,0,0,1)";
+      ctx.lineWidth=(stroke.width||18)*Math.max(.7,r.width/900);
+    }else{
+      ctx.globalCompositeOperation="source-over";
+      ctx.strokeStyle=stroke.color||"#d32f2f";
+      ctx.lineWidth=(stroke.width||4)*Math.max(.7,r.width/900);
+    }
+    ctx.beginPath();
+    const p0=cssPointFromNorm(pts[0]);
+    ctx.moveTo(p0.x,p0.y);
+    for(let i=1;i<pts.length;i++){
+      const p=cssPointFromNorm(pts[i]);
+      ctx.lineTo(p.x,p.y);
+    }
+    if(pts.length===1){
+      ctx.arc(p0.x,p0.y,ctx.lineWidth/2,0,Math.PI*2);
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const redrawAll=()=>{
+    const {ctx,r}=setupCanvas();
+    ctx.clearRect(0,0,r.width,r.height);
+    const strokes=editorStrokes(fileId,pageIndex);
+    for(const s of strokes)drawStrokeFast(ctx,s,r);
+  };
+
+  const drawIncrement=(a,b,stroke)=>{
+    const {ctx,r}=setupCanvas();
+    const pa=cssPointFromNorm(a),pb=cssPointFromNorm(b);
+    ctx.save();
+    ctx.lineCap="round";ctx.lineJoin="round";
+    if(stroke.tool==="eraser"){
+      ctx.globalCompositeOperation="destination-out";
+      ctx.strokeStyle="rgba(0,0,0,1)";
+      ctx.lineWidth=(stroke.width||18)*Math.max(.7,r.width/900);
+    }else{
+      ctx.globalCompositeOperation="source-over";
+      ctx.strokeStyle=stroke.color||"#d32f2f";
+      ctx.lineWidth=(stroke.width||4)*Math.max(.7,r.width/900);
+    }
+    ctx.beginPath();
+    ctx.moveTo(pa.x,pa.y);
+    ctx.lineTo(pb.x,pb.y);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawLinePreview=()=>{
+    redrawAll();
+    if(!current||!lineStart||!lineEnd)return;
+    const {ctx,r}=setupCanvas();
+    drawStrokeFast(ctx,{tool:"pen",color:current.color,width:current.width,points:[lineStart,lineEnd]},r);
+  };
+
+  const begin=e=>{
+    drawing=true;
+    pointerId=e.pointerId;
     try{canvas.setPointerCapture(pointerId)}catch{}
     try{window.getSelection()?.removeAllRanges()}catch{}
-    const p=editorPoint(e,canvas);
-    current={tool:memoEditorTool,color:memoEditorColor,
+    const p=normPointFromEvent(e);
+    current={
+      tool:memoEditorTool,
+      color:memoEditorColor,
       width:memoEditorTool==="eraser"?Math.max(18,memoEditorWidth*4):memoEditorWidth,
-      points:[p],startTime:performance.now()};
+      points:[p]
+    };
+    lastRawPoint=p;
     if(memoEditorTool==="line"){
-      lineStartScreen=screenPoint(e);
-      lineEndScreen={...lineStartScreen};
+      lineStart={...p}; lineEnd={...p};
     }else{
-      lineStartScreen=null;lineEndScreen=null;
+      lineStart=null; lineEnd=null;
     }
     editorRedo(fileId,pageIndex).length=0;
-    if(current.tool==="line")drawLinePreview(); else redraw();
   };
 
-  const move=e=>{
+  const handleMoveEvent=e=>{
     if(!drawing||e.pointerId!==pointerId||!current)return;
     e.preventDefault();e.stopPropagation();
-    try{window.getSelection()?.removeAllRanges()}catch{}
-    const events=(typeof e.getCoalescedEvents==="function")?e.getCoalescedEvents():[];
-    const list=events.length?events:[e];
+
+    const coalesced=(typeof e.getCoalescedEvents==="function")?e.getCoalescedEvents():[];
+    const events=coalesced.length?coalesced:[e];
 
     if(current.tool==="line"){
-      const ev=list[list.length-1]||e;
-      lineEndScreen=screenPoint(ev);
+      const ev=events[events.length-1]||e;
+      lineEnd=normPointFromEvent(ev);
       drawLinePreview();
       return;
     }
 
-    const r=canvas.getBoundingClientRect();
-    for(const ev of list){
-      const pt=editorPoint(ev,canvas),last=current.points[current.points.length-1];
-      if(!last)continue;
-      const px=Math.hypot((pt.x-last.x)*r.width,(pt.y-last.y)*r.height);
-      if(px>=0.55)current.points.push(pt);
+    const r=pageRect();
+    for(const ev of events){
+      const p=normPointFromEvent(ev);
+      const last=current.points[current.points.length-1];
+      const px=Math.hypot((p.x-last.x)*r.width,(p.y-last.y)*r.height);
+      // Pencil追従優先：0.25px以上の動きだけ追加
+      if(px>=0.25){
+        current.points.push(p);
+        drawIncrement(last,p,current);
+      }
+      lastRawPoint=p;
     }
-    redraw();
-    const rr=canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);
-    const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
-    editorDrawStroke(ctx,current,rr.width,rr.height);
   };
 
   const finish=e=>{
@@ -5612,46 +5689,72 @@ function editorBindInk(canvas,fileId,pageIndex){
     try{canvas.releasePointerCapture(pointerId)}catch{}
 
     if(current.tool==="line"){
-      // pointerup座標は使わない。最後に画面上で追従できた実座標を保存時だけPDF座標へ変換。
-      const a=screenToNormalized(lineStartScreen);
-      const b=screenToNormalized(lineEndScreen||lineStartScreen);
+      const a=lineStart||current.points[0];
+      const b=lineEnd||a;
       current.tool="pen";
-      current.points=[a,b];
       current.shape="line";
-    }else if(current.points.length===1){
-      current.points.push(current.points[0]);
+      current.points=[{...a},{...b}];
+    }else{
+      // pointerup座標は使わず、最後にpointermove/rawupdateで取得した点を採用
+      if(lastRawPoint){
+        const last=current.points[current.points.length-1];
+        if(!last||Math.abs(last.x-lastRawPoint.x)>.00001||Math.abs(last.y-lastRawPoint.y)>.00001){
+          current.points.push({...lastRawPoint});
+        }
+      }
+      if(current.points.length===1)current.points.push({...current.points[0]});
     }
 
     editorStrokes(fileId,pageIndex).push(current);
-    current=null;pointerId=null;lineStartScreen=null;lineEndScreen=null;
     persistMemoEditorInk(fileId);
-    redraw();updateMemoEditorControls();
+
+    current=null;pointerId=null;lastRawPoint=null;lineStart=null;lineEnd=null;
+    redrawAll();
+    updateMemoEditorControls();
   };
 
   canvas.addEventListener("pointerdown",e=>{
-    if(e.pointerType==="pen"){e.preventDefault();startDraw(e)}
-    else if(e.pointerType==="touch"&&memoEditorFingerDraw){e.preventDefault();startDraw(e)}
+    if(e.pointerType==="pen"){
+      e.preventDefault();begin(e);
+    }else if(e.pointerType==="touch"&&memoEditorFingerDraw){
+      e.preventDefault();begin(e);
+    }
   },{passive:false});
+
   canvas.addEventListener("pointermove",e=>{
-    if(e.pointerType==="pen"||(e.pointerType==="touch"&&memoEditorFingerDraw))move(e)
+    if(e.pointerType==="pen"||(e.pointerType==="touch"&&memoEditorFingerDraw)){
+      handleMoveEvent(e);
+    }
   },{passive:false});
+
   if("onpointerrawupdate" in window){
     canvas.addEventListener("pointerrawupdate",e=>{
-      if(e.pointerType==="pen"&&drawing&&e.pointerId===pointerId)move(e)
+      if(e.pointerType==="pen"&&drawing&&e.pointerId===pointerId){
+        handleMoveEvent(e);
+      }
     },{passive:false});
   }
+
   canvas.addEventListener("pointerup",finish,{passive:false});
+  canvas.addEventListener("pointercancel",e=>{
+    if(drawing&&e.pointerId===pointerId){
+      drawing=false;
+      current=null;pointerId=null;lastRawPoint=null;lineStart=null;lineEnd=null;
+      redrawAll();
+    }
+  });
+
   canvas.addEventListener("selectstart",e=>e.preventDefault());
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   canvas.addEventListener("dragstart",e=>e.preventDefault());
-  canvas.addEventListener("pointercancel",e=>{
-    if(drawing&&e.pointerId===pointerId){
-      drawing=false;current=null;pointerId=null;lineStartScreen=null;lineEndScreen=null;redraw()
-    }
-  });
+
   let raf=0;
-  new ResizeObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(redraw)}).observe(canvas.parentElement);
-  setTimeout(redraw,50);
+  new ResizeObserver(()=>{
+    cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(redrawAll);
+  }).observe(canvas.parentElement);
+
+  setTimeout(redrawAll,60);
 }
 function applyMemoEditorView(){
   const s=$("#memoEditorStage");if(!s)return;
