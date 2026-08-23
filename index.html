@@ -1007,9 +1007,40 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .drawing-page-title{font-size:16px;font-weight:900;color:#4f4843}
 .drawing-page-note{font-size:11px;color:#8a817a}
 #drawingPageArea .memo-drawing-block{border-top:0!important;margin-top:0!important;padding-top:0!important}
+
+/* v2.2.1 メモ：白紙A4比率 */
+.memo-grid.memo-bullet-editor{
+  display:block!important;
+  width:100%!important;
+  aspect-ratio:210 / 297!important;
+  min-height:0!important;
+  height:auto!important;
+  box-sizing:border-box!important;
+  resize:none!important;
+  background:#fff!important;
+  background-image:none!important;
+  border:1px solid #e0d9d3!important;
+  border-radius:10px!important;
+  padding:20px 22px!important;
+  line-height:1.85!important;
+  font-size:16px!important;
+  color:#2f2b28!important;
+  box-shadow:0 1px 3px rgba(0,0,0,.04)!important;
+}
+
+.memo-editor-pages{align-items:center!important}
+.memo-editor-image-page{
+  flex:0 0 auto!important;
+  max-width:none!important;
+  width:auto;
+  height:auto;
+}
+.memo-editor-image-page .memo-editor-image{
+  object-fit:contain!important;
+}
 </style>
 </head>
-<body data-build="v2.2.0">
+<body data-build="v2.2.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5096,7 +5127,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.2.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.2.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5926,13 +5957,30 @@ async function renderMemoEditorFile(){
       pages.innerHTML='<div class="memo-empty-files" style="padding:30px">PDFの表示に失敗しました</div>';
     }
   }else{
-    const holder=document.createElement("div");holder.className="memo-editor-page";
+    const holder=document.createElement("div");holder.className="memo-editor-page memo-editor-image-page";
     const img=document.createElement("img");img.className="memo-editor-image";img.draggable=false;
     const url=URL.createObjectURL(f.blob);memoEditorUrls.push(url);img.src=url;
     holder.appendChild(img);
     const ink=document.createElement("canvas");ink.className="memo-editor-ink";
     holder.appendChild(ink);pages.appendChild(holder);
-    img.onload=()=>editorBindInk(ink,f.id,0);
+    img.onload=()=>{
+      // 初期表示は画像全体が一画面に収まるようにする。
+      const vp=$("#memoEditorViewport");
+      const maxW=Math.max(100, (vp?.clientWidth||window.innerWidth)-20);
+      const maxH=Math.max(100, (vp?.clientHeight||window.innerHeight)-20);
+      const iw=Math.max(1,img.naturalWidth), ih=Math.max(1,img.naturalHeight);
+      const fit=Math.min(maxW/iw,maxH/ih);
+      const cssW=Math.max(1,Math.floor(iw*fit));
+      const cssH=Math.max(1,Math.floor(ih*fit));
+      holder.style.width=cssW+"px";
+      holder.style.maxWidth="none";
+      holder.style.height=cssH+"px";
+      img.style.width="100%";
+      img.style.height="100%";
+      img.style.objectFit="contain";
+      resetMemoEditorView();
+      editorBindInk(ink,f.id,0);
+    };
   }
   updateMemoEditorControls();
 }

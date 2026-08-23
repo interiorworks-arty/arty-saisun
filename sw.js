@@ -1,4 +1,4 @@
-const CACHE="gencho-v220-memo-drawing-split";
+const CACHE="gencho-v221-a4memo-imagefit";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
