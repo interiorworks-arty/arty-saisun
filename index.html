@@ -1049,9 +1049,23 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 .memo-editor-image-page{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;flex:none!important}
 .memo-editor-image-page .memo-editor-image{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important}
+
+/* v2.2.3 タブ長押しドラッグ：Safariの文字選択・長押しメニューを無効化 */
+.work-page-tabs,
+.work-page-tabs button{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important;
+}
+.work-page-tabs button{
+  touch-action:pan-y!important;
+}
+.work-page-tabs.tab-sorting{
+  touch-action:none!important;
+}
 </style>
 </head>
-<body data-build="v2.2.2">
+<body data-build="v2.2.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5138,7 +5152,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.2.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.2.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5524,6 +5538,8 @@ function saveWorkPageOrder(){
 function bindWorkPageTabs(){
  const box=document.querySelector(".work-page-tabs");if(!box||box.dataset.sortBound==="1")return;
  box.dataset.sortBound="1";applyWorkPageOrder();
+ box.addEventListener("selectstart",e=>e.preventDefault());
+ box.addEventListener("dragstart",e=>e.preventDefault());
  box.querySelectorAll("[data-work-page]").forEach(btn=>{
    let timer=0,dragging=false,pid=null,sx=0,sy=0,suppressClick=false;
    btn.onclick=()=>{if(!suppressClick)setWorkPage(btn.dataset.workPage)};
@@ -5531,7 +5547,13 @@ function bindWorkPageTabs(){
    btn.addEventListener("pointerdown",e=>{
      if(e.pointerType==="mouse"&&e.button!==0)return;
      pid=e.pointerId;sx=e.clientX;sy=e.clientY;dragging=false;suppressClick=false;clear();
-     timer=setTimeout(()=>{dragging=true;suppressClick=true;btn.classList.add("work-tab-dragging");btn.setPointerCapture?.(pid)},450);
+     timer=setTimeout(()=>{
+       dragging=true;suppressClick=true;
+       try{window.getSelection()?.removeAllRanges()}catch{}
+       box.classList.add("tab-sorting");
+       btn.classList.add("work-tab-dragging");
+       btn.setPointerCapture?.(pid);
+     },450);
    });
    btn.addEventListener("pointermove",e=>{
      if(e.pointerId!==pid)return;
@@ -5545,14 +5567,64 @@ function bindWorkPageTabs(){
    const finish=e=>{
      if(pid!==null&&e.pointerId!==undefined&&e.pointerId!==pid)return;
      clear();
-     if(dragging){e.preventDefault?.();btn.classList.remove("work-tab-dragging");saveWorkPageOrder();setTimeout(()=>{dragging=false;suppressClick=false},120)}
+     if(dragging){
+       e.preventDefault?.();
+       box.classList.remove("tab-sorting");
+       btn.classList.remove("work-tab-dragging");
+       saveWorkPageOrder();
+       try{window.getSelection()?.removeAllRanges()}catch{}
+       setTimeout(()=>{dragging=false;suppressClick=false},120)
+     }
      pid=null;
    };
    btn.addEventListener("pointerup",finish);btn.addEventListener("pointercancel",finish);
    btn.addEventListener("contextmenu",e=>{if(dragging||timer)e.preventDefault()});
  });
 }
+
+function bindWorkPageTouchSortFallback(){
+ const box=document.querySelector(".work-page-tabs");if(!box||box.dataset.touchSortBound==="1")return;
+ box.dataset.touchSortBound="1";
+ let btn=null,timer=0,sorting=false,lastX=0,lastY=0;
+ const stopTimer=()=>{if(timer){clearTimeout(timer);timer=0}};
+ box.addEventListener("touchstart",e=>{
+   const b=e.target.closest?.("[data-work-page]");if(!b||e.touches.length!==1)return;
+   btn=b;sorting=false;lastX=e.touches[0].clientX;lastY=e.touches[0].clientY;
+   stopTimer();
+   timer=setTimeout(()=>{
+     sorting=true;
+     try{window.getSelection()?.removeAllRanges()}catch{}
+     box.classList.add("tab-sorting");btn.classList.add("work-tab-dragging");
+   },450);
+ },{passive:true});
+ box.addEventListener("touchmove",e=>{
+   if(!btn||e.touches.length!==1)return;
+   const t=e.touches[0];
+   if(!sorting){
+     if(Math.hypot(t.clientX-lastX,t.clientY-lastY)>10)stopTimer();
+     return;
+   }
+   e.preventDefault();
+   const target=document.elementFromPoint(t.clientX,t.clientY)?.closest?.("[data-work-page]");
+   if(!target||target===btn||target.parentElement!==box)return;
+   const r=target.getBoundingClientRect();
+   box.insertBefore(btn,t.clientX<r.left+r.width/2?target:target.nextSibling);
+ },{passive:false});
+ const finish=e=>{
+   stopTimer();
+   if(sorting){
+     e.preventDefault?.();
+     box.classList.remove("tab-sorting");btn?.classList.remove("work-tab-dragging");
+     saveWorkPageOrder();
+     try{window.getSelection()?.removeAllRanges()}catch{}
+   }
+   btn=null;sorting=false;
+ };
+ box.addEventListener("touchend",finish,{passive:false});
+ box.addEventListener("touchcancel",finish,{passive:false});
+}
 bindWorkPageTabs();
+bindWorkPageTouchSortFallback();
 setWorkPage(activeWorkPage);
 render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
