@@ -937,9 +937,33 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 .memo-editor-top,.memo-editor-bottom{position:relative;z-index:220}
 .memo-editor-viewport{z-index:1}
+
+/* v2.0.0 Pencil描画中のSafari選択・ハイライト防止 */
+.memo-editor,
+.memo-editor *,
+.memo-editor-page,
+.memo-editor-page *,
+.memo-editor-pdf-page,
+.memo-editor-image,
+.memo-editor-ink{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+.memo-editor-page,
+.memo-editor-pdf-page,
+.memo-editor-image{
+  pointer-events:none!important;
+}
+.memo-editor-ink{
+  pointer-events:auto!important;
+  touch-action:none!important;
+  cursor:crosshair;
+}
 </style>
 </head>
-<body data-build="v1.9.9">
+<body data-build="v2.0.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5016,7 +5040,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"1.9.9",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.0.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5517,7 +5541,9 @@ function editorBindInk(canvas,fileId,pageIndex){
     }else editorDrawStroke(ctx,current,rr.width,rr.height);
   };
   const startDraw=e=>{
-    drawing=true; pointerId=e.pointerId; canvas.setPointerCapture?.(pointerId);
+    drawing=true; pointerId=e.pointerId;
+    try{canvas.setPointerCapture(pointerId)}catch{}
+    try{window.getSelection()?.removeAllRanges()}catch{};
     const p=editorPoint(e,canvas);
     current={tool:memoEditorTool,color:memoEditorColor,
       width:memoEditorTool==="eraser"?Math.max(18,memoEditorWidth*4):memoEditorWidth,
@@ -5526,12 +5552,15 @@ function editorBindInk(canvas,fileId,pageIndex){
     editorRedo(fileId,pageIndex).length=0; drawLive();
   };
   const move=e=>{
-    if(!drawing||e.pointerId!==pointerId||!current)return; e.preventDefault();
+    if(!drawing||e.pointerId!==pointerId||!current)return;
+    e.preventDefault();e.stopPropagation();
+    try{window.getSelection()?.removeAllRanges()}catch{};
     const events=(typeof e.getCoalescedEvents==="function")?e.getCoalescedEvents():[];
     const list=events.length?events:[e];
     if(current.tool==="line"){
-      lineEnd=editorPoint(list[list.length-1]||e,canvas);
-      current.points=[lineStart,lineEnd];
+      const lastEvent=list[list.length-1]||e;
+      lineEnd=editorPoint(lastEvent,canvas);
+      current.points=[lineStart,{...lineEnd}];
     }else{
       const r=canvas.getBoundingClientRect();
       for(const ev of list){
@@ -5544,7 +5573,9 @@ function editorBindInk(canvas,fileId,pageIndex){
     drawLive();
   };
   const finish=e=>{
-    if(!drawing||e.pointerId!==pointerId||!current)return; e.preventDefault(); drawing=false;
+    if(!drawing||e.pointerId!==pointerId||!current)return;
+    e.preventDefault();e.stopPropagation(); drawing=false;
+    try{canvas.releasePointerCapture(pointerId)}catch{};
     if(current.tool==="line"){
       // pointerupでは終点を取り直さず、描画中に最後に追従できた位置を使う
       const fixedEnd=lineEnd ? {...lineEnd} : {...lineStart};
@@ -5562,8 +5593,16 @@ function editorBindInk(canvas,fileId,pageIndex){
   });
   canvas.addEventListener("pointermove",e=>{
     if(e.pointerType==="pen"||(e.pointerType==="touch"&&memoEditorFingerDraw))move(e)
-  });
-  canvas.addEventListener("pointerup",finish);
+  },{passive:false});
+  if("onpointerrawupdate" in window){
+    canvas.addEventListener("pointerrawupdate",e=>{
+      if(e.pointerType==="pen"&&drawing&&e.pointerId===pointerId)move(e)
+    },{passive:false});
+  }
+  canvas.addEventListener("pointerup",finish,{passive:false});
+  canvas.addEventListener("selectstart",e=>e.preventDefault());
+  canvas.addEventListener("contextmenu",e=>e.preventDefault());
+  canvas.addEventListener("dragstart",e=>e.preventDefault());
   canvas.addEventListener("pointercancel",e=>{
     if(drawing&&e.pointerId===pointerId){drawing=false;current=null;pointerId=null;lineStart=null;lineEnd=null;redraw()}
   });
@@ -5676,7 +5715,7 @@ async function renderMemoEditorFile(){
         const renderView=pg.getViewport({scale:renderScale});
         const holder=document.createElement("div");holder.className="memo-editor-page";
         holder.style.maxWidth=Math.round(view.width)+"px";
-        const c=document.createElement("canvas");c.className="memo-editor-pdf-page";
+        const c=document.createElement("canvas");c.className="memo-editor-pdf-page";c.setAttribute("draggable","false");
         c.width=Math.ceil(renderView.width);c.height=Math.ceil(renderView.height);
         c.style.aspectRatio=`${view.width}/${view.height}`;
         await pg.render({canvasContext:c.getContext("2d"),viewport:renderView}).promise;
@@ -5691,7 +5730,7 @@ async function renderMemoEditorFile(){
     }
   }else{
     const holder=document.createElement("div");holder.className="memo-editor-page";
-    const img=document.createElement("img");img.className="memo-editor-image";
+    const img=document.createElement("img");img.className="memo-editor-image";img.draggable=false;
     const url=URL.createObjectURL(f.blob);memoEditorUrls.push(url);img.src=url;
     holder.appendChild(img);
     const ink=document.createElement("canvas");ink.className="memo-editor-ink";
@@ -5779,6 +5818,12 @@ async function drawMemoThumb(canvas,rec,isPdf){
     if(strokes.length)editorCompositeStrokes(ctx,strokes,rx,ry,rw,rh);
   }catch(e){console.warn("thumb",e)}
 }
+
+document.addEventListener("selectionchange",()=>{
+  if(document.getElementById("memoEditor")?.classList.contains("show")){
+    try{window.getSelection()?.removeAllRanges()}catch{}
+  }
+});
 </script>
 
 <div id="memoEditor" class="memo-editor" aria-hidden="true">

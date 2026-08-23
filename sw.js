@@ -1,4 +1,4 @@
-const CACHE="gencho-v199-line-endpoint";
+const CACHE="gencho-v200-pointer-capture-selection-fix";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
