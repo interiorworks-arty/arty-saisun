@@ -1071,7 +1071,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .export-drawing-empty{padding:6px 3px;font-size:12px;color:#8a817a}
 </style>
 </head>
-<body data-build="v2.3.2">
+<body data-build="v2.3.3">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5246,7 +5246,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.3.2",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.3.3",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5796,19 +5796,35 @@ function editorDrawStroke(ctx,s,w,h){
     ctx.strokeStyle=s.color||"#d32f2f";
     ctx.lineWidth=(s.width||4)*Math.max(.7,w/900);
   }
+
+  const p0=pts[0];
   ctx.beginPath();
-  ctx.moveTo(pts[0].x*w,pts[0].y*h);
-  for(let i=1;i<pts.length;i++){
-    const a=pts[i-1],b=pts[i];
-    const mx=(a.x+b.x)*w/2,my=(a.y+b.y)*h/2;
-    ctx.quadraticCurveTo(a.x*w,a.y*h,mx,my);
+  ctx.moveTo(p0.x*w,p0.y*h);
+
+  // 直線ツールは「始点→終点」の2点をそのまま結ぶ。
+  // 以前は2点でもquadraticCurveToを使っていたため、
+  // 終点ではなく中間点で線が止まっていた。
+  if(s.shape==="line" && pts.length>=2){
+    const last=pts[pts.length-1];
+    ctx.lineTo(last.x*w,last.y*h);
+  }else if(pts.length===2){
+    // 2点しかない通常ストロークも確実に終点まで描く。
+    ctx.lineTo(pts[1].x*w,pts[1].y*h);
+  }else if(pts.length>2){
+    for(let i=1;i<pts.length-1;i++){
+      const a=pts[i],b=pts[i+1];
+      const mx=(a.x+b.x)*w/2,my=(a.y+b.y)*h/2;
+      ctx.quadraticCurveTo(a.x*w,a.y*h,mx,my);
+    }
+    // 曲線も最後は必ず保存された終点まで到達させる。
+    const last=pts[pts.length-1];
+    ctx.lineTo(last.x*w,last.y*h);
+  }else{
+    ctx.arc(p0.x*w,p0.y*h,ctx.lineWidth/2,0,Math.PI*2);
   }
-  if(pts.length===1){
-    const a=pts[0];ctx.arc(a.x*w,a.y*h,ctx.lineWidth/2,0,Math.PI*2)
-  }
+
   ctx.stroke();ctx.restore();
 }
-
 function editorCompositeStrokes(baseCtx,strokes,x,y,w,h){
   if(!baseCtx||!strokes||!strokes.length||w<=0||h<=0)return;
   const layer=document.createElement("canvas");
@@ -5883,9 +5899,14 @@ function editorBindInk(canvas,fileId,pageIndex){
     ctx.beginPath();
     const p0=cssPointFromNorm(pts[0]);
     ctx.moveTo(p0.x,p0.y);
-    for(let i=1;i<pts.length;i++){
-      const p=cssPointFromNorm(pts[i]);
+    if(stroke.shape==="line"&&pts.length>=2){
+      const p=cssPointFromNorm(pts[pts.length-1]);
       ctx.lineTo(p.x,p.y);
+    }else{
+      for(let i=1;i<pts.length;i++){
+        const p=cssPointFromNorm(pts[i]);
+        ctx.lineTo(p.x,p.y);
+      }
     }
     if(pts.length===1){
       ctx.arc(p0.x,p0.y,ctx.lineWidth/2,0,Math.PI*2);
