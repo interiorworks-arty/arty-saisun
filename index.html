@@ -1071,7 +1071,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .export-drawing-empty{padding:6px 3px;font-size:12px;color:#8a817a}
 </style>
 </head>
-<body data-build="v2.3.5">
+<body data-build="v2.3.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1479,7 +1479,7 @@ function registerProduct(product,repeat){
 
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,activeGenericEnter=null,keypadMode="measure",numberCursor=0,productCursor=0;
 
-const KEYPAD_PREF_KEY="gencho-keypad-layout-v2";
+const KEYPAD_PREF_KEY="gencho-keypad-layout-v3";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
 
 const PRODUCT_KEYPAD_PREF_KEY="gencho-product-keypad-layout-v1";
@@ -1667,7 +1667,8 @@ function applyKeypadLayout(){
     requestAnimationFrame(()=>{
       const rect=kp.getBoundingClientRect();
       const left=Math.max(8,window.innerWidth-rect.width-18);
-      const top=Math.max(8,window.innerHeight-rect.height-92);
+      const bottomGap=86;
+      const top=Math.max(8,window.innerHeight-rect.height-bottomGap);
       kp.style.left=left+"px";
       kp.style.top=top+"px";
     });
@@ -1919,22 +1920,12 @@ function syncGenericNumber(){
 
 function ensureMeasureKeypadDefaultBottomRight(){
   const kp=$("#measureKeypad");if(!kp)return;
-  // If user has already moved/resized the keypad, keep the saved layout.
+  // v3でユーザーが移動済みなら、その保存位置を優先。
   let hasSaved=false;
-  try{
-    const keys=["gencho-keypad-layout-v1","gencho-measure-keypad-layout-v1","measure-keypad-layout"];
-    hasSaved=keys.some(k=>localStorage.getItem(k));
-  }catch{}
+  try{hasSaved=!!localStorage.getItem(KEYPAD_PREF_KEY)}catch{}
   if(hasSaved)return;
-
-  // Only set the initial position once per load.
-  if(kp.dataset.defaultPlaced==="1")return;
-  kp.dataset.defaultPlaced="1";
-  requestAnimationFrame(()=>{
-    const w=kp.offsetWidth||360,h=kp.offsetHeight||420;
-    kp.style.left=Math.max(8,window.innerWidth-w-12)+"px";
-    kp.style.top=Math.max(8,window.innerHeight-h-12)+"px";
-  });
+  // 未保存なら applyKeypadLayout() が右下へ配置する。
+  keypadLayout=null;
 }
 function hideMeasureKeypad(){
   clearActiveNumberEditor();
@@ -5272,7 +5263,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.3.5",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.3.6",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6366,8 +6357,7 @@ window.addEventListener("resize",()=>{
   if(!kp||kp.dataset.defaultPlaced!=="1")return;
   let hasSaved=false;
   try{
-    const keys=["gencho-keypad-layout-v1","gencho-measure-keypad-layout-v1","measure-keypad-layout"];
-    hasSaved=keys.some(k=>localStorage.getItem(k));
+    hasSaved=!!localStorage.getItem(KEYPAD_PREF_KEY);
   }catch{}
   if(hasSaved)return;
   const w=kp.offsetWidth||360,h=kp.offsetHeight||420;
