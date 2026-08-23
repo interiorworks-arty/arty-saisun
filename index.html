@@ -1038,9 +1038,20 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .memo-editor-image-page .memo-editor-image{
   object-fit:contain!important;
 }
+
+/* v2.2.2 タブ1列＋画像全体フィット */
+.work-page-tabs{grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:5px!important}
+.work-page-tabs button{min-width:0!important;padding:9px 2px!important;font-size:11px!important;overflow:hidden;text-overflow:ellipsis;touch-action:none}
+.work-page-tabs button.work-tab-dragging{opacity:.55;transform:scale(.96)}
+@media(max-width:600px){
+ .work-page-tabs{grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:3px!important}
+ .work-page-tabs button{padding:8px 1px!important;font-size:9px!important;letter-spacing:-.04em}
+}
+.memo-editor-image-page{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;flex:none!important}
+.memo-editor-image-page .memo-editor-image{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important}
 </style>
 </head>
-<body data-build="v2.2.1">
+<body data-build="v2.2.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5127,7 +5138,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.2.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.2.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5499,9 +5510,49 @@ $("#productKeypad").addEventListener("pointerdown",e=>{const btn=e.target.closes
 })();
 document.addEventListener("click",e=>{const pk=$("#productKeypad");if(!pk||!pk.classList.contains("show"))return;if(pk.contains(e.target)||e.target.classList?.contains("product-button"))return;hideProductKeypad()});
 
-document.querySelectorAll("[data-work-page]").forEach(btn=>{
-  btn.onclick=()=>setWorkPage(btn.dataset.workPage);
-});
+const WORK_PAGE_ORDER_KEY="gencho-work-page-order-v1";
+function applyWorkPageOrder(){
+ const box=document.querySelector(".work-page-tabs");if(!box)return;
+ const defs=["wall","floor","sheet","other","photo","memo","drawing","order"];let order=defs;
+ try{const a=JSON.parse(localStorage.getItem(WORK_PAGE_ORDER_KEY)||"null");if(Array.isArray(a))order=[...a.filter(x=>defs.includes(x)),...defs.filter(x=>!a.includes(x))]}catch{}
+ order.forEach(k=>{const b=box.querySelector(`[data-work-page="${k}"]`);if(b)box.appendChild(b)});
+}
+function saveWorkPageOrder(){
+ const box=document.querySelector(".work-page-tabs");if(!box)return;
+ try{localStorage.setItem(WORK_PAGE_ORDER_KEY,JSON.stringify([...box.querySelectorAll("[data-work-page]")].map(b=>b.dataset.workPage)))}catch{}
+}
+function bindWorkPageTabs(){
+ const box=document.querySelector(".work-page-tabs");if(!box||box.dataset.sortBound==="1")return;
+ box.dataset.sortBound="1";applyWorkPageOrder();
+ box.querySelectorAll("[data-work-page]").forEach(btn=>{
+   let timer=0,dragging=false,pid=null,sx=0,sy=0,suppressClick=false;
+   btn.onclick=()=>{if(!suppressClick)setWorkPage(btn.dataset.workPage)};
+   const clear=()=>{if(timer){clearTimeout(timer);timer=0}};
+   btn.addEventListener("pointerdown",e=>{
+     if(e.pointerType==="mouse"&&e.button!==0)return;
+     pid=e.pointerId;sx=e.clientX;sy=e.clientY;dragging=false;suppressClick=false;clear();
+     timer=setTimeout(()=>{dragging=true;suppressClick=true;btn.classList.add("work-tab-dragging");btn.setPointerCapture?.(pid)},450);
+   });
+   btn.addEventListener("pointermove",e=>{
+     if(e.pointerId!==pid)return;
+     if(!dragging){if(Math.hypot(e.clientX-sx,e.clientY-sy)>10)clear();return}
+     e.preventDefault();
+     const t=document.elementFromPoint(e.clientX,e.clientY)?.closest?.("[data-work-page]");
+     if(!t||t===btn||t.parentElement!==box)return;
+     const r=t.getBoundingClientRect();
+     box.insertBefore(btn,e.clientX<r.left+r.width/2?t:t.nextSibling);
+   },{passive:false});
+   const finish=e=>{
+     if(pid!==null&&e.pointerId!==undefined&&e.pointerId!==pid)return;
+     clear();
+     if(dragging){e.preventDefault?.();btn.classList.remove("work-tab-dragging");saveWorkPageOrder();setTimeout(()=>{dragging=false;suppressClick=false},120)}
+     pid=null;
+   };
+   btn.addEventListener("pointerup",finish);btn.addEventListener("pointercancel",finish);
+   btn.addEventListener("contextmenu",e=>{if(dragging||timer)e.preventDefault()});
+ });
+}
+bindWorkPageTabs();
 setWorkPage(activeWorkPage);
 render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
@@ -5872,7 +5923,7 @@ function bindMemoEditorViewportGestures(){
     touches.set(e.pointerId,{x:e.clientX-r.left,y:e.clientY-r.top});
     vp.setPointerCapture?.(e.pointerId);
     if(touches.size===1){
-      oneFinger={id:e.pointerId,startY:e.clientY,startPanY:memoEditorPanY};
+      oneFinger={id:e.pointerId,startX:e.clientX,startY:e.clientY,startPanX:memoEditorPanX,startPanY:memoEditorPanY};
     }else if(touches.size>=2){
       oneFinger=null;
       const [a,b]=[...touches.values()];
@@ -5901,10 +5952,12 @@ function bindMemoEditorViewportGestures(){
       applyMemoEditorView();
     }else if(oneFinger&&oneFinger.id===e.pointerId){
       // 指1本は図面を縦に送る。Safariのページスクロールとは分離。
+      memoEditorPanX=oneFinger.startPanX+(e.clientX-oneFinger.startX);
       memoEditorPanY=oneFinger.startPanY+(e.clientY-oneFinger.startY);
-      const stage=$("#memoEditorStage"),vpH=vp.clientHeight,scaledH=(stage.scrollHeight||vpH)*memoEditorScale;
-      const minY=Math.min(0,vpH-scaledH);
-      memoEditorPanY=Math.max(minY,Math.min(0,memoEditorPanY));
+      const stage=$("#memoEditorStage"),vpH=vp.clientHeight,vpW=vp.clientWidth;
+      const scaledH=(stage.scrollHeight||vpH)*memoEditorScale,scaledW=(stage.scrollWidth||vpW)*memoEditorScale;
+      memoEditorPanY=Math.max(Math.min(0,vpH-scaledH),Math.min(0,memoEditorPanY));
+      memoEditorPanX=Math.max(Math.min(0,vpW-scaledW),Math.min(0,memoEditorPanX));
       applyMemoEditorView();
     }
   },{passive:false});
@@ -5915,7 +5968,7 @@ function bindMemoEditorViewportGestures(){
     if(!touches.size)oneFinger=null;
     else if(touches.size===1&&!memoEditorFingerDraw){
       const id=[...touches.keys()][0],pt=[...touches.values()][0];
-      oneFinger={id,startY:pt.y,startPanY:memoEditorPanY};
+      oneFinger={id,startX:pt.x,startY:pt.y,startPanX:memoEditorPanX,startPanY:memoEditorPanY};
     }
   };
   vp.addEventListener("pointerup",end);
@@ -5969,15 +6022,16 @@ async function renderMemoEditorFile(){
       const maxW=Math.max(100, (vp?.clientWidth||window.innerWidth)-20);
       const maxH=Math.max(100, (vp?.clientHeight||window.innerHeight)-20);
       const iw=Math.max(1,img.naturalWidth), ih=Math.max(1,img.naturalHeight);
-      const fit=Math.min(maxW/iw,maxH/ih);
+      const fit=Math.min(maxW/iw,maxH/ih,1);
       const cssW=Math.max(1,Math.floor(iw*fit));
       const cssH=Math.max(1,Math.floor(ih*fit));
-      holder.style.width=cssW+"px";
-      holder.style.maxWidth="none";
-      holder.style.height=cssH+"px";
-      img.style.width="100%";
-      img.style.height="100%";
-      img.style.objectFit="contain";
+      holder.style.setProperty("width",cssW+"px","important");
+      holder.style.setProperty("height",cssH+"px","important");
+      holder.style.setProperty("max-width","none","important");
+      holder.style.setProperty("min-height","0","important");
+      img.style.setProperty("width","100%","important");
+      img.style.setProperty("height","100%","important");
+      img.style.setProperty("object-fit","contain","important");
       resetMemoEditorView();
       editorBindInk(ink,f.id,0);
     };
