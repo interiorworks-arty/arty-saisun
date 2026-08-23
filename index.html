@@ -1001,7 +1001,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 </style>
 </head>
-<body data-build="v2.1.0">
+<body data-build="v2.1.1">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5056,7 +5056,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.1.0",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.1.1",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5457,21 +5457,24 @@ function cloneInkData(v){try{return JSON.parse(JSON.stringify(v))}catch{return v
 function persistMemoEditorInk(fileId){
   const rec=memoEditorInkRec(fileId);
   rec.updatedAt=Date.now();
+  ensureMemoInk(state)[fileId]=rec;
   save();
 }
 function memoEditorInkRec(fileId){
   const rec=memoInkRecord(fileId);
   if(!Array.isArray(rec.pageStrokes))rec.pageStrokes=[];
   if(!Array.isArray(rec.pageRedo))rec.pageRedo=[];
-  // 旧形式は一度だけコピー。その後はpageStrokesだけを正とする。
-  if(rec.inkEngineVersion!=="2.1"){
-    if(Array.isArray(rec.strokes)&&rec.strokes.length){
-      if(!Array.isArray(rec.pageStrokes[0])||!rec.pageStrokes[0].length){
-        rec.pageStrokes[0]=rec.strokes.map(s=>JSON.parse(JSON.stringify(s)));
-      }
+
+  // v2.1.1以降は pageStrokes だけを正データとして扱う。
+  // 旧 strokes は一度だけ移行し、その後は必ず空にして再復活を防ぐ。
+  if(rec.inkEngineVersion!=="2.1.1"){
+    const hasNew=rec.pageStrokes.some(a=>Array.isArray(a)&&a.length);
+    if(!hasNew && Array.isArray(rec.strokes) && rec.strokes.length){
+      rec.pageStrokes[0]=rec.strokes.map(s=>JSON.parse(JSON.stringify(s)));
     }
-    rec.inkEngineVersion="2.1";
-    rec.strokes=[]; // 旧データからの再復活を防止
+    rec.strokes=[];
+    rec.redo=[];
+    rec.inkEngineVersion="2.1.1";
   }
   return rec;
 }
@@ -5541,6 +5544,8 @@ function editorBindInk(canvas,fileId,pageIndex){
   let lastRawPoint=null;
   let lineStart=null;
   let lineEnd=null;
+  let liveRaf=0;
+  const liveSegments=[];
 
   const pageRect=()=>canvas.getBoundingClientRect();
 
@@ -5605,25 +5610,30 @@ function editorBindInk(canvas,fileId,pageIndex){
     for(const s of strokes)drawStrokeFast(ctx,s,r);
   };
 
-  const drawIncrement=(a,b,stroke)=>{
+  const flushLiveSegments=()=>{
+    liveRaf=0;
+    if(!liveSegments.length)return;
     const {ctx,r}=setupCanvas();
-    const pa=cssPointFromNorm(a),pb=cssPointFromNorm(b);
-    ctx.save();
-    ctx.lineCap="round";ctx.lineJoin="round";
-    if(stroke.tool==="eraser"){
-      ctx.globalCompositeOperation="destination-out";
-      ctx.strokeStyle="rgba(0,0,0,1)";
-      ctx.lineWidth=(stroke.width||18)*Math.max(.7,r.width/900);
-    }else{
-      ctx.globalCompositeOperation="source-over";
-      ctx.strokeStyle=stroke.color||"#d32f2f";
-      ctx.lineWidth=(stroke.width||4)*Math.max(.7,r.width/900);
+    while(liveSegments.length){
+      const {a,b,stroke}=liveSegments.shift();
+      const pa=cssPointFromNorm(a),pb=cssPointFromNorm(b);
+      ctx.save();
+      ctx.lineCap="round";ctx.lineJoin="round";
+      if(stroke.tool==="eraser"){
+        ctx.globalCompositeOperation="destination-out";
+        ctx.strokeStyle="rgba(0,0,0,1)";
+        ctx.lineWidth=(stroke.width||18)*Math.max(.7,r.width/900);
+      }else{
+        ctx.globalCompositeOperation="source-over";
+        ctx.strokeStyle=stroke.color||"#d32f2f";
+        ctx.lineWidth=(stroke.width||4)*Math.max(.7,r.width/900);
+      }
+      ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();ctx.restore();
     }
-    ctx.beginPath();
-    ctx.moveTo(pa.x,pa.y);
-    ctx.lineTo(pb.x,pb.y);
-    ctx.stroke();
-    ctx.restore();
+  };
+  const drawIncrement=(a,b,stroke)=>{
+    liveSegments.push({a:{...a},b:{...b},stroke:{tool:stroke.tool,color:stroke.color,width:stroke.width}});
+    if(!liveRaf)liveRaf=requestAnimationFrame(flushLiveSegments);
   };
 
   const drawLinePreview=()=>{
@@ -5674,7 +5684,7 @@ function editorBindInk(canvas,fileId,pageIndex){
       const last=current.points[current.points.length-1];
       const px=Math.hypot((p.x-last.x)*r.width,(p.y-last.y)*r.height);
       // Pencil追従優先：0.25px以上の動きだけ追加
-      if(px>=0.25){
+      if(px>=0.4){
         current.points.push(p);
         drawIncrement(last,p,current);
       }
@@ -5705,6 +5715,7 @@ function editorBindInk(canvas,fileId,pageIndex){
       if(current.points.length===1)current.points.push({...current.points[0]});
     }
 
+    if(liveRaf){cancelAnimationFrame(liveRaf);liveRaf=0;flushLiveSegments()}
     editorStrokes(fileId,pageIndex).push(current);
     persistMemoEditorInk(fileId);
 
@@ -5908,8 +5919,14 @@ function undoMemoEditor(){
   const f=memoEditorCurrent();if(!f)return;
   const rec=memoEditorInkRec(f.id);
   for(let i=rec.pageStrokes.length-1;i>=0;i--){
-    if(Array.isArray(rec.pageStrokes[i])&&rec.pageStrokes[i].length){
-      const s=rec.pageStrokes[i].pop();editorRedo(f.id,i).push(s);persistMemoEditorInk(f.id);renderMemoEditorFile();return;
+    const arr=rec.pageStrokes[i];
+    if(Array.isArray(arr)&&arr.length){
+      const s=arr.pop();
+      if(!Array.isArray(rec.pageRedo[i]))rec.pageRedo[i]=[];
+      rec.pageRedo[i].push(s);
+      persistMemoEditorInk(f.id);
+      renderMemoEditorFile();
+      return;
     }
   }
 }
@@ -5917,14 +5934,19 @@ function redoMemoEditor(){
   const f=memoEditorCurrent();if(!f)return;
   const rec=memoEditorInkRec(f.id);
   for(let i=rec.pageRedo.length-1;i>=0;i--){
-    if(Array.isArray(rec.pageRedo[i])&&rec.pageRedo[i].length){
-      const s=rec.pageRedo[i].pop();editorStrokes(f.id,i).push(s);persistMemoEditorInk(f.id);renderMemoEditorFile();return;
+    const arr=rec.pageRedo[i];
+    if(Array.isArray(arr)&&arr.length){
+      const s=arr.pop();
+      if(!Array.isArray(rec.pageStrokes[i]))rec.pageStrokes[i]=[];
+      rec.pageStrokes[i].push(s);
+      persistMemoEditorInk(f.id);
+      renderMemoEditorFile();
+      return;
     }
   }
 }
 function bindMemoEditorControls(){
-  const back=$("#memoEditorBack");if(!back||back.dataset.bound==="1")return;
-  back.dataset.bound="1";
+  const back=$("#memoEditorBack");if(!back)return;
   back.onclick=closeMemoEditor;
   $("#memoEditorPrev").onclick=()=>moveMemoEditor(-1);
   $("#memoEditorNext").onclick=()=>moveMemoEditor(1);
@@ -5970,6 +5992,12 @@ document.addEventListener("selectionchange",()=>{
     try{window.getSelection()?.removeAllRanges()}catch{}
   }
 });
+
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",()=>bindMemoEditorControls(),{once:true});
+}else{
+  bindMemoEditorControls();
+}
 </script>
 
 <div id="memoEditor" class="memo-editor" aria-hidden="true">
