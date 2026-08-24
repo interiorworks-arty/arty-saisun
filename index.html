@@ -1071,7 +1071,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .export-drawing-empty{padding:6px 3px;font-size:12px;color:#8a817a}
 </style>
 </head>
-<body data-build="v2.3.6">
+<body data-build="v2.3.7">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4483,51 +4483,27 @@ async function canvasToPdfJpegs(canvas){
   return out;
 }
 function makePdfFromJpegs(images){
-  const enc=new TextEncoder(),chunks=[],offsets=[0];
-  let length=0;
+  const enc=new TextEncoder(),chunks=[],offsets=[0];let length=0;
   const pushText=s=>{const b=enc.encode(s);chunks.push(b);length+=b.length};
   const pushBytes=b=>{chunks.push(b);length+=b.length};
   const objStart=n=>{offsets[n]=length;pushText(`${n} 0 obj\n`)};
   const objEnd=()=>pushText(`endobj\n`);
-
-  const A4_SHORT=595.28,A4_LONG=841.89,margin=18;
-  const pageObjs=images.map((_,i)=>3+i*3);
-  const objCount=2+images.length*3;
-
+  // アプリ生成ページはA4縦固定。取り込み図面PDFは原本直接結合なので原本の向きを維持。
+  const pageW=595.28,pageH=841.89,margin=18;
+  const pageObjs=images.map((_,i)=>3+i*3),objCount=2+images.length*3;
   pushText("%PDF-1.4\n%PDFGEN\n");
   objStart(1);pushText("<< /Type /Catalog /Pages 2 0 R >>\n");objEnd();
   objStart(2);pushText(`<< /Type /Pages /Count ${images.length} /Kids [${pageObjs.map(n=>`${n} 0 R`).join(" ")}] >>\n`);objEnd();
-
   images.forEach((im,i)=>{
     const pageObj=3+i*3,imageObj=pageObj+1,contentObj=pageObj+2;
-    // ページごとに内容の向きを判定。
-    // 横長の図面・画像はA4横、縦長のメモや現調ページはA4縦。
-    const landscape=Number(im.width)>Number(im.height);
-    const pageW=landscape?A4_LONG:A4_SHORT;
-    const pageH=landscape?A4_SHORT:A4_LONG;
-    const maxW=pageW-margin*2,maxH=pageH-margin*2;
-    const scale=Math.min(maxW/im.width,maxH/im.height);
-    const drawW=im.width*scale,drawH=im.height*scale;
-    const x=(pageW-drawW)/2,y=(pageH-drawH)/2;
-    const content=`q\n${drawW.toFixed(3)} 0 0 ${drawH.toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} cm\n/Im0 Do\nQ\n`;
-    const cb=enc.encode(content);
-
-    objStart(pageObj);
-    pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${imageObj} 0 R >> >> /Contents ${contentObj} 0 R >>\n`);
-    objEnd();
-
-    objStart(imageObj);
-    pushText(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`);
-    pushBytes(im.bytes);pushText("\nendstream\n");objEnd();
-
-    objStart(contentObj);
-    pushText(`<< /Length ${cb.length} >>\nstream\n`);
-    pushBytes(cb);pushText("endstream\n");objEnd();
+    const scale=Math.min((pageW-margin*2)/im.width,(pageH-margin*2)/im.height);
+    const drawW=im.width*scale,drawH=im.height*scale,x=(pageW-drawW)/2,y=(pageH-drawH)/2;
+    const content=`q\n${drawW.toFixed(3)} 0 0 ${drawH.toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} cm\n/Im0 Do\nQ\n`,cb=enc.encode(content);
+    objStart(pageObj);pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${imageObj} 0 R >> >> /Contents ${contentObj} 0 R >>\n`);objEnd();
+    objStart(imageObj);pushText(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`);pushBytes(im.bytes);pushText("\nendstream\n");objEnd();
+    objStart(contentObj);pushText(`<< /Length ${cb.length} >>\nstream\n`);pushBytes(cb);pushText("endstream\n");objEnd();
   });
-
-  const xref=length;
-  pushText(`xref\n0 ${objCount+1}\n`);
-  pushText("0000000000 65535 f \n");
+  const xref=length;pushText(`xref\n0 ${objCount+1}\n0000000000 65535 f \n`);
   for(let n=1;n<=objCount;n++)pushText(`${String(offsets[n]).padStart(10,"0")} 00000 n \n`);
   pushText(`trailer\n<< /Size ${objCount+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
   return new Blob([concatUint8(chunks)],{type:"application/pdf"});
@@ -5263,7 +5239,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.3.6",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.3.7",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
