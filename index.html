@@ -1131,9 +1131,18 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   touch-action:manipulation;-webkit-user-select:none;user-select:none;
 }
 
+
+/* v2.4.2 出力選択：全てを選択 */
+.export-select-all-row{display:flex;justify-content:flex-end;margin:2px 0 8px}
+.export-select-all-btn{
+  border:0;border-radius:9px;background:#e5dfda;color:#514a45;
+  padding:8px 12px;font-size:12px;font-weight:900;touch-action:manipulation;
+}
+.export-select-all-btn.all-selected{background:#665f59;color:#fff}
+
 </style>
 </head>
-<body data-build="v2.4.1">
+<body data-build="v2.4.2">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1277,6 +1286,9 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 <div id="exportSheet" class="menu">
   <div class="sheet">
     <div class="sheet-title-row"><h3>出力内容を選択</h3></div>
+    <div class="export-select-all-row">
+      <button type="button" id="exportSelectAll" class="export-select-all-btn">全てを選択</button>
+    </div>
     <div class="export-select-list">
       <label class="export-select-item"><input type="checkbox" data-export-part="wall">クロス</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="floor">床</label>
@@ -5365,7 +5377,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.1",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.2",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5631,10 +5643,33 @@ $("#currentSitePdf").onclick=async()=>{
   });
   $("#exportSheet").classList.add("show");
   await renderExportDrawingChoices();
+  syncExportSelectAllButton();
 };
 $("#closeExportSheet").onclick=()=>$("#exportSheet").classList.remove("show");
+
+const exportSelectAllBtn=$("#exportSelectAll");
+function syncExportSelectAllButton(){
+  if(!exportSelectAllBtn)return;
+  const boxes=[...document.querySelectorAll("#exportSheet [data-export-part]")];
+  const all=boxes.length&&boxes.every(cb=>cb.checked);
+  exportSelectAllBtn.classList.toggle("all-selected",all);
+  exportSelectAllBtn.textContent=all?"全て解除":"全てを選択";
+}
+if(exportSelectAllBtn){
+  exportSelectAllBtn.onclick=async()=>{
+    const boxes=[...document.querySelectorAll("#exportSheet [data-export-part]")];
+    const shouldCheck=!boxes.every(cb=>cb.checked);
+    boxes.forEach(cb=>cb.checked=shouldCheck);
+    await renderExportDrawingChoices();
+    syncExportSelectAllButton();
+  };
+}
+document.querySelectorAll("#exportSheet [data-export-part]").forEach(cb=>{
+  cb.addEventListener("change",()=>syncExportSelectAllButton());
+});
+
 const exportDrawingMaster=document.querySelector('#exportSheet [data-export-part="drawing"]');
-if(exportDrawingMaster)exportDrawingMaster.onchange=()=>renderExportDrawingChoices();
+if(exportDrawingMaster)exportDrawingMaster.onchange=async()=>{await renderExportDrawingChoices();syncExportSelectAllButton()};
 $("#exportSelectedImage").onclick=()=>exportSelectedAsImage();
 $("#exportSelectedPdf").onclick=()=>exportSelectedAsPdf();
 $("#siteListBtn").onclick=openSiteManager;
@@ -6472,27 +6507,39 @@ window.addEventListener("resize",()=>{
   kp.style.top=Math.max(8,window.innerHeight-h-12)+"px";
 });
 
-const __exportPreviewClose=$("#exportPdfPreviewClose");
-if(__exportPreviewClose){
+function bindExportPdfPreviewControls(){
+  const closeBtn=$("#exportPdfPreviewClose");
+  if(!closeBtn||closeBtn.dataset.bound==="1")return;
+  closeBtn.dataset.bound="1";
   const bindPreviewTap=(el,fn)=>{
     if(!el)return;
     let last=0;
     const run=e=>{
-      if(e?.type==="touchend")e.preventDefault();
-      const now=Date.now();if(now-last<350)return;last=now;
+      if(e?.cancelable)e.preventDefault();
+      e?.stopPropagation?.();
+      const now=Date.now();if(now-last<250)return;last=now;
       fn(e);
     };
-    el.addEventListener("pointerup",run,{passive:false});
-    el.addEventListener("touchend",run,{passive:false});
+    // iPad/Safariでも確実に反応するよう click を主軸にしつつ pointerup も併用。
     el.addEventListener("click",run,{passive:false});
+    el.addEventListener("pointerup",run,{passive:false});
   };
-  bindPreviewTap(__exportPreviewClose,()=>closeExportPdfPreview());
-  bindPreviewTap($("#exportPdfPreviewPrev"),()=>{if(exportPdfPreviewIndex>0){exportPdfPreviewIndex--;renderExportPdfPreviewPage()}});
-  bindPreviewTap($("#exportPdfPreviewNext"),()=>{if(exportPdfPreviewIndex<exportPdfPreviewImages.length-1){exportPdfPreviewIndex++;renderExportPdfPreviewPage()}});
+  bindPreviewTap(closeBtn,()=>closeExportPdfPreview());
+  bindPreviewTap($("#exportPdfPreviewPrev"),()=>{
+    if(exportPdfPreviewIndex>0){exportPdfPreviewIndex--;renderExportPdfPreviewPage()}
+  });
+  bindPreviewTap($("#exportPdfPreviewNext"),()=>{
+    if(exportPdfPreviewIndex<exportPdfPreviewImages.length-1){exportPdfPreviewIndex++;renderExportPdfPreviewPage()}
+  });
   bindPreviewTap($("#exportPdfPreviewShare"),async()=>{
     if(!exportPdfPreviewFile)return;
     await shareOrDownloadFile(exportPdfPreviewFile,$("#exportPdfPreviewTitle").textContent||"現調 PDF");
   });
+}
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",bindExportPdfPreviewControls,{once:true});
+}else{
+  bindExportPdfPreviewControls();
 }
 </script>
 
