@@ -1081,9 +1081,48 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   flex:0 0 auto!important;
 }
 
+
+/* v2.4.0 出力PDFプレビュー：iPad横向きでも1ページ全体表示 */
+.export-pdf-preview{
+  position:fixed;inset:0;z-index:5000;background:#d8d1cb;
+  display:none;flex-direction:column;
+}
+.export-pdf-preview.show{display:flex}
+.export-pdf-preview-top{
+  flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding:10px 12px;background:#f5f3f0;border-bottom:1px solid #cfc7c0;
+}
+.export-pdf-preview-title{
+  flex:1;min-width:0;font-size:13px;font-weight:900;color:#4d4742;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.export-pdf-preview-btn{
+  border:0;border-radius:9px;background:#e5dfda;color:#514a45;
+  padding:9px 12px;font-weight:900;font-size:12px;
+}
+.export-pdf-preview-btn.primary{background:#665f59;color:#fff}
+.export-pdf-preview-body{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  padding:14px;overflow:hidden;
+}
+.export-pdf-preview-page{
+  max-width:100%;max-height:100%;width:auto;height:auto;
+  object-fit:contain;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);
+}
+.export-pdf-preview-bottom{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:18px;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  background:#f5f3f0;border-top:1px solid #cfc7c0;
+}
+.export-pdf-preview-nav{
+  border:0;border-radius:10px;background:#e5dfda;color:#514a45;
+  min-width:58px;padding:9px 14px;font-size:18px;font-weight:900;
+}
+.export-pdf-preview-count{min-width:70px;text-align:center;font-weight:900;color:#514a45}
+
 </style>
 </head>
-<body data-build="v2.3.9">
+<body data-build="v2.4.0">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4500,22 +4539,45 @@ function makePdfFromJpegs(images){
   const pushBytes=b=>{chunks.push(b);length+=b.length};
   const objStart=n=>{offsets[n]=length;pushText(`${n} 0 obj\n`)};
   const objEnd=()=>pushText(`endobj\n`);
-  // アプリ生成ページはA4縦固定。取り込み図面PDFは原本直接結合なので原本の向きを維持。
-  const pageW=595.28,pageH=841.89,margin=18;
+  const A4W=595.28,A4H=841.89;
   const pageObjs=images.map((_,i)=>3+i*3),objCount=2+images.length*3;
   pushText("%PDF-1.4\n%PDFGEN\n");
-  objStart(1);pushText(`<< /Type /Catalog /Pages 2 0 R${images.length ? " /OpenAction [3 0 R /Fit]" : ""} >>\n`);objEnd();
+  objStart(1);pushText("<< /Type /Catalog /Pages 2 0 R >>\n");objEnd();
   objStart(2);pushText(`<< /Type /Pages /Count ${images.length} /Kids [${pageObjs.map(n=>`${n} 0 R`).join(" ")}] >>\n`);objEnd();
+
   images.forEach((im,i)=>{
     const pageObj=3+i*3,imageObj=pageObj+1,contentObj=pageObj+2;
-    const scale=Math.min((pageW-margin*2)/im.width,(pageH-margin*2)/im.height);
-    const drawW=im.width*scale,drawH=im.height*scale,x=(pageW-drawW)/2,y=(pageH-drawH)/2;
+    const original=!!im.originalPdfPage;
+    const pageW=original?Number(im.pageW)||A4W:A4W;
+    const pageH=original?Number(im.pageH)||A4H:A4H;
+    const margin=original?0:18;
+
+    let drawW,drawH,x,y;
+    if(original){
+      // 図面は元PDFのページサイズ・縦横・比率をそのまま維持。
+      drawW=pageW;drawH=pageH;x=0;y=0;
+    }else{
+      // アプリ生成ページはA4縦に統一。
+      const scale=Math.min((pageW-margin*2)/im.width,(pageH-margin*2)/im.height);
+      drawW=im.width*scale;drawH=im.height*scale;
+      x=(pageW-drawW)/2;y=(pageH-drawH)/2;
+    }
+
     const content=`q\n${drawW.toFixed(3)} 0 0 ${drawH.toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} cm\n/Im0 Do\nQ\n`,cb=enc.encode(content);
-    objStart(pageObj);pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${imageObj} 0 R >> >> /Contents ${contentObj} 0 R >>\n`);objEnd();
-    objStart(imageObj);pushText(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`);pushBytes(im.bytes);pushText("\nendstream\n");objEnd();
-    objStart(contentObj);pushText(`<< /Length ${cb.length} >>\nstream\n`);pushBytes(cb);pushText("endstream\n");objEnd();
+    objStart(pageObj);
+    pushText(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)}] /Resources << /XObject << /Im0 ${imageObj} 0 R >> >> /Contents ${contentObj} 0 R >>\n`);
+    objEnd();
+
+    objStart(imageObj);
+    pushText(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`);
+    pushBytes(im.bytes);pushText("\nendstream\n");objEnd();
+
+    objStart(contentObj);
+    pushText(`<< /Length ${cb.length} >>\nstream\n`);pushBytes(cb);pushText("endstream\n");objEnd();
   });
-  const xref=length;pushText(`xref\n0 ${objCount+1}\n0000000000 65535 f \n`);
+
+  const xref=length;
+  pushText(`xref\n0 ${objCount+1}\n0000000000 65535 f \n`);
   for(let n=1;n<=objCount;n++)pushText(`${String(offsets[n]).padStart(10,"0")} 00000 n \n`);
   pushText(`trailer\n<< /Size ${objCount+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
   return new Blob([concatUint8(chunks)],{type:"application/pdf"});
@@ -4959,6 +5021,10 @@ async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
           const view=pg.getViewport({scale});
           const c=document.createElement("canvas");
           c.width=Math.max(1,Math.ceil(view.width));c.height=Math.max(1,Math.ceil(view.height));
+          // 元PDFのMediaBox相当（PDF.js scale:1 は point 単位）を保持。
+          c._pdfOriginalPage=true;
+          c._pdfPageW=base.width;
+          c._pdfPageH=base.height;
           const ctx=c.getContext("2d",{alpha:false});
           ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
           await pg.render({canvasContext:ctx,viewport:view}).promise;
@@ -5035,20 +5101,57 @@ async function exportSelectedAsImage(){
     await shareOrDownloadFile(file,`${state.siteName||"現調"} ${exportTitle}`);
   }catch(e){console.error(e);alert("画像作成に失敗しました")}
 }
+
+let exportPdfPreviewFile=null,exportPdfPreviewImages=[],exportPdfPreviewIndex=0,exportPdfPreviewUrls=[];
+function closeExportPdfPreview(){
+  $("#exportPdfPreview")?.classList.remove("show");
+  $("#exportPdfPreview")?.setAttribute("aria-hidden","true");
+  exportPdfPreviewUrls.forEach(u=>URL.revokeObjectURL(u));
+  exportPdfPreviewUrls=[];exportPdfPreviewImages=[];exportPdfPreviewFile=null;exportPdfPreviewIndex=0;
+}
+function renderExportPdfPreviewPage(){
+  const img=$("#exportPdfPreviewImage"),count=$("#exportPdfPreviewCount");
+  if(!img||!exportPdfPreviewImages.length)return;
+  exportPdfPreviewIndex=Math.max(0,Math.min(exportPdfPreviewIndex,exportPdfPreviewImages.length-1));
+  img.src=exportPdfPreviewUrls[exportPdfPreviewIndex];
+  count.textContent=`${exportPdfPreviewIndex+1} / ${exportPdfPreviewImages.length}`;
+  $("#exportPdfPreviewPrev").disabled=exportPdfPreviewIndex<=0;
+  $("#exportPdfPreviewNext").disabled=exportPdfPreviewIndex>=exportPdfPreviewImages.length-1;
+}
+function openExportPdfPreview(file,images,title){
+  closeExportPdfPreview();
+  exportPdfPreviewFile=file;exportPdfPreviewImages=images.slice();exportPdfPreviewIndex=0;
+  exportPdfPreviewUrls=images.map(im=>URL.createObjectURL(new Blob([im.bytes],{type:"image/jpeg"})));
+  $("#exportPdfPreviewTitle").textContent=title||file.name||"PDFプレビュー";
+  $("#exportPdfPreview").classList.add("show");
+  $("#exportPdfPreview").setAttribute("aria-hidden","false");
+  renderExportPdfPreviewPage();
+}
 async function exportSelectedAsPdf(){
   try{
     save();const parts=selectedExportParts();if(!parts.length){alert("出力する内容を選択してください");return}
     const canvases=await buildSelectedExportCanvases(parts,state);if(!canvases.length){alert("選択した内容に出力できるデータがありません");return}
     const images=[];
     for(const canvas of canvases){
-      try{const pages=await canvasToPdfJpegs(canvas);images.push(...pages)}catch(err){console.error("canvas PDF convert",err)}
+      try{
+        if(canvas._pdfOriginalPage){
+          const im=await canvasToJpegInfo(canvas);
+          im.originalPdfPage=true;
+          im.pageW=canvas._pdfPageW;
+          im.pageH=canvas._pdfPageH;
+          images.push(im);
+        }else{
+          const pages=await canvasToPdfJpegs(canvas);
+          images.push(...pages);
+        }
+      }catch(err){console.error("canvas PDF convert",err)}
     }
     if(!images.length){alert("PDFに変換できるデータがありません");return}
     const blob=makePdfFromJpegs(images);
     const exportTitle=selectedExportTitle(parts);
     const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(exportTitle)}.pdf`,{type:"application/pdf"});
     $("#exportSheet").classList.remove("show");
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${exportTitle} PDF`);
+    openExportPdfPreview(file,images,`${state.siteName||"現調"} ${exportTitle} PDF`);
   }catch(e){console.error(e);alert("PDF作成に失敗しました")}
 }
 
@@ -5251,7 +5354,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.3.9",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.0",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6357,6 +6460,17 @@ window.addEventListener("resize",()=>{
   kp.style.left=Math.max(8,window.innerWidth-w-12)+"px";
   kp.style.top=Math.max(8,window.innerHeight-h-12)+"px";
 });
+
+const __exportPreviewClose=$("#exportPdfPreviewClose");
+if(__exportPreviewClose){
+  __exportPreviewClose.onclick=closeExportPdfPreview;
+  $("#exportPdfPreviewPrev").onclick=()=>{if(exportPdfPreviewIndex>0){exportPdfPreviewIndex--;renderExportPdfPreviewPage()}};
+  $("#exportPdfPreviewNext").onclick=()=>{if(exportPdfPreviewIndex<exportPdfPreviewImages.length-1){exportPdfPreviewIndex++;renderExportPdfPreviewPage()}};
+  $("#exportPdfPreviewShare").onclick=async()=>{
+    if(!exportPdfPreviewFile)return;
+    await shareOrDownloadFile(exportPdfPreviewFile,$("#exportPdfPreviewTitle").textContent||"現調 PDF");
+  };
+}
 </script>
 
 <div id="memoEditor" class="memo-editor" aria-hidden="true">
@@ -6392,4 +6506,21 @@ window.addEventListener("resize",()=>{
     <div class="memo-editor-hint">Pencil=描画 / 指1本=スクロール / 指2本=拡大・移動</div>
   </div>
 </div>
+
+<div id="exportPdfPreview" class="export-pdf-preview" aria-hidden="true">
+  <div class="export-pdf-preview-top">
+    <button type="button" id="exportPdfPreviewClose" class="export-pdf-preview-btn">戻る</button>
+    <div id="exportPdfPreviewTitle" class="export-pdf-preview-title">PDFプレビュー</div>
+    <button type="button" id="exportPdfPreviewShare" class="export-pdf-preview-btn primary">共有・保存</button>
+  </div>
+  <div class="export-pdf-preview-body">
+    <img id="exportPdfPreviewImage" class="export-pdf-preview-page" alt="PDFプレビュー">
+  </div>
+  <div class="export-pdf-preview-bottom">
+    <button type="button" id="exportPdfPreviewPrev" class="export-pdf-preview-nav">◀</button>
+    <div id="exportPdfPreviewCount" class="export-pdf-preview-count">1 / 1</div>
+    <button type="button" id="exportPdfPreviewNext" class="export-pdf-preview-nav">▶</button>
+  </div>
+</div>
+
 </body></html>
