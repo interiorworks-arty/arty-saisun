@@ -1142,7 +1142,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v2.4.3">
+<body data-build="v2.4.4">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -3018,7 +3018,7 @@ async function renderDrawingPage(){
   };
 
   try{
-    const all=uniqueDrawingRecords(await memoDbAllForSite(renderSiteId));
+    const all=await uniqueDrawingRecords(await memoDbAllForSite(renderSiteId));
     if(state.id!==renderSiteId)return;
     const files=all.slice().sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0));
     const list=area.querySelector(".memo-file-list");list.innerHTML="";
@@ -4998,19 +4998,42 @@ function selectedExportTitle(parts){
 function selectedDrawingExportIds(){
   return [...document.querySelectorAll("#exportDrawingChoices [data-export-drawing]:checked")].map(x=>x.dataset.exportDrawing);
 }
-function uniqueDrawingRecords(records){
-  const seen=new Set(),out=[];
-  for(const rec of (records||[])){
-    // 過去の更新で同じ図面レコードが二重保存されていても、出力時は1件として扱う。
-    // ファイル名・種類・実データ容量が同じものだけを重複とみなし、別図面は残す。
-    const name=String(rec.fileName||"").trim().toLowerCase();
-    const type=String(rec.mimeType||"").trim().toLowerCase();
-    const size=Number(rec.blob?.size||0);
-    const key=`${name}|${type}|${size}`;
-    if(seen.has(key))continue;
-    seen.add(key);out.push(rec);
+async function drawingBlobHash(rec){
+  try{
+    const buf=await rec.blob.arrayBuffer();
+    if(window.crypto?.subtle){
+      const digest=await crypto.subtle.digest("SHA-256",buf);
+      return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
+    }
+    // fallback: byte content checksum (still filename-independent)
+    const a=new Uint8Array(buf);let h1=2166136261>>>0,h2=0;
+    for(let i=0;i<a.length;i++){h1=Math.imul(h1^a[i],16777619)>>>0;h2=(h2+a[i]*(i+1))>>>0}
+    return `${a.length}:${h1.toString(16)}:${h2.toString(16)}`;
+  }catch(e){
+    console.warn("drawing hash failed",e);
+    return `fallback:${rec.id}`;
   }
-  return out;
+}
+function drawingInkScore(rec){
+  try{
+    const ink=memoEditorInkRec(rec.id);
+    return (ink?.pageStrokes||[]).reduce((n,a)=>n+(Array.isArray(a)?a.length:0),0);
+  }catch{return 0}
+}
+async function uniqueDrawingRecords(records){
+  const byHash=new Map();
+  for(const rec of (records||[])){
+    // ファイル名が違っても、PDF/画像の実データが同じなら同一図面として扱う。
+    const hash=await drawingBlobHash(rec);
+    const prev=byHash.get(hash);
+    if(!prev){
+      byHash.set(hash,rec);
+      continue;
+    }
+    // 同じ実データが重複している場合は、手書きが多く残っている方を採用。
+    if(drawingInkScore(rec)>drawingInkScore(prev))byHash.set(hash,rec);
+  }
+  return [...byHash.values()];
 }
 async function renderExportDrawingChoices(){
   const wrap=$("#exportDrawingChoices");if(!wrap)return;
@@ -5018,7 +5041,7 @@ async function renderExportDrawingChoices(){
   wrap.style.display=master?.checked?"block":"none";
   if(!master?.checked)return;
   try{
-    const files=uniqueDrawingRecords(await memoDbAllForSite(state.id));
+    const files=await uniqueDrawingRecords(await memoDbAllForSite(state.id));
     wrap.innerHTML="";
     if(!files.length){wrap.innerHTML='<div class="export-drawing-empty">図面はまだありません</div>';return}
     files.forEach(f=>{
@@ -5036,7 +5059,7 @@ async function renderExportDrawingChoices(){
 async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
   if(!window.pdfjsLib)throw new Error("pdfjs not loaded");
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const all=uniqueDrawingRecords(await memoDbAllForSite(siteObj.id));
+  const all=await uniqueDrawingRecords(await memoDbAllForSite(siteObj.id));
   const ids=Array.isArray(selectedIds)?new Set(selectedIds):null;
   const files=all.filter(f=>!ids||ids.has(f.id));
   const out=[];
@@ -5391,7 +5414,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.3",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.4",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
