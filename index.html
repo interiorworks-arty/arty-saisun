@@ -1140,9 +1140,31 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 .export-select-all-btn.all-selected{background:#665f59;color:#fff}
 
+
+/* v2.4.6 クロス：全室共通品番 */
+.wall-common-product{
+  display:grid;grid-template-columns:auto minmax(150px,280px) 1fr;
+  gap:10px;align-items:center;margin:4px 0 12px;padding:10px 12px;
+  background:#f2eeeb;border:1px solid #e1dad5;border-radius:12px;
+}
+.wall-common-product-label{font-size:13px;font-weight:900;color:#514a45;white-space:nowrap}
+.wall-common-product-btn{
+  width:100%;min-height:38px;text-align:left!important;padding:8px 12px!important;
+  border-radius:9px!important;background:#fff!important;border:1px solid #d9d1cb!important;
+}
+.wall-common-product-btn.empty{color:#a29a94!important}
+.wall-common-product-note{font-size:10px;color:#8a817a}
+.product-button.inherited-product{
+  color:#6f6862!important;background:#f3efec!important;border-style:dashed!important;
+}
+@media(max-width:700px){
+  .wall-common-product{grid-template-columns:auto 1fr}
+  .wall-common-product-note{grid-column:1 / -1}
+}
+
 </style>
 </head>
-<body data-build="v2.4.5">
+<body data-build="v2.4.6">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1158,6 +1180,11 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   <button type="button" data-work-page="order">発注</button>
 </div>
 <div id="wallWorkPage" class="work-page active">
+  <div class="wall-common-product">
+    <div class="wall-common-product-label">全室共通品番</div>
+    <button type="button" id="wallCommonProductBtn" class="product-button wall-common-product-btn empty">品番を入力</button>
+    <div class="wall-common-product-note">個別に品番を入力した区分は、そちらを優先します</div>
+  </div>
   <div id="roomTabs" class="tabs"></div>
   <div id="roomArea"></div>
 </div>
@@ -1580,6 +1607,7 @@ function collectUsedProducts(){
     out.push(v);
   };
   recentProducts.forEach(add);
+  add(state?.wallCommonProduct);
 
   // 現在の現場を優先して、すでに入力済みの未登録品番も候補にする
   (state?.rooms||[]).forEach(r=>(r.sections||[]).forEach(sec=>{
@@ -1678,7 +1706,7 @@ function renderNumberCursor(){
 }
 function syncProductButton(){if(!activeProductButton||!activeProductSection)return;renderProductCursor();const secEl=activeProductButton.closest(".section");secEl?.querySelector(".save-product")?.toggleAttribute("disabled",!activeProductSection.product);const fc=activeProductButton.closest(".finish-card");fc?.querySelector(".register-product")?.toggleAttribute("disabled",!activeProductSection.product);save();live();renderRecentProductCandidates()}
 function showProductKeypad(btn,sec,e=null){hideMeasureKeypad();if(activeProductSection&&activeProductSection!==sec)rememberRecentProduct(activeProductSection.product);activeProductButton=btn;activeProductSection=sec;productCursor=String(sec.product||"").length;document.querySelectorAll(".product-button.active-input").forEach(el=>el.classList.remove("active-input"));btn.classList.add("active-input");productUpper=true;renderProductLetters();renderRecentProductCandidates();renderProductCursor();const kp=$("#productKeypad");kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyProductKeypadLayout()}
-function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);if(activeProductButton&&activeProductSection){activeProductButton.textContent=activeProductSection.product||"品番";activeProductButton.classList.toggle("empty",!activeProductSection.product)}const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
+function hideProductKeypad(){if(activeProductSection)rememberRecentProduct(activeProductSection.product);if(activeProductButton&&activeProductSection){const inherited=isWallSectionObject(activeProductSection)?effectiveWallProduct(activeProductSection,state):String(activeProductSection.product||"");activeProductButton.textContent=inherited||(activeProductSection===state.wallCommonProductTarget?"品番を入力":"品番");activeProductButton.classList.toggle("empty",!inherited);activeProductButton.classList.toggle("inherited-product",isWallSectionObject(activeProductSection)&&!String(activeProductSection.product||"").trim()&&!!ensureWallCommonProduct(state))}const kp=$("#productKeypad");if(kp){kp.classList.remove("show");kp.setAttribute("aria-hidden","true")}activeProductButton?.classList.remove("active-input");activeProductButton=null;activeProductSection=null}
 let nativeProductTarget=null,nativeProductButton=null;
 function openNativeProductInput(){
   if(!activeProductSection)return;
@@ -1698,6 +1726,7 @@ function closeNativeProductInput(apply=false){
       nativeProductButton.classList.toggle("empty",!nativeProductTarget.product);
     }
     save();
+    if(nativeProductTarget===state.wallCommonProductTarget&&activeWorkPage==="wall")render();
   }
   $("#nativeProductSheet").classList.remove("show");
   if(!apply&&nativeProductTarget&&nativeProductButton){
@@ -1712,7 +1741,7 @@ function productKeyPress(key){
   let v=String(activeProductSection.product||"");
   if(key==="native"){openNativeProductInput();return}
   if(key==="shift"){productUpper=!productUpper;renderProductLetters();return}
-  if(key==="done"){rememberRecentProduct(v);hideProductKeypad();return}
+  if(key==="done"){const wasCommon=activeProductSection===state.wallCommonProductTarget;rememberRecentProduct(v);hideProductKeypad();if(wasCommon&&activeWorkPage==="wall")render();return}
   if(key==="left"){productCursor=Math.max(0,productCursor-1);renderProductCursor();return}
   if(key==="right"){productCursor=Math.min(v.length,productCursor+1);renderProductCursor();return}
   if(key==="back"){const x=backspaceAtCursor(v,productCursor);activeProductSection.product=x.value;productCursor=x.cursor;syncProductButton();return}
@@ -2172,6 +2201,41 @@ function room(){return state.rooms.find(r=>r.id===activeRoom)}
 function parse(v){let s=String(v||"").trim().replace(/\s/g,"").replace(/[＊※*]/g,"*").replace(/[×xX]/g,"-");const tail=s.match(/\*+$/);const starCount=tail?tail[0].length:0;if(starCount)s=s.slice(0,-starCount);let m=s.match(/^(\d+(?:\.\d+)?)-(\d+)$/);if(!m)return null;let len=+m[1],qty=+m[2];return len>0&&qty>0?{len,qty,star:starCount>0,starCount}:null}
 function calc(v,rep){let p=parse(v);if(!p)return null;let r=+rep||0,noneCm=p.len*p.qty,each=p.len;if(r>0)each=p.starCount>0?p.len+r*p.starCount:Math.ceil(p.len/r)*r;return {...p,r,each,noneM:noneCm/100,withM:each*p.qty/100}}
 const fmt=n=>(Math.round((n+Number.EPSILON)*100)/100).toFixed(2)+"m",esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function ensureWallCommonProduct(siteObj=state){
+  if(siteObj.wallCommonProduct==null)siteObj.wallCommonProduct="";
+  return String(siteObj.wallCommonProduct||"").trim();
+}
+function isWallSectionObject(obj,siteObj=state){
+  return !!(obj&&(siteObj.rooms||[]).some(r=>(r.sections||[]).includes(obj)));
+}
+function effectiveWallProduct(sec,siteObj=state){
+  const own=String(sec?.product||"").trim();
+  return own||ensureWallCommonProduct(siteObj);
+}
+function renderWallCommonProduct(){
+  const btn=$("#wallCommonProductBtn");if(!btn)return;
+  const v=ensureWallCommonProduct(state);
+  btn.textContent=v||"品番を入力";
+  btn.classList.toggle("empty",!v);
+}
+
+function commonWallProductTarget(){
+  if(!state.wallCommonProductTarget){
+    Object.defineProperty(state,"wallCommonProductTarget",{value:{},writable:true,configurable:true,enumerable:false});
+    Object.defineProperty(state.wallCommonProductTarget,"product",{
+      configurable:true,enumerable:false,
+      get(){return state.wallCommonProduct||""},
+      set(v){state.wallCommonProduct=String(v||"");save();renderWallCommonProduct()}
+    });
+  }
+  return state.wallCommonProductTarget;
+}
+function bindWallCommonProductButton(){
+  const btn=$("#wallCommonProductBtn");if(!btn||btn.dataset.bound==="1")return;
+  btn.dataset.bound="1";
+  bindTapOnly(btn,e=>showProductKeypad(btn,commonWallProductTarget(),e));
+}
 function ensure(sec){if(sec.hRepeat==null)sec.hRepeat="";if(!sec.measures.length)sec.measures.push(blank());if(sec.measures.at(-1).value.trim())sec.measures.push(blank())}
 function secTotals(sec){let none=0,withR=0;sec.measures.forEach(m=>{let c=calc(m.value,sec.repeat);if(c){none+=c.noneM;withR+=c.withM}});return{none,withR}}
 function roomTotals(r){let none=0,withR=0;r.sections.forEach(s=>{let t=secTotals(s);none+=t.none;withR+=t.withR});return{none,withR}}
@@ -3099,7 +3163,7 @@ function collectOrderData(siteObj=state){
   (siteObj.rooms||[]).forEach(r=>{
     const roomByProduct=new Map();
     (r.sections||[]).forEach(sec=>{
-      const product=String(sec.product||"").trim();
+      const product=effectiveWallProduct(sec,siteObj);
       if(!product)return;
       const t=secTotals(sec);
       if(!t.withR)return;
@@ -4145,7 +4209,7 @@ function addMeasureRowGlobal(sec,m,i,list){
   };
   return row;
 }
-function renderSection(r,sec){ensure(sec);let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category editable" role="button" tabindex="0">${esc(sec.name)}</div><button type="button" class="product-button product${sec.product?"":" empty"}">${esc(sec.product||"品番")}</button><div class="repeat-group"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><button type="button" class="repeat-button repeat repeat-v${sec.repeat?"":" empty"}">${sec.repeat?esc(sec.repeat):"リピート"}</button></div><div class="repeat-wrap"><span class="repeat-prefix">↔︎</span><button type="button" class="repeat-button repeat-h${sec.hRepeat?"":" empty"}">${sec.hRepeat?esc(sec.hRepeat):"リピート"}</button></div></div><button class="delete-section">×</button></div><div class="product-tools"><button type="button" class="pick-product">登録品番</button><button type="button" class="save-product" ${sec.product?"":"disabled"}>この品番を登録</button></div><div class="measure-list"></div><div class="section-totals"><span>↕︎なし <strong class="sn"></strong></span><span>↕︎あり <strong class="sw"></strong></span></div>`;
+function renderSection(r,sec){ensure(sec);const effectiveProduct=effectiveWallProduct(sec,state),inheritedProduct=!String(sec.product||"").trim()&&!!effectiveProduct;let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category editable" role="button" tabindex="0">${esc(sec.name)}</div><button type="button" class="product-button product${effectiveProduct?"":" empty"}${inheritedProduct?" inherited-product":""}">${esc(effectiveProduct||"品番")}</button><div class="repeat-group"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><button type="button" class="repeat-button repeat repeat-v${sec.repeat?"":" empty"}">${sec.repeat?esc(sec.repeat):"リピート"}</button></div><div class="repeat-wrap"><span class="repeat-prefix">↔︎</span><button type="button" class="repeat-button repeat-h${sec.hRepeat?"":" empty"}">${sec.hRepeat?esc(sec.hRepeat):"リピート"}</button></div></div><button class="delete-section">×</button></div><div class="product-tools"><button type="button" class="pick-product">登録品番</button><button type="button" class="save-product" ${sec.product?"":"disabled"}>この品番を登録</button></div><div class="measure-list"></div><div class="section-totals"><span>↕︎なし <strong class="sn"></strong></span><span>↕︎あり <strong class="sw"></strong></span></div>`;
 let cat=d.querySelector(".category"),prod=d.querySelector(".product"),rep=d.querySelector(".repeat-v"),hrep=d.querySelector(".repeat-h");
 cat.onclick=()=>openSectionSheetForEdit(sec);
 cat.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openSectionSheetForEdit(sec)}};
@@ -4209,7 +4273,7 @@ function addMeasureRow(m,i){
 sec.measures.forEach((m,i)=>list.appendChild(addMeasureRow(m,i)));
 let t=secTotals(sec);d.querySelector(".sn").textContent=fmt(t.none);d.querySelector(".sw").textContent=fmt(t.withR);return d}
 function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,s.repeat);row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
-function buildCalc(){let html="";if(calcMode==="room"){state.rooms.forEach(r=>{let rt=roomTotals(r);html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;r.sections.forEach(s=>{let t=secTotals(s);if(!t.none&&!t.withR)return;html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${s.product?"　"+esc(s.product):""}${s.repeat?"　↕︎"+esc(s.repeat):""}${s.hRepeat?"　↔︎"+esc(s.hRepeat):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;let ds=s.measures.map(m=>{let c=calc(m.value,s.repeat);if(!c)return"";let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`}).filter(Boolean);if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;html+="</div>"});html+="</div>"})}else{let g={};state.rooms.forEach(r=>r.sections.forEach(s=>{let k=s.product.trim()||"品番未入力",t=secTotals(s);if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`)}));Object.entries(g).forEach(([p,x])=>html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`)}
+function buildCalc(){let html="";if(calcMode==="room"){state.rooms.forEach(r=>{let rt=roomTotals(r);html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;r.sections.forEach(s=>{let t=secTotals(s);if(!t.none&&!t.withR)return;html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${s.repeat?"　↕︎"+esc(s.repeat):""}${s.hRepeat?"　↔︎"+esc(s.hRepeat):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;let ds=s.measures.map(m=>{let c=calc(m.value,s.repeat);if(!c)return"";let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`}).filter(Boolean);if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;html+="</div>"});html+="</div>"})}else{let g={};state.rooms.forEach(r=>r.sections.forEach(s=>{let k=effectiveWallProduct(s,state)||"品番未入力",t=secTotals(s);if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`)}));Object.entries(g).forEach(([p,x])=>html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`)}
 let gn=0,gw=0;state.rooms.forEach(r=>{let t=roomTotals(r);gn+=t.none;gw+=t.withR});html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;$("#calcContent").innerHTML=html}
 
 function displayMeasureText(v){return String(v||"").replace(/\*/g,"＊")}
@@ -4224,9 +4288,9 @@ function splitWrapped(ctx,text,maxWidth){
   if(line)lines.push(line);
   return lines.length?lines:[""];
 }
-function sectionMetaText(sec){
+function sectionMetaText(sec,siteObj=state){
   const bits=[];
-  if(sec.product&&sec.product.trim())bits.push(sec.product.trim());
+  const p=effectiveWallProduct(sec,siteObj);if(p)bits.push(p);
   if(sec.repeat)bits.push(`↕${sec.repeat}`);if(sec.hRepeat)bits.push(`↔${sec.hRepeat}`);
   if(sec.measures.some(m=>String(m.value||"").includes("*")))bits.push("柄伸ばしあり");
   return bits.join("　");
@@ -4352,9 +4416,9 @@ function buildRoomImageCanvas(r,siteObj=state){
     ctx.fillStyle='#272522'; ctx.font='700 28px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     ctx.fillText(sec.name,x,y);
     x += ctx.measureText(sec.name).width + 24;
-    if(sec.product&&sec.product.trim()){
+    const productText=effectiveWallProduct(sec,siteObj);
+    if(productText){
       ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      const productText=sec.product.trim();
       ctx.fillText(productText,x,y);
       x += ctx.measureText(productText).width + 24;
     }
@@ -4440,7 +4504,7 @@ function buildSiteTotalCanvas(siteObj=state){
 }
 function productGroups(siteObj=state){
   const g={};
-  (siteObj.rooms||[]).forEach(r=>(r.sections||[]).forEach(s=>{const t=secTotals(s);if(!t.none&&!t.withR)return;const k=String(s.product||"").trim()||"品番未入力";if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;g[k].items.push({room:r.name,section:s.name,none:t.none,withR:t.withR});}));
+  (siteObj.rooms||[]).forEach(r=>(r.sections||[]).forEach(s=>{const t=secTotals(s);if(!t.none&&!t.withR)return;const k=effectiveWallProduct(s,siteObj)||"品番未入力";if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;g[k].items.push({room:r.name,section:s.name,none:t.none,withR:t.withR});}));
   return g;
 }
 function buildCalcSummaryCanvas(mode="room",siteObj=state){
@@ -4457,7 +4521,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         subs:(r.sections||[]).map(s=>{
           const x=secTotals(s);
           return (!x.none&&!x.withR)?null:{
-            label:`${s.name}${s.product?"　"+s.product:""}${s.repeat?"　↕"+s.repeat:""}${s.hRepeat?"　↔"+s.hRepeat:""}`,
+            label:`${s.name}${effectiveWallProduct(s,siteObj)?"　"+effectiveWallProduct(s,siteObj):""}${s.repeat?"　↕"+s.repeat:""}${s.hRepeat?"　↔"+s.hRepeat:""}`,
             none:x.none,
             withR:x.withR
           };
@@ -5417,7 +5481,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.5",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.6",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5467,7 +5531,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
