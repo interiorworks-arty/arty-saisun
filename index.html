@@ -1143,7 +1143,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 /* v2.4.6 クロス：全室共通品番 */
 .wall-common-product{
-  display:grid;grid-template-columns:auto minmax(150px,280px) 1fr;
+  display:grid;grid-template-columns:auto minmax(150px,280px) auto auto 1fr;
   gap:10px;align-items:center;margin:4px 0 12px;padding:10px 12px;
   background:#f2eeeb;border:1px solid #e1dad5;border-radius:12px;
 }
@@ -1162,9 +1162,22 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .wall-common-product-note{grid-column:1 / -1}
 }
 
+
+.wall-common-repeat-wrap{display:flex;align-items:center;gap:5px;font-weight:900;color:#665f59}
+.wall-common-repeat-wrap .repeat-button{min-width:72px;min-height:38px;padding:8px 10px;border-radius:9px;background:#fff;border:1px solid #d9d1cb;color:#514a45;font-weight:800}
+.wall-common-repeat-wrap .repeat-button.empty{color:#a29a94}
+
+/* v2.4.8 共通設定の各区分反映 */
+.section .product-button.inherited-product,
+.section .repeat-button.inherited-product{
+  background:#f1ece8!important;
+  border:1px dashed #bfb5ad!important;
+  color:#5f5751!important;
+}
+
 </style>
 </head>
-<body data-build="v2.4.6">
+<body data-build="v2.4.8">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1181,9 +1194,11 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 </div>
 <div id="wallWorkPage" class="work-page active">
   <div class="wall-common-product">
-    <div class="wall-common-product-label">全室共通品番</div>
+    <div class="wall-common-product-label">全室共通</div>
     <button type="button" id="wallCommonProductBtn" class="product-button wall-common-product-btn empty">品番を入力</button>
-    <div class="wall-common-product-note">個別に品番を入力した区分は、そちらを優先します</div>
+    <div class="wall-common-repeat-wrap"><span>↕︎</span><button type="button" id="wallCommonRepeatVBtn" class="repeat-button empty">リピート</button></div>
+    <div class="wall-common-repeat-wrap"><span>↔︎</span><button type="button" id="wallCommonRepeatHBtn" class="repeat-button empty">リピート</button></div>
+    <div class="wall-common-product-note">個別に品番・リピートを入力した区分は、そちらを優先します</div>
   </div>
   <div id="roomTabs" class="tabs"></div>
   <div id="roomArea"></div>
@@ -2204,8 +2219,14 @@ const fmt=n=>(Math.round((n+Number.EPSILON)*100)/100).toFixed(2)+"m",esc=s=>Stri
 
 function ensureWallCommonProduct(siteObj=state){
   if(siteObj.wallCommonProduct==null)siteObj.wallCommonProduct="";
+  if(siteObj.wallCommonRepeatV==null)siteObj.wallCommonRepeatV="";
+  if(siteObj.wallCommonRepeatH==null)siteObj.wallCommonRepeatH="";
   return String(siteObj.wallCommonProduct||"").trim();
 }
+function commonWallRepeatV(siteObj=state){ensureWallCommonProduct(siteObj);return String(siteObj.wallCommonRepeatV||"").trim()}
+function commonWallRepeatH(siteObj=state){ensureWallCommonProduct(siteObj);return String(siteObj.wallCommonRepeatH||"").trim()}
+function effectiveWallRepeatV(sec,siteObj=state){const own=String(sec?.repeat||"").trim();return own||commonWallRepeatV(siteObj)}
+function effectiveWallRepeatH(sec,siteObj=state){const own=String(sec?.hRepeat||"").trim();return own||commonWallRepeatH(siteObj)}
 function isWallSectionObject(obj,siteObj=state){
   return !!(obj&&(siteObj.rooms||[]).some(r=>(r.sections||[]).includes(obj)));
 }
@@ -2215,9 +2236,11 @@ function effectiveWallProduct(sec,siteObj=state){
 }
 function renderWallCommonProduct(){
   const btn=$("#wallCommonProductBtn");if(!btn)return;
-  const v=ensureWallCommonProduct(state);
-  btn.textContent=v||"品番を入力";
-  btn.classList.toggle("empty",!v);
+  const v=ensureWallCommonProduct(state),rv=commonWallRepeatV(state),rh=commonWallRepeatH(state);
+  btn.textContent=v||"品番を入力";btn.classList.toggle("empty",!v);
+  const vb=$("#wallCommonRepeatVBtn"),hb=$("#wallCommonRepeatHBtn");
+  if(vb){vb.textContent=rv||"リピート";vb.classList.toggle("empty",!rv)}
+  if(hb){hb.textContent=rh||"リピート";hb.classList.toggle("empty",!rh)}
 }
 
 function commonWallProductTarget(){
@@ -2226,7 +2249,7 @@ function commonWallProductTarget(){
     Object.defineProperty(state.wallCommonProductTarget,"product",{
       configurable:true,enumerable:false,
       get(){return state.wallCommonProduct||""},
-      set(v){state.wallCommonProduct=String(v||"");save();renderWallCommonProduct()}
+      set(v){state.wallCommonProduct=String(v||"");save();renderWallCommonProduct();if(activeWorkPage==="wall")render()}
     });
   }
   return state.wallCommonProductTarget;
@@ -2236,8 +2259,25 @@ function bindWallCommonProductButton(){
   btn.dataset.bound="1";
   bindTapOnly(btn,e=>showProductKeypad(btn,commonWallProductTarget(),e));
 }
+function commonWallRepeatTarget(key){
+  const prop=key==="hRepeat"?"wallCommonRepeatH":"wallCommonRepeatV";
+  const cache=key==="hRepeat"?"wallCommonRepeatHTarget":"wallCommonRepeatVTarget";
+  if(!state[cache]){
+    Object.defineProperty(state,cache,{value:{},writable:true,configurable:true,enumerable:false});
+    Object.defineProperty(state[cache],key,{configurable:true,enumerable:false,
+      get(){return state[prop]||""},
+      set(v){state[prop]=String(v||"");save();renderWallCommonProduct();if(activeWorkPage==="wall")render()}
+    });
+  }
+  return state[cache];
+}
+function bindWallCommonRepeatButtons(){
+  const vb=$("#wallCommonRepeatVBtn"),hb=$("#wallCommonRepeatHBtn");
+  if(vb&&vb.dataset.bound!=="1"){vb.dataset.bound="1";bindTapOnly(vb,e=>showRepeatKeypad(vb,commonWallRepeatTarget("repeat"),"repeat",e))}
+  if(hb&&hb.dataset.bound!=="1"){hb.dataset.bound="1";bindTapOnly(hb,e=>showRepeatKeypad(hb,commonWallRepeatTarget("hRepeat"),"hRepeat",e))}
+}
 function ensure(sec){if(sec.hRepeat==null)sec.hRepeat="";if(!sec.measures.length)sec.measures.push(blank());if(sec.measures.at(-1).value.trim())sec.measures.push(blank())}
-function secTotals(sec){let none=0,withR=0;sec.measures.forEach(m=>{let c=calc(m.value,sec.repeat);if(c){none+=c.noneM;withR+=c.withM}});return{none,withR}}
+function secTotals(sec,siteObj=state){let none=0,withR=0;const rv=effectiveWallRepeatV(sec,siteObj);sec.measures.forEach(m=>{let c=calc(m.value,rv);if(c){none+=c.noneM;withR+=c.withM}});return{none,withR}}
 function roomTotals(r){let none=0,withR=0;r.sections.forEach(s=>{let t=secTotals(s);none+=t.none;withR+=t.withR});return{none,withR}}
 function bindRoomTabDrag(handle,wrap,r){
   handle.addEventListener("pointerdown",e=>{
@@ -3165,7 +3205,7 @@ function collectOrderData(siteObj=state){
     (r.sections||[]).forEach(sec=>{
       const product=effectiveWallProduct(sec,siteObj);
       if(!product)return;
-      const t=secTotals(sec);
+      const t=secTotals(sec,siteObj);
       if(!t.withR)return;
       roomByProduct.set(product,(roomByProduct.get(product)||0)+t.withR);
     });
@@ -4194,7 +4234,7 @@ function bindMeasureTap(inp,m,sec,list,row){
 }
 
 function addMeasureRowGlobal(sec,m,i,list){
-  let row=document.createElement("div"),c=calc(m.value,sec.repeat);
+  let row=document.createElement("div"),c=calc(m.value,effectiveWallRepeatV(sec,state));
   row.className="measure-row";
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
@@ -4209,7 +4249,14 @@ function addMeasureRowGlobal(sec,m,i,list){
   };
   return row;
 }
-function renderSection(r,sec){ensure(sec);const effectiveProduct=effectiveWallProduct(sec,state),inheritedProduct=!String(sec.product||"").trim()&&!!effectiveProduct;let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category editable" role="button" tabindex="0">${esc(sec.name)}</div><button type="button" class="product-button product${effectiveProduct?"":" empty"}${inheritedProduct?" inherited-product":""}">${esc(effectiveProduct||"品番")}</button><div class="repeat-group"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><button type="button" class="repeat-button repeat repeat-v${sec.repeat?"":" empty"}">${sec.repeat?esc(sec.repeat):"リピート"}</button></div><div class="repeat-wrap"><span class="repeat-prefix">↔︎</span><button type="button" class="repeat-button repeat-h${sec.hRepeat?"":" empty"}">${sec.hRepeat?esc(sec.hRepeat):"リピート"}</button></div></div><button class="delete-section">×</button></div><div class="product-tools"><button type="button" class="pick-product">登録品番</button><button type="button" class="save-product" ${sec.product?"":"disabled"}>この品番を登録</button></div><div class="measure-list"></div><div class="section-totals"><span>↕︎なし <strong class="sn"></strong></span><span>↕︎あり <strong class="sw"></strong></span></div>`;
+function renderSection(r,sec){ensure(sec);
+const effectiveProduct=effectiveWallProduct(sec,state);
+const effectiveRepeatV=effectiveWallRepeatV(sec,state);
+const effectiveRepeatH=effectiveWallRepeatH(sec,state);
+const inheritedProduct=!String(sec.product||"").trim()&&!!effectiveProduct;
+const inheritedRepeatV=!String(sec.repeat||"").trim()&&!!effectiveRepeatV;
+const inheritedRepeatH=!String(sec.hRepeat||"").trim()&&!!effectiveRepeatH;
+let d=document.createElement("div");d.className="section";d.innerHTML=`<div class="section-head"><div class="category editable" role="button" tabindex="0">${esc(sec.name)}</div><button type="button" class="product-button product${effectiveProduct?"":" empty"}${inheritedProduct?" inherited-product":""}">${esc(effectiveProduct||"品番")}</button><div class="repeat-group"><div class="repeat-wrap"><span class="repeat-prefix">↕︎</span><button type="button" class="repeat-button repeat repeat-v${effectiveRepeatV?"":" empty"}${inheritedRepeatV?" inherited-product":""}">${effectiveRepeatV?esc(effectiveRepeatV):"リピート"}</button></div><div class="repeat-wrap"><span class="repeat-prefix">↔︎</span><button type="button" class="repeat-button repeat-h${effectiveRepeatH?"":" empty"}${inheritedRepeatH?" inherited-product":""}">${effectiveRepeatH?esc(effectiveRepeatH):"リピート"}</button></div></div><button class="delete-section">×</button></div><div class="product-tools"><button type="button" class="pick-product">登録品番</button><button type="button" class="save-product" ${sec.product?"":"disabled"}>この品番を登録</button></div><div class="measure-list"></div><div class="section-totals"><span>↕︎なし <strong class="sn"></strong></span><span>↕︎あり <strong class="sw"></strong></span></div>`;
 let cat=d.querySelector(".category"),prod=d.querySelector(".product"),rep=d.querySelector(".repeat-v"),hrep=d.querySelector(".repeat-h");
 cat.onclick=()=>openSectionSheetForEdit(sec);
 cat.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openSectionSheetForEdit(sec)}};
@@ -4222,7 +4269,7 @@ d.querySelector(".save-product").onclick=()=>{if(registerProduct(sec.product,sec
 d.querySelector(".delete-section").onclick=()=>{if(confirm(sec.name+"を削除しますか？")){r.sections=r.sections.filter(x=>x.id!==sec.id);save();render()}};
 let list=d.querySelector(".measure-list");
 function addMeasureRow(m,i){
-  let row=document.createElement("div"),c=calc(m.value,sec.repeat);
+  let row=document.createElement("div"),c=calc(m.value,effectiveWallRepeatV(sec,state));
   row.className="measure-row";
   const ph=i===0?"238-8":"";
   row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
@@ -4272,8 +4319,8 @@ function addMeasureRow(m,i){
 }
 sec.measures.forEach((m,i)=>list.appendChild(addMeasureRow(m,i)));
 let t=secTotals(sec);d.querySelector(".sn").textContent=fmt(t.none);d.querySelector(".sw").textContent=fmt(t.withR);return d}
-function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,s.repeat);row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
-function buildCalc(){let html="";if(calcMode==="room"){state.rooms.forEach(r=>{let rt=roomTotals(r);html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;r.sections.forEach(s=>{let t=secTotals(s);if(!t.none&&!t.withR)return;html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${s.repeat?"　↕︎"+esc(s.repeat):""}${s.hRepeat?"　↔︎"+esc(s.hRepeat):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;let ds=s.measures.map(m=>{let c=calc(m.value,s.repeat);if(!c)return"";let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`}).filter(Boolean);if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;html+="</div>"});html+="</div>"})}else{let g={};state.rooms.forEach(r=>r.sections.forEach(s=>{let k=effectiveWallProduct(s,state)||"品番未入力",t=secTotals(s);if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`)}));Object.entries(g).forEach(([p,x])=>html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`)}
+function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,effectiveWallRepeatV(s,state));row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+function buildCalc(){let html="";if(calcMode==="room"){state.rooms.forEach(r=>{let rt=roomTotals(r);html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;r.sections.forEach(s=>{let t=secTotals(s);if(!t.none&&!t.withR)return;html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${effectiveWallRepeatV(s,state)?"　↕︎"+esc(effectiveWallRepeatV(s,state)):""}${effectiveWallRepeatH(s,state)?"　↔︎"+esc(effectiveWallRepeatH(s,state)):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;let ds=s.measures.map(m=>{let c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`}).filter(Boolean);if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;html+="</div>"});html+="</div>"})}else{let g={};state.rooms.forEach(r=>r.sections.forEach(s=>{let k=effectiveWallProduct(s,state)||"品番未入力",t=secTotals(s);if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`)}));Object.entries(g).forEach(([p,x])=>html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`)}
 let gn=0,gw=0;state.rooms.forEach(r=>{let t=roomTotals(r);gn+=t.none;gw+=t.withR});html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;$("#calcContent").innerHTML=html}
 
 function displayMeasureText(v){return String(v||"").replace(/\*/g,"＊")}
@@ -4291,7 +4338,7 @@ function splitWrapped(ctx,text,maxWidth){
 function sectionMetaText(sec,siteObj=state){
   const bits=[];
   const p=effectiveWallProduct(sec,siteObj);if(p)bits.push(p);
-  if(sec.repeat)bits.push(`↕${sec.repeat}`);if(sec.hRepeat)bits.push(`↔${sec.hRepeat}`);
+  const rv=effectiveWallRepeatV(sec,siteObj),rh=effectiveWallRepeatH(sec,siteObj);if(rv)bits.push(`↕${rv}`);if(rh)bits.push(`↔${rh}`);
   if(sec.measures.some(m=>String(m.value||"").includes("*")))bits.push("柄伸ばしあり");
   return bits.join("　");
 }
@@ -4422,12 +4469,12 @@ function buildRoomImageCanvas(r,siteObj=state){
       ctx.fillText(productText,x,y);
       x += ctx.measureText(productText).width + 24;
     }
-    if(sec.repeat){
+    const rv=effectiveWallRepeatV(sec,siteObj),rh=effectiveWallRepeatH(sec,siteObj);if(rv){
       ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
       ctx.fillText(`↕${sec.repeat}`,x,y);
       x += ctx.measureText(`↕${sec.repeat}`).width + 18;
     }
-    if(sec.hRepeat){
+    if(rh){
       ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
       ctx.fillText(`↔${sec.hRepeat}`,x,y);
     }
@@ -4521,7 +4568,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         subs:(r.sections||[]).map(s=>{
           const x=secTotals(s);
           return (!x.none&&!x.withR)?null:{
-            label:`${s.name}${effectiveWallProduct(s,siteObj)?"　"+effectiveWallProduct(s,siteObj):""}${s.repeat?"　↕"+s.repeat:""}${s.hRepeat?"　↔"+s.hRepeat:""}`,
+            label:`${s.name}${effectiveWallProduct(s,siteObj)?"　"+effectiveWallProduct(s,siteObj):""}${effectiveWallRepeatV(s,siteObj)?"　↕"+effectiveWallRepeatV(s,siteObj):""}${effectiveWallRepeatH(s,siteObj)?"　↔"+effectiveWallRepeatH(s,siteObj):""}`,
             none:x.none,
             withR:x.withR
           };
@@ -5481,7 +5528,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.6",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.8",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5531,7 +5578,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
