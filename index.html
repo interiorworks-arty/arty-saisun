@@ -24,7 +24,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .section{padding:14px 0;border-top:1px solid var(--line)}.section:first-of-type{border-top:0}
 .section-head{display:grid;grid-template-columns:minmax(140px,auto) minmax(150px,1.35fr) minmax(190px,1.25fr) 24px;gap:7px;align-items:center}.category{font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.category.editable{cursor:pointer;position:relative}.category.editable::after{content:"✎";font-size:11px;color:#a39a93;margin-left:4px;vertical-align:top}
 .placeholder-input{width:100%;font-size:14px;padding:7px 0}.placeholder-input::placeholder{color:#b2aaa4}.product-button{width:100%;font-size:14px;padding:7px 0;border:0;border-bottom:1px solid transparent;background:transparent;color:var(--ink);text-align:left;min-height:34px}.product-button.empty{color:#b2aaa4}.product-button.active-input{border-bottom-color:#91877f}.repeat-wrap{display:flex;align-items:center;gap:2px}.repeat-prefix{color:#938b84}
-.measure-row{display:grid;grid-template-columns:26px minmax(150px,220px) minmax(120px,180px) 1fr;gap:8px;align-items:center;min-height:36px}.measure-drag{border:0;background:transparent;color:#b0a8a2;font-size:20px;padding:4px 0;touch-action:none;cursor:grab}.measure-drag:active{cursor:grabbing}.measure-drag.hidden{visibility:hidden}.measure-row.drop-target{background:#f3efec;border-radius:8px}.measure-input{width:100%;font-size:20px;font-weight:650;padding:5px 1px;border:0;background:transparent;text-align:left;color:var(--ink);min-height:34px;display:grid;grid-template-columns:58px 12px 1fr;align-items:baseline;font-variant-numeric:tabular-nums}.measure-input .m-left{text-align:right}.measure-input .m-hyphen{text-align:center}.measure-input .m-right{text-align:left}.measure-input .m-raw{grid-column:1/4;text-align:left}.measure-input.empty{color:#c4bdb7;font-weight:400}
+.measure-row{display:grid;grid-template-columns:26px minmax(150px,220px) minmax(120px,180px) minmax(38px,58px) 1fr;gap:8px;align-items:center;min-height:36px}.measure-drag{border:0;background:transparent;color:#b0a8a2;font-size:20px;padding:4px 0;touch-action:none;cursor:grab}.measure-drag:active{cursor:grabbing}.measure-drag.hidden{visibility:hidden}.measure-row.drop-target{background:#f3efec;border-radius:8px}.measure-input{width:100%;font-size:20px;font-weight:650;padding:5px 1px;border:0;background:transparent;text-align:left;color:var(--ink);min-height:34px;display:grid;grid-template-columns:58px 12px 1fr;align-items:baseline;font-variant-numeric:tabular-nums}.measure-input .m-left{text-align:right}.measure-input .m-hyphen{text-align:center}.measure-input .m-right{text-align:left}.measure-input .m-raw{grid-column:1/4;text-align:left}.measure-input.empty{color:#c4bdb7;font-weight:400}
 .measure-input.active-input{display:flex!important;align-items:center;white-space:nowrap;flex-wrap:nowrap;overflow:hidden;text-align:left}
 .line-result{font-size:12px;color:#8b837d;white-space:nowrap}.section-totals{display:flex;gap:16px;margin-top:8px;font-size:12px;color:#766f69}.section-totals strong{font-size:14px;color:var(--ink)}
 .add-section{width:100%;border:0;background:#efebe8;color:#514a45;border-radius:12px;padding:12px;font-weight:700;margin-top:8px}
@@ -1214,16 +1214,16 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .calc-selection-bar.has-selection{border-color:#bfb4ac}
 
 
-.cut-result{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:left}.line-result{text-align:right}
+.cut-result{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:left}.cut-difference{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:center}.line-result{text-align:right}
 @media(max-width:620px){
-  .measure-row{grid-template-columns:22px minmax(105px,145px) minmax(82px,115px) 1fr;gap:5px}
-  .cut-result{font-size:15px}
+  .measure-row{grid-template-columns:22px minmax(105px,145px) minmax(82px,115px) minmax(28px,40px) 1fr;gap:5px}
+  .cut-result,.cut-difference{font-size:15px}
   .line-result{font-size:10px;text-align:right}
 }
 
 </style>
 </head>
-<body data-build="v2.4.12">
+<body data-build="v2.4.13">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2266,6 +2266,13 @@ function cutDisplay(v,rep){
   if(!c||!c.r)return "";
   const each=Number.isInteger(c.each)?String(c.each):String(Math.round((c.each+Number.EPSILON)*100)/100);
   return `${each}-${c.qty}`;
+}
+function cutDifference(v,rep){
+  const c=calc(v,rep);
+  if(!c||!c.r||c.starCount>0)return "";
+  const diff=c.each-c.len;
+  if(!Number.isFinite(diff))return "";
+  return Number.isInteger(diff)?String(diff):String(Math.round((diff+Number.EPSILON)*100)/100);
 }
 const fmt=n=>(Math.round((n+Number.EPSILON)*100)/100).toFixed(2)+"m",esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -4289,7 +4296,7 @@ function addMeasureRowGlobal(sec,m,i,list){
   let row=document.createElement("div"),c=calc(m.value,effectiveWallRepeatV(sec,state));
   row.className="measure-row";
   const ph=i===0?"238-8":"";
-  row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="cut-result">${cutDisplay(m.value,effectiveWallRepeatV(sec,state))?`→ ${esc(cutDisplay(m.value,effectiveWallRepeatV(sec,state)))}`:""}</div><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="cut-result">${cutDisplay(m.value,effectiveWallRepeatV(sec,state))?`→ ${esc(cutDisplay(m.value,effectiveWallRepeatV(sec,state)))}`:""}</div><div class="cut-difference">${esc(cutDifference(m.value,effectiveWallRepeatV(sec,state)))}</div><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
   bindMeasureTap(inp,m,sec,list,row);
   inp.oninput=()=>{
@@ -4324,7 +4331,7 @@ function addMeasureRow(m,i){
   let row=document.createElement("div"),c=calc(m.value,effectiveWallRepeatV(sec,state));
   row.className="measure-row";
   const ph=i===0?"238-8":"";
-  row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="cut-result">${cutDisplay(m.value,effectiveWallRepeatV(sec,state))?`→ ${esc(cutDisplay(m.value,effectiveWallRepeatV(sec,state)))}`:""}</div><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
+  row.dataset.mid=m.id;row.innerHTML=`<button type="button" class="measure-drag${m.value?"":" hidden"}" aria-label="並び替え">≡</button><button type="button" class="measure-input${m.value?"":" empty"}" value="${esc(m.value)}" data-placeholder="${ph}"></button><div class="cut-result">${cutDisplay(m.value,effectiveWallRepeatV(sec,state))?`→ ${esc(cutDisplay(m.value,effectiveWallRepeatV(sec,state)))}`:""}</div><div class="cut-difference">${esc(cutDifference(m.value,effectiveWallRepeatV(sec,state)))}</div><div class="line-result">${c?fmt(c.noneM)+" / "+fmt(c.withM):""}</div>`;
   let inp=row.querySelector(".measure-input");let drag=row.querySelector(".measure-drag");renderMeasureButton(inp,m.value,ph);if(m.value)bindMeasureDrag(drag,row,sec,m);
   bindMeasureTap(inp,m,sec,list,row);
   inp.oninput=()=>{
@@ -4371,7 +4378,7 @@ function addMeasureRow(m,i){
 }
 sec.measures.forEach((m,i)=>list.appendChild(addMeasureRow(m,i)));
 let t=secTotals(sec);d.querySelector(".sn").textContent=fmt(t.none);d.querySelector(".sw").textContent=fmt(t.withR);return d}
-function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,effectiveWallRepeatV(s,state));const cut=cutDisplay(s.measures[j]?.value,effectiveWallRepeatV(s,state));const cutEl=row.querySelector(".cut-result");if(cutEl)cutEl.textContent=cut?`→ ${cut}`:"";row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,effectiveWallRepeatV(s,state));const cut=cutDisplay(s.measures[j]?.value,effectiveWallRepeatV(s,state));const cutEl=row.querySelector(".cut-result");if(cutEl)cutEl.textContent=cut?`→ ${cut}`:"";const diffEl=row.querySelector(".cut-difference");if(diffEl)diffEl.textContent=cutDifference(s.measures[j]?.value,effectiveWallRepeatV(s,state));row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
 
 function sectionGroups(siteObj=state){
   const map=new Map();
@@ -4599,6 +4606,16 @@ function drawCutDisplayLine(ctx,x,baseline,value,repeatV){
   ctx.fillText(`→ ${cut}`,x,baseline);
   ctx.restore();
 }
+function drawCutDifferenceLine(ctx,x,baseline,value,repeatV){
+  const diff=cutDifference(value,repeatV);
+  if(diff==="")return;
+  ctx.save();
+  ctx.fillStyle='#8b837d';
+  ctx.font='700 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.textBaseline='alphabetic';
+  ctx.fillText(diff,x,baseline);
+  ctx.restore();
+}
 function buildRoomImageCanvas(r,siteObj=state){
   const siteName=(siteObj?.siteName||"現場名未入力").trim()||"現場名未入力";
   const usefulSections=r.sections.filter(sec=>sec.measures.some(m=>String(m.value||"").trim()));
@@ -4668,6 +4685,7 @@ function buildRoomImageCanvas(r,siteObj=state){
     measures.forEach(m=>{
       drawAlignedMeasureLine(ctx,cardX+cardPad+10,y,m.value);
       drawCutDisplayLine(ctx,cardX+cardPad+310,y,m.value,rv);
+      drawCutDifferenceLine(ctx,cardX+cardPad+500,y,m.value,rv);
       y+=measureH;
     });
 
@@ -5729,7 +5747,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.12",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.13",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
