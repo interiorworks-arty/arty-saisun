@@ -1,4 +1,4 @@
-const CACHE="gencho-v2411-cut-display";
+const CACHE="gencho-v2412-cut-layout-export";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
