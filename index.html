@@ -1177,7 +1177,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 </style>
 </head>
-<body data-build="v2.4.8">
+<body data-build="v2.4.9">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1221,7 +1221,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 </section>
 <section id="calcView" class="calc-view">
 <div class="calc-card">
-<div class="calc-tabs"><button id="byRoom" class="active">部屋別</button><button id="byProduct">品番別</button></div>
+<div class="calc-tabs"><button id="byRoom" class="active">部屋別</button><button id="byProduct">品番別</button><button id="bySection">区分別</button></div>
 <div class="calc-export-actions"><button id="calcImageBtn">画像保存</button><button id="calcPdfBtn">PDF</button></div>
 <div id="calcContent"></div>
 </div>
@@ -4320,9 +4320,77 @@ function addMeasureRow(m,i){
 sec.measures.forEach((m,i)=>list.appendChild(addMeasureRow(m,i)));
 let t=secTotals(sec);d.querySelector(".sn").textContent=fmt(t.none);d.querySelector(".sw").textContent=fmt(t.withR);return d}
 function live(){let r=room(),card=document.querySelector(".room-card");if(!r||!card)return;card.querySelectorAll(".section").forEach((el,i)=>{let s=r.sections[i],t=secTotals(s);el.querySelector(".sn").textContent=fmt(t.none);el.querySelector(".sw").textContent=fmt(t.withR);el.querySelectorAll(".measure-row").forEach((row,j)=>{let c=calc(s.measures[j]?.value,effectiveWallRepeatV(s,state));row.querySelector(".line-result").textContent=c?fmt(c.noneM)+" / "+fmt(c.withM):""})});let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
-function buildCalc(){let html="";if(calcMode==="room"){state.rooms.forEach(r=>{let rt=roomTotals(r);html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;r.sections.forEach(s=>{let t=secTotals(s);if(!t.none&&!t.withR)return;html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${effectiveWallRepeatV(s,state)?"　↕︎"+esc(effectiveWallRepeatV(s,state)):""}${effectiveWallRepeatH(s,state)?"　↔︎"+esc(effectiveWallRepeatH(s,state)):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;let ds=s.measures.map(m=>{let c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`}).filter(Boolean);if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;html+="</div>"});html+="</div>"})}else{let g={};state.rooms.forEach(r=>r.sections.forEach(s=>{let k=effectiveWallProduct(s,state)||"品番未入力",t=secTotals(s);if(!g[k])g[k]={none:0,withR:0,items:[]};g[k].none+=t.none;g[k].withR+=t.withR;if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`)}));Object.entries(g).forEach(([p,x])=>html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`)}
-let gn=0,gw=0;state.rooms.forEach(r=>{let t=roomTotals(r);gn+=t.none;gw+=t.withR});html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;$("#calcContent").innerHTML=html}
 
+function sectionGroups(siteObj=state){
+  const map=new Map();
+  const preferred=[...(typeof sectionOrder!=="undefined"?sectionOrder:[]),...(typeof CATS!=="undefined"?CATS:[])];
+  const order=[];
+  const touch=name=>{if(!order.includes(name))order.push(name)};
+  preferred.forEach(touch);
+
+  (siteObj.rooms||[]).forEach(r=>(r.sections||[]).forEach(s=>{
+    const t=secTotals(s,siteObj);
+    if(!t.none&&!t.withR)return;
+    const name=String(s.name||"区分未入力").trim()||"区分未入力";
+    touch(name);
+    if(!map.has(name))map.set(name,{none:0,withR:0,items:[]});
+    const g=map.get(name);
+    g.none+=t.none;g.withR+=t.withR;
+    g.items.push({
+      room:r.name,
+      product:effectiveWallProduct(s,siteObj),
+      repeatV:effectiveWallRepeatV(s,siteObj),
+      repeatH:effectiveWallRepeatH(s,siteObj),
+      none:t.none,withR:t.withR
+    });
+  }));
+
+  return order.filter(name=>map.has(name)).map(name=>[name,map.get(name)]);
+}
+function buildCalc(){
+  let html="";
+  if(calcMode==="room"){
+    state.rooms.forEach(r=>{
+      let rt=roomTotals(r);
+      html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;
+      r.sections.forEach(s=>{
+        let t=secTotals(s,state);if(!t.none&&!t.withR)return;
+        html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${effectiveWallRepeatV(s,state)?"　↕︎"+esc(effectiveWallRepeatV(s,state)):""}${effectiveWallRepeatH(s,state)?"　↔︎"+esc(effectiveWallRepeatH(s,state)):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;
+        let ds=s.measures.map(m=>{
+          let c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";
+          let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;
+          return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`;
+        }).filter(Boolean);
+        if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;
+        html+="</div>";
+      });
+      html+="</div>";
+    });
+  }else if(calcMode==="product"){
+    let g={};
+    state.rooms.forEach(r=>r.sections.forEach(s=>{
+      let k=effectiveWallProduct(s,state)||"品番未入力",t=secTotals(s,state);
+      if(!g[k])g[k]={none:0,withR:0,items:[]};
+      g[k].none+=t.none;g[k].withR+=t.withR;
+      if(t.none||t.withR)g[k].items.push(`${r.name} ${s.name}：${fmt(t.withR)}`);
+    }));
+    Object.entries(g).forEach(([p,x])=>{
+      html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`;
+    });
+  }else{
+    sectionGroups(state).forEach(([name,x])=>{
+      const rooms=x.items.map(i=>{
+        const meta=[i.product,i.repeatV?`↕︎${i.repeatV}`:"",i.repeatH?`↔︎${i.repeatH}`:""].filter(Boolean).join(" ");
+        return `${i.room}${meta?"　"+meta:""}：${fmt(i.withR)}`;
+      });
+      html+=`<div class="calc-item"><div class="calc-title"><span>${esc(name)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${rooms.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`;
+    });
+  }
+  let gn=0,gw=0;
+  state.rooms.forEach(r=>{let t=roomTotals(r);gn+=t.none;gw+=t.withR});
+  html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;
+  $("#calcContent").innerHTML=html;
+}
 function displayMeasureText(v){return String(v||"").replace(/\*/g,"＊")}
 function sanitizeFilename(s){return String(s||"現調").replace(/[\\/:*?"<>|]/g,"_").trim()||"現調"}
 function splitWrapped(ctx,text,maxWidth){
@@ -4566,7 +4634,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         none:t.none,
         withR:t.withR,
         subs:(r.sections||[]).map(s=>{
-          const x=secTotals(s);
+          const x=secTotals(s,siteObj);
           return (!x.none&&!x.withR)?null:{
             label:`${s.name}${effectiveWallProduct(s,siteObj)?"　"+effectiveWallProduct(s,siteObj):""}${effectiveWallRepeatV(s,siteObj)?"　↕"+effectiveWallRepeatV(s,siteObj):""}${effectiveWallRepeatH(s,siteObj)?"　↔"+effectiveWallRepeatH(s,siteObj):""}`,
             none:x.none,
@@ -4575,7 +4643,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         }).filter(Boolean)
       });
     });
-  }else{
+  }else if(mode==="product"){
     Object.entries(productGroups(siteObj)).forEach(([p,x])=>{
       rows.push({
         title:p,
@@ -4583,6 +4651,19 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         withR:x.withR,
         subs:x.items.map(i=>({
           label:`${i.room}　${i.section}`,
+          none:i.none,
+          withR:i.withR
+        }))
+      });
+    });
+  }else{
+    sectionGroups(siteObj).forEach(([name,x])=>{
+      rows.push({
+        title:name,
+        none:x.none,
+        withR:x.withR,
+        subs:x.items.map(i=>({
+          label:`${i.room}${i.product?"　"+i.product:""}${i.repeatV?"　↕"+i.repeatV:""}${i.repeatH?"　↔"+i.repeatH:""}`,
           none:i.none,
           withR:i.withR
         }))
@@ -4609,7 +4690,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   y+=68;
   ctx.fillStyle="#272522";
   ctx.font='800 44px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText(mode==="room"?"部屋別集計":"品番別集計",pad+25,y);
+  ctx.fillText(mode==="room"?"部屋別集計":mode==="product"?"品番別集計":"区分別集計",pad+25,y);
 
   y+=38;
   ctx.strokeStyle="#ddd7d2";ctx.lineWidth=2;
@@ -5352,10 +5433,10 @@ async function saveCurrentRoomImage(){
 }
 
 async function exportCalcImage(){
-  try{save();const canvas=buildCalcSummaryCanvas(calcMode,state);const label=calcMode==="room"?"部屋別":"品番別";const fn=`${sanitizeFilename(state.siteName||"現調")}_${label}集計.png`;const file=await canvasToPngFile(canvas,fn);await shareOrDownloadFile(file,`${state.siteName||"現調"} ${label}集計`)}catch(e){console.error(e);alert("画像保存に失敗しました")}
+  try{save();const canvas=buildCalcSummaryCanvas(calcMode,state);const label=calcMode==="room"?"部屋別":calcMode==="product"?"品番別":"区分別";const fn=`${sanitizeFilename(state.siteName||"現調")}_${label}集計.png`;const file=await canvasToPngFile(canvas,fn);await shareOrDownloadFile(file,`${state.siteName||"現調"} ${label}集計`)}catch(e){console.error(e);alert("画像保存に失敗しました")}
 }
 async function exportCalcPdf(){
-  try{save();const canvas=buildCalcSummaryCanvas(calcMode,state);const label=calcMode==="room"?"部屋別":"品番別";const pages=await canvasToPdfJpegs(canvas);const blob=makePdfFromJpegs(pages);const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_${label}集計.pdf`,{type:"application/pdf"});await shareOrDownloadFile(file,`${state.siteName||"現調"} ${label}集計PDF`)}catch(e){console.error(e);alert("PDF作成に失敗しました")}
+  try{save();const canvas=buildCalcSummaryCanvas(calcMode,state);const label=calcMode==="room"?"部屋別":calcMode==="product"?"品番別":"区分別";const pages=await canvasToPdfJpegs(canvas);const blob=makePdfFromJpegs(pages);const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_${label}集計.pdf`,{type:"application/pdf"});await shareOrDownloadFile(file,`${state.siteName||"現調"} ${label}集計PDF`)}catch(e){console.error(e);alert("PDF作成に失敗しました")}
 }
 $("#calcImageBtn").onclick=()=>exportCalcImage();
 $("#calcPdfBtn").onclick=()=>exportCalcPdf();
@@ -5528,7 +5609,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.8",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.9",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -5779,7 +5860,16 @@ $("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length
 $("#memoDrawingInput").onchange=e=>{const files=e.target.files;if(files?.length&&memoDrawingTargetPageId)addMemoDrawingFiles(files,memoDrawingTargetPageId)};
 $("#siteName").oninput=save;$("#siteDate").onchange=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
 $("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
-$("#byRoom").onclick=()=>{calcMode="room";$("#byRoom").classList.add("active");$("#byProduct").classList.remove("active");buildCalc()};$("#byProduct").onclick=()=>{calcMode="product";$("#byProduct").classList.add("active");$("#byRoom").classList.remove("active");buildCalc()};
+function setCalcMode(mode){
+  calcMode=mode;
+  $("#byRoom").classList.toggle("active",mode==="room");
+  $("#byProduct").classList.toggle("active",mode==="product");
+  $("#bySection").classList.toggle("active",mode==="section");
+  buildCalc();
+}
+$("#byRoom").onclick=()=>setCalcMode("room");
+$("#byProduct").onclick=()=>setCalcMode("product");
+$("#bySection").onclick=()=>setCalcMode("section");
 
 $("#newSite").onclick=()=>{
   const n=prompt("新しい現場名（後から変更できます）","");

@@ -1,4 +1,4 @@
-const CACHE="gencho-v248-common-reflect";
+const CACHE="gencho-v249-section-calc";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
