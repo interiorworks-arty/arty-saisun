@@ -1,4 +1,4 @@
-const CACHE="gencho-v2418-repeat-dom-order";
+const CACHE="gencho-v2419-repeat-overlap-fix";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
