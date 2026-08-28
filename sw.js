@@ -1,4 +1,4 @@
-const CACHE="gencho-v2415-smartphone-repeat-fix";
+const CACHE="gencho-v2416-repeat-swap-tagline";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

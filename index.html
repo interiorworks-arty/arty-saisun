@@ -1332,9 +1332,29 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   }
 }
 
+
+/* v2.4.16 スマホ：全室共通リピート左右入替＋タグライン改行防止 */
+@media(max-width:600px){
+  /* 寸法入力の並びに合わせて、左=↔︎、右=↕︎ */
+  .wall-common-repeat-wrap:nth-of-type(1){
+    grid-area:hrepeat!important;
+  }
+  .wall-common-repeat-wrap:nth-of-type(2){
+    grid-area:vrepeat!important;
+  }
+
+  /* 「職人もデジタル化。」を1行表示 */
+  .tag{
+    white-space:nowrap!important;
+    word-break:keep-all!important;
+    font-size:11px!important;
+    letter-spacing:-.02em!important;
+  }
+}
+
 </style>
 </head>
-<body data-build="v2.4.15">
+<body data-build="v2.4.16">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5858,7 +5878,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.15",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.16",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
