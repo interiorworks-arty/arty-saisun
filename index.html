@@ -1221,9 +1221,71 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .line-result{font-size:10px;text-align:right}
 }
 
+
+/* v2.4.14 スマホ専用最適化（iPad表示は変更しない） */
+@media(max-width:600px){
+  /* 全室共通：品番を1段目、縦横リピートをコンパクトに横並び */
+  .wall-common-product{
+    grid-template-columns:auto minmax(0,1fr)!important;
+    gap:8px 7px!important;
+    padding:10px!important;
+  }
+  .wall-common-product-label{align-self:center}
+  .wall-common-product-btn{min-width:0!important}
+  .wall-common-repeat-wrap{
+    min-width:0!important;
+    display:grid!important;
+    grid-template-columns:18px minmax(0,1fr)!important;
+    gap:3px!important;
+  }
+  .wall-common-repeat-wrap:nth-of-type(1){grid-column:1 / 2}
+  .wall-common-repeat-wrap:nth-of-type(2){grid-column:2 / 3}
+  .wall-common-repeat-wrap .repeat-button{
+    min-width:0!important;width:100%!important;min-height:34px!important;
+    padding:6px 7px!important;font-size:13px!important;
+  }
+  .wall-common-product-note{grid-column:1 / -1!important}
+
+  /* 区分ヘッダー：スマホでも縦横リピートを均等に */
+  .section-head{
+    grid-template-columns:minmax(54px,.75fr) minmax(76px,1fr) minmax(120px,1.7fr) 20px!important;
+  }
+  .repeat-group{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+  .repeat-button{font-size:11px!important}
+
+  /* 採寸：1行目に「入力 → 裁断 差」、2行目にm数 */
+  .measure-row{
+    display:grid!important;
+    grid-template-columns:20px minmax(78px,1fr) minmax(82px,1fr) 34px!important;
+    grid-template-areas:
+      "drag input cut diff"
+      ". result result result"!important;
+    column-gap:5px!important;row-gap:1px!important;
+    align-items:center!important;
+    padding:7px 0!important;
+    border-bottom:1px solid #eee9e5;
+  }
+  .measure-row:last-child{border-bottom:0}
+  .measure-drag{grid-area:drag!important}
+  .measure-input{grid-area:input!important;font-size:18px!important;font-weight:900!important}
+  .cut-result{
+    grid-area:cut!important;font-size:16px!important;font-weight:800!important;
+    min-width:0!important;text-align:left!important;
+  }
+  .cut-difference{
+    grid-area:diff!important;font-size:15px!important;font-weight:800!important;
+    min-width:0!important;text-align:right!important;
+  }
+  .line-result{
+    grid-area:result!important;max-width:none!important;width:auto!important;
+    font-size:10px!important;text-align:left!important;padding-left:2px!important;
+    color:#8b837d!important;white-space:nowrap!important;
+  }
+}
+
 </style>
 </head>
-<body data-build="v2.4.13">
+<body data-build="v2.4.14">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5747,7 +5809,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.13",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.14",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
