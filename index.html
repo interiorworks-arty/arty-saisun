@@ -1283,9 +1283,58 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   }
 }
 
+
+/* v2.4.15 スマホ：全室共通リピート欄のサイズ修正 */
+@media(max-width:600px){
+  .wall-common-product{
+    display:grid!important;
+    grid-template-columns:auto minmax(0,1fr) auto!important;
+    grid-template-areas:
+      "label product product"
+      ". vrepeat hrepeat"
+      "note note note"!important;
+    gap:8px 7px!important;
+    align-items:center!important;
+  }
+  .wall-common-product-label{grid-area:label!important}
+  .wall-common-product-btn{grid-area:product!important}
+
+  .wall-common-repeat-wrap:nth-of-type(1){
+    grid-area:vrepeat!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    width:auto!important;
+    min-width:0!important;
+    gap:3px!important;
+  }
+  .wall-common-repeat-wrap:nth-of-type(2){
+    grid-area:hrepeat!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    width:auto!important;
+    min-width:0!important;
+    gap:3px!important;
+  }
+  .wall-common-repeat-wrap .repeat-button{
+    width:84px!important;
+    min-width:84px!important;
+    max-width:84px!important;
+    min-height:34px!important;
+    padding:6px 7px!important;
+    font-size:13px!important;
+    flex:0 0 84px!important;
+  }
+  .wall-common-product-note{
+    grid-area:note!important;
+    grid-column:auto!important;
+  }
+}
+
 </style>
 </head>
-<body data-build="v2.4.14">
+<body data-build="v2.4.15">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5809,7 +5858,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.14",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.15",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
