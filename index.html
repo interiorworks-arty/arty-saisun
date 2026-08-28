@@ -1175,9 +1175,47 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   color:#5f5751!important;
 }
 
+
+/* v2.4.10 区分別：任意選択で施工数量合計 */
+.calc-section-select{
+  width:100%;border:0;background:transparent;padding:7px 8px;
+  color:inherit;text-align:left;display:flex;justify-content:space-between;
+  gap:10px;font:inherit;border-radius:9px;touch-action:manipulation;
+}
+.calc-section-item.selected>.calc-section-select{background:#ded6d0}
+.calc-section-item.partial>.calc-section-select{background:#eee9e5}
+.calc-section-rooms{display:flex;flex-direction:column;gap:4px}
+.calc-room-select{
+  width:100%;border:0;background:transparent;color:#756e68;border-radius:8px;
+  padding:6px 8px;display:flex;justify-content:space-between;align-items:center;
+  gap:12px;text-align:left;font-size:13px;touch-action:manipulation;
+}
+.calc-room-select strong{color:#625b55;white-space:nowrap}
+.calc-room-select.selected{background:#ded6d0;color:#3f3a36}
+.calc-room-select.selected strong{color:#3f3a36}
+.calc-section-totals{padding:5px 8px 0}
+.calc-content-section-select{padding-bottom:100px}
+.calc-selection-bar{
+  position:fixed;left:12px;right:12px;
+  bottom:calc(76px + env(safe-area-inset-bottom));
+  z-index:70;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 12px;background:rgba(248,246,244,.97);
+  border:1px solid #d8d0ca;border-radius:14px;box-shadow:0 5px 20px rgba(0,0,0,.14);
+}
+.calc-selection-bar>div{display:grid;grid-template-columns:auto auto;align-items:baseline;column-gap:10px}
+.calc-selection-bar span{font-size:12px;font-weight:900;color:#756e68}
+.calc-selection-bar strong{font-size:24px;font-weight:900;color:#3e3935}
+.calc-selection-bar small{grid-column:1/-1;font-size:10px;color:#8b837d}
+.calc-selection-bar button{
+  border:0;border-radius:9px;background:#e7e1dc;color:#665f59;
+  padding:9px 12px;font-weight:900;touch-action:manipulation;
+}
+.calc-selection-bar button:disabled{opacity:.4}
+.calc-selection-bar.has-selection{border-color:#bfb4ac}
+
 </style>
 </head>
-<body data-build="v2.4.9">
+<body data-build="v2.4.10">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="small-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4337,6 +4375,7 @@ function sectionGroups(siteObj=state){
     const g=map.get(name);
     g.none+=t.none;g.withR+=t.withR;
     g.items.push({
+      key:`${r.id||r.name}|${s.id||s.name}`,
       room:r.name,
       product:effectiveWallProduct(s,siteObj),
       repeatV:effectiveWallRepeatV(s,siteObj),
@@ -4347,6 +4386,36 @@ function sectionGroups(siteObj=state){
 
   return order.filter(name=>map.has(name)).map(name=>[name,map.get(name)]);
 }
+
+const calcSectionSelection=new Set();
+
+function sectionSelectionSnapshot(siteObj=state){
+  const groups=sectionGroups(siteObj);
+  const valid=new Set();
+  groups.forEach(([,g])=>g.items.forEach(it=>valid.add(it.key)));
+  [...calcSectionSelection].forEach(k=>{if(!valid.has(k))calcSectionSelection.delete(k)});
+  return groups;
+}
+function sectionSelectionTotals(groups){
+  let none=0,withR=0,count=0;
+  groups.forEach(([,g])=>g.items.forEach(it=>{
+    if(calcSectionSelection.has(it.key)){none+=it.none;withR+=it.withR;count++}
+  }));
+  return {none,withR,count};
+}
+function toggleSectionSelection(sectionName){
+  const found=sectionSelectionSnapshot(state).find(([name])=>name===sectionName);
+  if(!found)return;
+  const keys=found[1].items.map(it=>it.key);
+  const allSelected=keys.length>0&&keys.every(k=>calcSectionSelection.has(k));
+  keys.forEach(k=>allSelected?calcSectionSelection.delete(k):calcSectionSelection.add(k));
+  buildCalc();
+}
+function toggleSectionRoomSelection(key){
+  if(calcSectionSelection.has(key))calcSectionSelection.delete(key);else calcSectionSelection.add(key);
+  buildCalc();
+}
+function clearSectionSelection(){calcSectionSelection.clear();buildCalc()}
 function buildCalc(){
   let html="";
   if(calcMode==="room"){
@@ -4378,18 +4447,41 @@ function buildCalc(){
       html+=`<div class="calc-item"><div class="calc-title"><span>${esc(p)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${x.items.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`;
     });
   }else{
-    sectionGroups(state).forEach(([name,x])=>{
-      const rooms=x.items.map(i=>{
+    const groups=sectionSelectionSnapshot(state);
+    groups.forEach(([name,x])=>{
+      const keys=x.items.map(it=>it.key);
+      const selectedCount=keys.filter(k=>calcSectionSelection.has(k)).length;
+      const allSelected=keys.length>0&&selectedCount===keys.length;
+      const partial=selectedCount>0&&!allSelected;
+      html+=`<div class="calc-item calc-section-item${allSelected?" selected":partial?" partial":""}">`;
+      html+=`<button type="button" class="calc-title calc-section-select" data-section-name="${esc(name)}"><span>${esc(name)}</span><span>${fmt(x.withR)}</span></button>`;
+      html+=`<div class="calc-sub calc-section-rooms">`;
+      x.items.forEach(i=>{
         const meta=[i.product,i.repeatV?`↕︎${i.repeatV}`:"",i.repeatH?`↔︎${i.repeatH}`:""].filter(Boolean).join(" ");
-        return `${i.room}${meta?"　"+meta:""}：${fmt(i.withR)}`;
+        const sel=calcSectionSelection.has(i.key);
+        html+=`<button type="button" class="calc-room-select${sel?" selected":""}" data-section-room-key="${esc(i.key)}"><span>${esc(i.room)}${meta?"　"+esc(meta):""}</span><strong>${fmt(i.withR)}</strong></button>`;
       });
-      html+=`<div class="calc-item"><div class="calc-title"><span>${esc(name)}</span><span>${fmt(x.withR)}</span></div><div class="calc-sub">${rooms.map(esc).join("<br>")}<br><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div>`;
+      html+=`<div class="calc-section-totals"><b>リピートなし ${fmt(x.none)} ／ リピートあり ${fmt(x.withR)}</b></div></div></div>`;
     });
+    const st=sectionSelectionTotals(groups);
+    html+=`<div class="calc-selection-bar${st.count?" has-selection":""}"><div><span>選択合計</span><strong>${fmt(st.withR)}</strong><small>リピートなし ${fmt(st.none)}</small></div><button type="button" id="clearSectionSelection" ${st.count?"":"disabled"}>クリア</button></div>`;
   }
   let gn=0,gw=0;
   state.rooms.forEach(r=>{let t=roomTotals(r);gn+=t.none;gw+=t.withR});
   html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;
-  $("#calcContent").innerHTML=html;
+  const calcContent=$("#calcContent");
+  calcContent.innerHTML=html;
+  calcContent.classList.toggle("calc-content-section-select",calcMode==="section");
+  if(calcMode==="section"){
+    calcContent.querySelectorAll(".calc-section-select").forEach(btn=>{
+      btn.onclick=()=>toggleSectionSelection(btn.dataset.sectionName);
+    });
+    calcContent.querySelectorAll(".calc-room-select").forEach(btn=>{
+      btn.onclick=()=>toggleSectionRoomSelection(btn.dataset.sectionRoomKey);
+    });
+    const clear=calcContent.querySelector("#clearSectionSelection");
+    if(clear)clear.onclick=clearSectionSelection;
+  }
 }
 function displayMeasureText(v){return String(v||"").replace(/\*/g,"＊")}
 function sanitizeFilename(s){return String(s||"現調").replace(/[\\/:*?"<>|]/g,"_").trim()||"現調"}
@@ -5609,7 +5701,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.9",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.10",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
