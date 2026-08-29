@@ -1535,9 +1535,42 @@ header .room-actions .site-list-btn{
   .glue-meter{grid-column:2 / 6;text-align:left;font-size:11px;padding-bottom:3px}
 }
 
+
+/* v2.4.27 糊付け：現場合計・残りm数＋途中枚数 */
+.glue-summary{display:flex;gap:10px;align-items:stretch;min-width:0}
+.glue-summary-box{
+  min-width:150px;background:#f1edea;border-radius:12px;
+  padding:9px 13px;display:flex;flex-direction:column;gap:2px
+}
+.glue-summary-box span{font-size:11px;font-weight:800;color:#8b827b}
+.glue-summary-box strong{font-size:21px;font-weight:900;color:#332f2c;font-variant-numeric:tabular-nums}
+.glue-row{grid-template-columns:38px minmax(100px,170px) 28px minmax(100px,170px) minmax(32px,65px) minmax(72px,1fr) auto!important}
+.glue-qty-btn{
+  border:0;border-radius:10px;background:#eee9e5;color:#514a45;
+  min-width:102px;padding:7px 10px;font-size:15px;font-weight:900;
+  font-variant-numeric:tabular-nums;line-height:1.05
+}
+.glue-qty-btn small{display:block;margin-top:4px;font-size:10px;font-weight:800;color:#8b827b}
+.glue-row.partial{background:#faf8f6}
+.glue-row.partial .glue-check{
+  border-color:var(--accent);background:#eee9e5;color:var(--accent)
+}
+.glue-row.partial .glue-check::after{content:"•";font-size:25px;line-height:1}
+@media(max-width:600px){
+  .glue-page-top{align-items:flex-start;flex-wrap:wrap}
+  .glue-summary{width:100%}
+  .glue-summary-box{min-width:0;flex:1;padding:8px 10px}
+  .glue-summary-box strong{font-size:18px}
+  .glue-row{
+    grid-template-columns:34px minmax(72px,1fr) 18px minmax(72px,1fr) 32px!important
+  }
+  .glue-meter{grid-column:2 / 4!important;grid-row:auto!important}
+  .glue-qty-btn{grid-column:4 / 6;min-width:0;width:100%;font-size:13px}
+}
+
 </style>
 </head>
-<body data-build="v2.4.26">
+<body data-build="v2.4.27">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1548,8 +1581,8 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-page="sheet">シート</button>
   <button type="button" data-work-page="other">その他</button>
   <button type="button" data-work-page="photo">写真・動画</button>
-  <button type="button" data-work-page="memo">メモ</button>
   <button type="button" data-work-page="drawing">図面</button>
+  <button type="button" data-work-page="memo">メモ</button>
   <button type="button" data-work-page="glue">糊付け</button>
   <button type="button" data-work-page="order">発注</button>
 </div>
@@ -4521,37 +4554,73 @@ function glueMeasureKey(roomObj,sec,m){
 function glueUsefulRooms(siteObj=state){
   return (siteObj.rooms||[]).filter(r=>(r.sections||[]).some(sec=>(sec.measures||[]).some(m=>String(m.value||"").trim())));
 }
-function glueProgress(siteObj=state){
+function glueDoneQty(checks,key,totalQty){
+  const raw=checks[key];
+  if(raw===true)return totalQty; // v2.4.26 のチェック済みデータを引き継ぐ
+  const n=Number(raw);
+  if(!Number.isFinite(n)||n<=0)return 0;
+  return Math.max(0,Math.min(totalQty,Math.floor(n)));
+}
+function setGlueDoneQty(checks,key,qty,totalQty){
+  const n=Math.max(0,Math.min(totalQty,Math.floor(Number(qty)||0)));
+  if(n<=0)delete checks[key];
+  else checks[key]=n;
+}
+function glueSummary(siteObj=state){
   const checks=ensureGlueChecks(siteObj);
-  let total=0,done=0;
-  glueUsefulRooms(siteObj).forEach(r=>(r.sections||[]).forEach(sec=>(sec.measures||[]).forEach(m=>{
-    if(!String(m.value||"").trim())return;
-    total++;
-    if(checks[glueMeasureKey(r,sec,m)])done++;
-  })));
-  return {done,total};
+  let totalM=0,doneM=0;
+  glueUsefulRooms(siteObj).forEach(r=>(r.sections||[]).forEach(sec=>{
+    const rv=effectiveWallRepeatV(sec,siteObj);
+    (sec.measures||[]).forEach(m=>{
+      if(!String(m.value||"").trim())return;
+      const c=calc(m.value,rv);if(!c)return;
+      totalM+=c.withM;
+      const key=glueMeasureKey(r,sec,m);
+      const doneQty=glueDoneQty(checks,key,c.qty);
+      doneM+=(c.each*doneQty)/100;
+    });
+  }));
+  const remainingM=Math.max(0,totalM-doneM);
+  return {totalM,doneM,remainingM};
+}
+function refreshGlueSummary(wrap){
+  const s=glueSummary(state);
+  const total=wrap?.querySelector(".glue-total-m");
+  const remain=wrap?.querySelector(".glue-remaining-m");
+  if(total)total.textContent=fmt(s.totalM);
+  if(remain)remain.textContent=fmt(s.remainingM);
+}
+function promptGlueDoneQty(current,total){
+  const v=prompt(`糊付け済みの枚数を入力してください\n0〜${total}枚`,String(current));
+  if(v===null)return null;
+  const s=String(v).trim();
+  if(!/^\d+$/.test(s)){alert("0〜"+total+"の数字で入力してください");return null}
+  const n=Number(s);
+  if(n<0||n>total){alert("0〜"+total+"の範囲で入力してください");return null}
+  return n;
 }
 function renderGluePage(){
   const area=$("#gluePageArea");if(!area)return;
-  ensureGlueChecks(state);
+  const checks=ensureGlueChecks(state);
   const rooms=glueUsefulRooms(state);
   if(!rooms.length){
     area.innerHTML='<div class="glue-page"><div class="glue-page-title">糊付け</div><div class="glue-page-empty">クロスの採寸データがありません</div></div>';
     return;
   }
-  const progress=glueProgress(state);
+  const summary=glueSummary(state);
   const wrap=document.createElement("div");
   wrap.className="glue-page";
-  wrap.innerHTML=`<div class="glue-page-top"><div><div class="glue-page-title">糊付け</div><div class="glue-progress">${progress.done} / ${progress.total} 完了</div></div><button type="button" class="glue-page-reset">チェックを全解除</button></div><div class="glue-room-list"></div>`;
+  wrap.innerHTML=`<div class="glue-page-top"><div class="glue-summary"><div class="glue-summary-box"><span>現場合計</span><strong class="glue-total-m">${fmt(summary.totalM)}</strong></div><div class="glue-summary-box"><span>残り</span><strong class="glue-remaining-m">${fmt(summary.remainingM)}</strong></div></div><button type="button" class="glue-page-reset">チェックを全解除</button></div><div class="glue-room-list"></div>`;
   wrap.querySelector(".glue-page-reset").onclick=()=>{
-    if(!confirm("糊付けのチェックをすべて外しますか？"))return;
+    if(!confirm("糊付けのチェック・途中枚数をすべて0に戻しますか？"))return;
     state.glueChecks={};save();renderGluePage();
   };
   const list=wrap.querySelector(".glue-room-list");
-  const checks=ensureGlueChecks(state);
+
   rooms.forEach(r=>{
     const roomEl=document.createElement("section");roomEl.className="glue-room";
     const title=document.createElement("h3");title.className="glue-room-title";title.textContent=r.name;roomEl.appendChild(title);
+
     (r.sections||[]).forEach(sec=>{
       const measures=(sec.measures||[]).filter(m=>String(m.value||"").trim());
       if(!measures.length)return;
@@ -4560,30 +4629,47 @@ function renderGluePage(){
       const head=document.createElement("div");head.className="glue-section-head";
       head.innerHTML=`<span class="glue-section-name">${esc(sec.name)}</span>${prod?`<span class="glue-product">${esc(prod)}</span>`:""}${rv?`<span class="glue-repeat">↕︎${esc(rv)}</span>`:""}${rh?`<span class="glue-repeat">↔︎${esc(rh)}</span>`:""}`;
       secEl.appendChild(head);
+
       measures.forEach(m=>{
         const key=glueMeasureKey(r,sec,m);
         const c=calc(m.value,rv);
+        if(!c)return;
         const cut=cutDisplay(m.value,rv);
         const diff=cutDifference(m.value,rv);
-        const row=document.createElement("div");row.className="glue-row"+(checks[key]?" checked":"");
-        row.innerHTML=`<button type="button" class="glue-check" aria-label="${checks[key]?"チェックを外す":"完了にする"}">${checks[key]?"✓":""}</button><div class="glue-original">${esc(m.value)}</div><div class="glue-arrow">${cut?"→":""}</div><div class="glue-cut">${cut?esc(cut):""}</div><div class="glue-diff">${diff?esc(diff):""}</div><div class="glue-meter">${c?`${fmt(c.noneM)}${rv?` / ${fmt(c.withM)}`:""}`:""}</div>`;
+        const doneQty=glueDoneQty(checks,key,c.qty);
+        const checked=doneQty>=c.qty;
+        const partial=doneQty>0&&!checked;
+
+        const row=document.createElement("div");
+        row.className="glue-row"+(checked?" checked":"")+(partial?" partial":"");
+        row.innerHTML=`<button type="button" class="glue-check" aria-label="${checked?"チェックを外す":"すべて完了にする"}">${checked?"✓":""}</button><div class="glue-original">${esc(m.value)}</div><div class="glue-arrow">${cut?"→":""}</div><div class="glue-cut">${cut?esc(cut):""}</div><div class="glue-diff">${diff?esc(diff):""}</div><div class="glue-meter">${fmt(c.withM)}</div>${c.qty>1?`<button type="button" class="glue-qty-btn">${doneQty} / ${c.qty}<small>残り ${c.qty-doneQty}枚</small></button>`:""}`;
+
         const btn=row.querySelector(".glue-check");
         btn.onclick=()=>{
-          if(checks[key])delete checks[key]; else checks[key]=true;
+          const now=glueDoneQty(checks,key,c.qty);
+          setGlueDoneQty(checks,key,now>=c.qty?0:c.qty,c.qty);
           save();
-          const checked=!!checks[key];
-          row.classList.toggle("checked",checked);
-          btn.textContent=checked?"✓":"";
-          btn.setAttribute("aria-label",checked?"チェックを外す":"完了にする");
-          const p=glueProgress(state);
-          wrap.querySelector(".glue-progress").textContent=`${p.done} / ${p.total} 完了`;
+          renderGluePage();
         };
+
+        const qtyBtn=row.querySelector(".glue-qty-btn");
+        if(qtyBtn){
+          qtyBtn.onclick=()=>{
+            const current=glueDoneQty(checks,key,c.qty);
+            const n=promptGlueDoneQty(current,c.qty);
+            if(n===null)return;
+            setGlueDoneQty(checks,key,n,c.qty);
+            save();
+            renderGluePage();
+          };
+        }
         secEl.appendChild(row);
       });
       roomEl.appendChild(secEl);
     });
     list.appendChild(roomEl);
   });
+
   area.innerHTML="";
   area.appendChild(wrap);
 }
@@ -6217,7 +6303,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.26",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.27",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6629,7 +6715,7 @@ document.addEventListener("click",e=>{const pk=$("#productKeypad");if(!pk||!pk.c
 const WORK_PAGE_ORDER_KEY="gencho-work-page-order-v1";
 function applyWorkPageOrder(){
  const box=document.querySelector(".work-page-tabs");if(!box)return;
- const defs=["wall","floor","sheet","other","photo","memo","drawing","order"];let order=defs;
+ const defs=["wall","floor","sheet","other","photo","drawing","memo","glue","order"];let order=defs;
  try{const a=JSON.parse(localStorage.getItem(WORK_PAGE_ORDER_KEY)||"null");if(Array.isArray(a))order=[...a.filter(x=>defs.includes(x)),...defs.filter(x=>!a.includes(x))]}catch{}
  order.forEach(k=>{const b=box.querySelector(`[data-work-page="${k}"]`);if(b)box.appendChild(b)});
 }
