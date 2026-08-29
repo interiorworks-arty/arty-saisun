@@ -1,4 +1,4 @@
-const CACHE="gencho-v2424-room-side-arrows";
+const CACHE="gencho-v2425-ipad-only-room-arrows";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

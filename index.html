@@ -1465,9 +1465,18 @@ header .room-actions .site-list-btn{
   .room-side-next{right:2px}
 }
 
+
+/* v2.4.25 スマホでは部屋移動矢印を非表示 */
+@media(max-width:600px){
+  .room-side-nav,
+  .room-side-nav.show{
+    display:none!important;
+  }
+}
+
 </style>
 </head>
-<body data-build="v2.4.24">
+<body data-build="v2.4.25">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -6063,7 +6072,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.24",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.25",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
