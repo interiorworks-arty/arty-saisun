@@ -1568,9 +1568,21 @@ header .room-actions .site-list-btn{
   .glue-qty-btn{grid-column:4 / 6;min-width:0;width:100%;font-size:13px}
 }
 
+
+/* v2.4.28 糊付け途中枚数：アプリ内数字テンキー */
+.glue-qty-sheet{position:fixed;inset:0;z-index:89;background:rgba(0,0,0,.28);display:none;align-items:center;justify-content:center;padding:20px}
+.glue-qty-sheet.show{display:flex}
+.glue-qty-card{width:min(390px,calc(100% - 24px));background:#fff;border-radius:18px;padding:18px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+.glue-qty-title{font-size:18px;font-weight:900;margin-bottom:4px}.glue-qty-limit{font-size:13px;color:#827971;font-weight:750;margin-bottom:12px}
+.glue-qty-input{width:100%;min-height:58px;border:2px solid #d7d0ca;border-radius:12px;background:#faf8f6;text-align:left;padding:8px 14px;font-size:26px;font-weight:900;color:var(--ink)}
+.glue-qty-input.active-input{border-color:var(--accent)}
+.glue-qty-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}.glue-qty-actions button{border:0;border-radius:10px;padding:10px 16px;background:#eeeae7;font-weight:850}.glue-qty-actions button.primary{background:var(--accent);color:#fff}
+.keypad.glue-qty-mode [data-key="."],.keypad.glue-qty-mode [data-key="*"],.keypad.glue-qty-mode [data-key="-"],.keypad.glue-qty-mode [data-key="left"],.keypad.glue-qty-mode [data-key="right"]{visibility:hidden!important}
+.keypad.glue-qty-mode .key-enter{grid-row:span 2}
+
 </style>
 </head>
-<body data-build="v2.4.27">
+<body data-build="v2.4.28">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1630,6 +1642,15 @@ header .room-actions .site-list-btn{
 <div id="roomSideNav" class="room-side-nav" aria-hidden="true">
   <button type="button" id="roomPrevBtn" class="room-side-btn room-side-prev" aria-label="前の部屋へ">◀︎</button>
   <button type="button" id="roomNextBtn" class="room-side-btn room-side-next" aria-label="次の部屋へ">▶︎</button>
+</div>
+
+<div id="glueQtySheet" class="glue-qty-sheet" aria-hidden="true">
+  <div class="glue-qty-card">
+    <div class="glue-qty-title">糊付け済み枚数</div>
+    <div id="glueQtyLimit" class="glue-qty-limit"></div>
+    <button type="button" id="glueQtyInput" class="glue-qty-input" data-placeholder="0">0</button>
+    <div class="glue-qty-actions"><button type="button" id="glueQtyCancel">キャンセル</button><button type="button" id="glueQtyDone" class="primary">完了</button></div>
+  </div>
 </div>
 
 <div id="measureKeypad" class="keypad" aria-hidden="true">
@@ -1997,6 +2018,7 @@ function registerProduct(product,repeat){
 }
 
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,activeGenericEnter=null,keypadMode="measure",numberCursor=0,productCursor=0;
+let activeGlueQtyKey=null,activeGlueQtyTotal=0,glueQtyDraft={value:""};
 
 const KEYPAD_PREF_KEY="gencho-keypad-layout-v4";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
@@ -4590,15 +4612,29 @@ function refreshGlueSummary(wrap){
   if(total)total.textContent=fmt(s.totalM);
   if(remain)remain.textContent=fmt(s.remainingM);
 }
-function promptGlueDoneQty(current,total){
-  const v=prompt(`糊付け済みの枚数を入力してください\n0〜${total}枚`,String(current));
-  if(v===null)return null;
-  const s=String(v).trim();
-  if(!/^\d+$/.test(s)){alert("0〜"+total+"の数字で入力してください");return null}
-  const n=Number(s);
-  if(n<0||n>total){alert("0〜"+total+"の範囲で入力してください");return null}
-  return n;
+function closeGlueQtyEditor(apply=false){
+  const sheet=$("#glueQtySheet"),kp=$("#measureKeypad");
+  if(apply&&activeGlueQtyKey){
+    const n=Math.max(0,Math.min(activeGlueQtyTotal,Math.floor(Number(glueQtyDraft.value)||0)));
+    setGlueDoneQty(ensureGlueChecks(state),activeGlueQtyKey,n,activeGlueQtyTotal);save();
+  }
+  if(sheet){sheet.classList.remove("show");sheet.setAttribute("aria-hidden","true")}
+  if(kp)kp.classList.remove("glue-qty-mode");
+  hideMeasureKeypad();activeGlueQtyKey=null;activeGlueQtyTotal=0;glueQtyDraft={value:""};
+  if(apply)renderGluePage();
 }
+function openGlueQtyEditor(key,current,total){
+  activeGlueQtyKey=key;activeGlueQtyTotal=total;glueQtyDraft={value:String(current)};
+  const sheet=$("#glueQtySheet"),inp=$("#glueQtyInput");
+  $("#glueQtyLimit").textContent=`0〜${total}枚`;
+  sheet.classList.add("show");sheet.setAttribute("aria-hidden","false");
+  inp.textContent=glueQtyDraft.value;
+  showGenericNumberKeypad(inp,glueQtyDraft,"value","糊付け枚数",()=>{
+    let n=Math.floor(Number(glueQtyDraft.value)||0);if(n>total){glueQtyDraft.value=String(total);numberCursor=glueQtyDraft.value.length;renderNumberCursor()}
+  },null,()=>closeGlueQtyEditor(true));
+  $("#measureKeypad")?.classList.add("glue-qty-mode");
+}
+
 function renderGluePage(){
   const area=$("#gluePageArea");if(!area)return;
   const checks=ensureGlueChecks(state);
@@ -4656,11 +4692,7 @@ function renderGluePage(){
         if(qtyBtn){
           qtyBtn.onclick=()=>{
             const current=glueDoneQty(checks,key,c.qty);
-            const n=promptGlueDoneQty(current,c.qty);
-            if(n===null)return;
-            setGlueDoneQty(checks,key,n,c.qty);
-            save();
-            renderGluePage();
+            openGlueQtyEditor(key,current,c.qty);
           };
         }
         secEl.appendChild(row);
@@ -6303,7 +6335,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.27",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.28",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6636,6 +6668,10 @@ $("#backupFileInput").onchange=async e=>{
 
 
 
+$("#glueQtyCancel").onclick=()=>closeGlueQtyEditor(false);
+$("#glueQtyDone").onclick=()=>closeGlueQtyEditor(true);
+$("#glueQtySheet").addEventListener("pointerdown",e=>{if(e.target===$("#glueQtySheet"))closeGlueQtyEditor(false)});
+
 $("#measureKeypad").querySelectorAll("button[data-key]").forEach(btn=>{
   btn.addEventListener("pointerdown",e=>{
     e.preventDefault();
@@ -6645,6 +6681,7 @@ $("#measureKeypad").querySelectorAll("button[data-key]").forEach(btn=>{
 document.addEventListener("click",e=>{
   const kp=$("#measureKeypad");
   if(!kp)return;
+  if($("#glueQtySheet")?.classList.contains("show"))return;
   if(kp.contains(e.target) || e.target.classList?.contains("measure-input"))return;
   if(e.target.closest?.(".bottom"))return;
   hideMeasureKeypad();
