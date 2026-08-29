@@ -1474,9 +1474,70 @@ header .room-actions .site-list-btn{
   }
 }
 
+
+/* v2.4.26 糊付けページ */
+.work-page-tabs{grid-template-columns:repeat(9,minmax(0,1fr))!important}
+.glue-page{background:#fff;border-radius:16px;padding:14px;margin-bottom:14px}
+.glue-page-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.glue-page-title{font-size:21px;font-weight:900;color:var(--ink)}
+.glue-page-reset{
+  border:0;border-radius:10px;background:#eeeae7;color:#665e58;
+  padding:8px 11px;font-size:12px;font-weight:800
+}
+.glue-page-empty{padding:24px 10px;color:#958c85;font-size:14px}
+.glue-room{padding:8px 0 18px}
+.glue-room+.glue-room{border-top:2px solid #e8e2dd;padding-top:18px}
+.glue-room-title{
+  position:sticky;top:92px;z-index:4;
+  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
+  font-size:22px;font-weight:900;padding:8px 2px 9px;margin:0 0 5px
+}
+.glue-section{padding:13px 0;border-top:1px solid #eee7e2}
+.glue-section:first-of-type{border-top:0}
+.glue-section-head{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:7px}
+.glue-section-name{font-size:18px;font-weight:900}
+.glue-product{font-size:14px;font-weight:800;color:#716962}
+.glue-repeat{font-size:13px;font-weight:750;color:#8a817a}
+.glue-row{
+  display:grid;grid-template-columns:38px minmax(110px,180px) 28px minmax(110px,180px) minmax(32px,70px) 1fr;
+  gap:8px;align-items:center;min-height:48px;padding:4px 2px;
+  border-top:1px solid #f1ebe7
+}
+.glue-row:first-of-type{border-top:0}
+.glue-check{
+  width:30px;height:30px;border:2px solid #aaa19a;border-radius:6px;background:#fff;
+  color:#fff;font-size:22px;line-height:25px;font-weight:900;padding:0;
+  display:flex;align-items:center;justify-content:center
+}
+.glue-row.checked .glue-check{background:var(--accent);border-color:var(--accent)}
+.glue-original{font-size:21px;font-weight:850;font-variant-numeric:tabular-nums}
+.glue-arrow{font-size:22px;font-weight:900;color:#9c938c;text-align:center}
+.glue-cut{font-size:21px;font-weight:850;color:#776f69;font-variant-numeric:tabular-nums}
+.glue-diff{font-size:18px;font-weight:800;color:#918880;text-align:right;font-variant-numeric:tabular-nums}
+.glue-meter{font-size:12px;font-weight:700;color:#9a918a;text-align:right;white-space:nowrap}
+.glue-row.checked .glue-original,
+.glue-row.checked .glue-cut,
+.glue-row.checked .glue-diff,
+.glue-row.checked .glue-meter{opacity:.38;text-decoration:line-through}
+.glue-progress{font-size:12px;color:#8a817a;font-weight:800}
+@media(max-width:600px){
+  .work-page-tabs{grid-template-columns:repeat(9,minmax(0,1fr))!important}
+  .work-page-tabs button{font-size:8.3px!important;padding-left:0!important;padding-right:0!important}
+  .glue-page{padding:10px}
+  .glue-room-title{top:82px;font-size:19px}
+  .glue-row{
+    grid-template-columns:34px minmax(74px,1fr) 20px minmax(74px,1fr) 34px!important;
+    gap:4px!important
+  }
+  .glue-original,.glue-cut{font-size:17px}
+  .glue-arrow{font-size:17px}
+  .glue-diff{font-size:15px}
+  .glue-meter{grid-column:2 / 6;text-align:left;font-size:11px;padding-bottom:3px}
+}
+
 </style>
 </head>
-<body data-build="v2.4.25">
+<body data-build="v2.4.26">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1489,6 +1550,7 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-page="photo">写真・動画</button>
   <button type="button" data-work-page="memo">メモ</button>
   <button type="button" data-work-page="drawing">図面</button>
+  <button type="button" data-work-page="glue">糊付け</button>
   <button type="button" data-work-page="order">発注</button>
 </div>
 <div id="wallWorkPage" class="work-page active">
@@ -1515,6 +1577,9 @@ header .room-actions .site-list-btn{
 </div>
 <div id="drawingWorkPage" class="work-page">
   <div id="drawingPageArea"></div>
+</div>
+<div id="glueWorkPage" class="work-page">
+  <div id="gluePageArea"></div>
 </div>
 <div id="orderWorkPage" class="work-page">
   <div id="orderPageArea"></div>
@@ -1720,7 +1785,7 @@ function localDateYmd(d=new Date()){
   return `${y}-${m}-${day}`;
 }
 function makeSite(name=""){
-  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",memoPages:[],status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",memoPages:[],glueChecks:{},status:"active",createdAt:Date.now(),updatedAt:Date.now()}
 }
 function loadSites(){
   try{
@@ -4445,6 +4510,84 @@ function renderFinishPage(){
   bottomToolbar.querySelector("button").onclick=()=>addFinishRoomForPage(page);
   area.appendChild(bottomToolbar);
 }
+
+function ensureGlueChecks(siteObj=state){
+  if(!siteObj.glueChecks||typeof siteObj.glueChecks!=="object"||Array.isArray(siteObj.glueChecks))siteObj.glueChecks={};
+  return siteObj.glueChecks;
+}
+function glueMeasureKey(roomObj,sec,m){
+  return `${roomObj.id}|${sec.id}|${m.id}`;
+}
+function glueUsefulRooms(siteObj=state){
+  return (siteObj.rooms||[]).filter(r=>(r.sections||[]).some(sec=>(sec.measures||[]).some(m=>String(m.value||"").trim())));
+}
+function glueProgress(siteObj=state){
+  const checks=ensureGlueChecks(siteObj);
+  let total=0,done=0;
+  glueUsefulRooms(siteObj).forEach(r=>(r.sections||[]).forEach(sec=>(sec.measures||[]).forEach(m=>{
+    if(!String(m.value||"").trim())return;
+    total++;
+    if(checks[glueMeasureKey(r,sec,m)])done++;
+  })));
+  return {done,total};
+}
+function renderGluePage(){
+  const area=$("#gluePageArea");if(!area)return;
+  ensureGlueChecks(state);
+  const rooms=glueUsefulRooms(state);
+  if(!rooms.length){
+    area.innerHTML='<div class="glue-page"><div class="glue-page-title">糊付け</div><div class="glue-page-empty">クロスの採寸データがありません</div></div>';
+    return;
+  }
+  const progress=glueProgress(state);
+  const wrap=document.createElement("div");
+  wrap.className="glue-page";
+  wrap.innerHTML=`<div class="glue-page-top"><div><div class="glue-page-title">糊付け</div><div class="glue-progress">${progress.done} / ${progress.total} 完了</div></div><button type="button" class="glue-page-reset">チェックを全解除</button></div><div class="glue-room-list"></div>`;
+  wrap.querySelector(".glue-page-reset").onclick=()=>{
+    if(!confirm("糊付けのチェックをすべて外しますか？"))return;
+    state.glueChecks={};save();renderGluePage();
+  };
+  const list=wrap.querySelector(".glue-room-list");
+  const checks=ensureGlueChecks(state);
+  rooms.forEach(r=>{
+    const roomEl=document.createElement("section");roomEl.className="glue-room";
+    const title=document.createElement("h3");title.className="glue-room-title";title.textContent=r.name;roomEl.appendChild(title);
+    (r.sections||[]).forEach(sec=>{
+      const measures=(sec.measures||[]).filter(m=>String(m.value||"").trim());
+      if(!measures.length)return;
+      const rv=effectiveWallRepeatV(sec,state),rh=effectiveWallRepeatH(sec,state),prod=effectiveWallProduct(sec,state);
+      const secEl=document.createElement("div");secEl.className="glue-section";
+      const head=document.createElement("div");head.className="glue-section-head";
+      head.innerHTML=`<span class="glue-section-name">${esc(sec.name)}</span>${prod?`<span class="glue-product">${esc(prod)}</span>`:""}${rv?`<span class="glue-repeat">↕︎${esc(rv)}</span>`:""}${rh?`<span class="glue-repeat">↔︎${esc(rh)}</span>`:""}`;
+      secEl.appendChild(head);
+      measures.forEach(m=>{
+        const key=glueMeasureKey(r,sec,m);
+        const c=calc(m.value,rv);
+        const cut=cutDisplay(m.value,rv);
+        const diff=cutDifference(m.value,rv);
+        const row=document.createElement("div");row.className="glue-row"+(checks[key]?" checked":"");
+        row.innerHTML=`<button type="button" class="glue-check" aria-label="${checks[key]?"チェックを外す":"完了にする"}">${checks[key]?"✓":""}</button><div class="glue-original">${esc(m.value)}</div><div class="glue-arrow">${cut?"→":""}</div><div class="glue-cut">${cut?esc(cut):""}</div><div class="glue-diff">${diff?esc(diff):""}</div><div class="glue-meter">${c?`${fmt(c.noneM)}${rv?` / ${fmt(c.withM)}`:""}`:""}</div>`;
+        const btn=row.querySelector(".glue-check");
+        btn.onclick=()=>{
+          if(checks[key])delete checks[key]; else checks[key]=true;
+          save();
+          const checked=!!checks[key];
+          row.classList.toggle("checked",checked);
+          btn.textContent=checked?"✓":"";
+          btn.setAttribute("aria-label",checked?"チェックを外す":"完了にする");
+          const p=glueProgress(state);
+          wrap.querySelector(".glue-progress").textContent=`${p.done} / ${p.total} 完了`;
+        };
+        secEl.appendChild(row);
+      });
+      roomEl.appendChild(secEl);
+    });
+    list.appendChild(roomEl);
+  });
+  area.innerHTML="";
+  area.appendChild(wrap);
+}
+
 function setWorkPage(page){
   activeWorkPage=page;
   document.querySelectorAll("[data-work-page]").forEach(b=>b.classList.toggle("active",b.dataset.workPage===page));
@@ -4453,12 +4596,14 @@ function setWorkPage(page){
   $("#photoWorkPage").classList.toggle("active",page==="photo");
   $("#memoWorkPage").classList.toggle("active",page==="memo");
   $("#drawingWorkPage").classList.toggle("active",page==="drawing");
+  $("#glueWorkPage").classList.toggle("active",page==="glue");
   $("#orderWorkPage").classList.toggle("active",page==="order");
   hideMeasureKeypad();hideProductKeypad();
   if(page==="wall"){renderTabs();renderRoom()}
   else if(page==="photo")renderPhotoPage();
   else if(page==="memo")renderMemoPage();
   else if(page==="drawing")renderDrawingPage();
+  else if(page==="glue")renderGluePage();
   else if(page==="order")renderOrderPage();
   else renderFinishPage();
   updateRoomSideNav();
@@ -6072,7 +6217,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.25",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.26",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6122,7 +6267,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){ensureGlueChecks(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
