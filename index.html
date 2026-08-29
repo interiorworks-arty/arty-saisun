@@ -1442,9 +1442,32 @@ header .room-actions .site-list-btn{
   pointer-events:none!important;
 }
 
+
+/* v2.4.24 採寸：前後の部屋へ固定矢印 */
+.room-side-nav{position:fixed;inset:0;z-index:24;pointer-events:none;display:none}
+.room-side-nav.show{display:block}
+.room-side-btn{
+  position:fixed;top:68%;transform:translateY(-50%);
+  width:52px;height:64px;border:0;background:transparent;color:#6f6862;
+  font-size:38px;font-weight:900;line-height:1;padding:0;
+  pointer-events:auto;-webkit-tap-highlight-color:transparent;touch-action:manipulation
+}
+.room-side-prev{left:max(10px,calc(50% - 430px))}
+.room-side-next{right:max(10px,calc(50% - 430px))}
+.room-side-btn:disabled{opacity:.18;pointer-events:none}
+.room-side-btn:active:not(:disabled){transform:translateY(-50%) scale(.9)}
+@media(max-width:600px){
+  .room-side-btn{
+    width:34px;height:54px;font-size:28px;top:66%;
+    background:rgba(245,243,240,.82);border-radius:999px
+  }
+  .room-side-prev{left:2px}
+  .room-side-next{right:2px}
+}
+
 </style>
 </head>
-<body data-build="v2.4.23">
+<body data-build="v2.4.24">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1497,6 +1520,10 @@ header .room-actions .site-list-btn{
 </section>
 </main>
 
+<div id="roomSideNav" class="room-side-nav" aria-hidden="true">
+  <button type="button" id="roomPrevBtn" class="room-side-btn room-side-prev" aria-label="前の部屋へ">◀︎</button>
+  <button type="button" id="roomNextBtn" class="room-side-btn room-side-next" aria-label="次の部屋へ">▶︎</button>
+</div>
 
 <div id="measureKeypad" class="keypad" aria-hidden="true">
   <div class="keypad-head" id="keypadDragHandle" aria-label="テンキーを移動">
@@ -2482,6 +2509,27 @@ function createNewSite(name=""){
 }
 
 function room(){return state.rooms.find(r=>r.id===activeRoom)}
+function activeRoomIndex(){return state.rooms.findIndex(r=>r.id===activeRoom)}
+function updateRoomSideNav(){
+  const nav=$("#roomSideNav"),prev=$("#roomPrevBtn"),next=$("#roomNextBtn");
+  if(!nav||!prev||!next)return;
+  const editing=!$("#editView")?.classList.contains("hidden");
+  const show=editing&&activeWorkPage==="wall"&&state.rooms.length>0;
+  nav.classList.toggle("show",show);
+  nav.setAttribute("aria-hidden",show?"false":"true");
+  if(!show)return;
+  const idx=activeRoomIndex();
+  prev.disabled=idx<=0;
+  next.disabled=idx<0||idx>=state.rooms.length-1;
+}
+function moveActiveRoom(step){
+  const idx=activeRoomIndex(),nextIdx=idx+step;
+  if(idx<0||nextIdx<0||nextIdx>=state.rooms.length)return;
+  hideMeasureKeypad();hideProductKeypad();
+  activeRoom=state.rooms[nextIdx].id;
+  renderTabs();
+  renderRoom();
+}
 function parse(v){let s=String(v||"").trim().replace(/\s/g,"").replace(/[＊※*]/g,"*").replace(/[×xX]/g,"-");const tail=s.match(/\*+$/);const starCount=tail?tail[0].length:0;if(starCount)s=s.slice(0,-starCount);let m=s.match(/^(\d+(?:\.\d+)?)-(\d+)$/);if(!m)return null;let len=+m[1],qty=+m[2];return len>0&&qty>0?{len,qty,star:starCount>0,starCount}:null}
 function calc(v,rep){let p=parse(v);if(!p)return null;let r=+rep||0,noneCm=p.len*p.qty,each=p.len;if(r>0)each=p.starCount>0?p.len+r*p.starCount:Math.ceil(p.len/r)*r;return {...p,r,each,noneM:noneCm/100,withM:each*p.qty/100}}
 function cutDisplay(v,rep){
@@ -4404,9 +4452,10 @@ function setWorkPage(page){
   else if(page==="drawing")renderDrawingPage();
   else if(page==="order")renderOrderPage();
   else renderFinishPage();
+  updateRoomSideNav();
 }
 
-function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';return}
+function renderRoom(){let area=$("#roomArea"),r=room();area.innerHTML="";if(!r){area.innerHTML='<div class="room-card">＋ から部屋を追加してください</div>';updateRoomSideNav();return}
 let card=document.createElement("div");card.className="room-card";card.innerHTML=`<div class="room-title"><h2>${esc(r.name)}</h2><div class="room-actions"><button class="small-btn img" data-save>画像保存</button><button class="small-btn img pdf-action" data-room-pdf>部屋PDF</button><button class="small-btn" data-r>部屋名編集</button><button class="small-btn" data-delete-room>この部屋を削除</button></div></div><div class="sections"></div><button class="add-section">＋ 区分を追加</button><div class="totals"><div class="total-box"><span>リピートなし</span><strong class="rn"></strong></div><div class="total-box"><span>リピートあり</span><strong class="rw"></strong></div></div>`;
 card.querySelector("[data-r]").onclick=()=>{let n=prompt("部屋名を変更",r.name);if(n){r.name=n.trim();save();render()}};
 
@@ -4426,7 +4475,7 @@ card.querySelector("[data-delete-room]").onclick=()=>{
 card.querySelector("[data-save]").onclick=()=>saveCurrentRoomImage();
 card.querySelector("[data-room-pdf]").onclick=()=>shareRoomPdf(r,state);
 let sw=card.querySelector(".sections");r.sections.forEach(sec=>sw.appendChild(renderSection(r,sec)));card.querySelector(".add-section").onclick=()=>openSectionSheetForAdd();
-area.appendChild(card);let bottomToolbar=document.createElement("div");bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';bottomToolbar.querySelector("button").onclick=()=>openSharedRoomSheet("wall");area.appendChild(bottomToolbar);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR)}
+area.appendChild(card);let bottomToolbar=document.createElement("div");bottomToolbar.className="finish-page-toolbar finish-page-toolbar-bottom";bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';bottomToolbar.querySelector("button").onclick=()=>openSharedRoomSheet("wall");area.appendChild(bottomToolbar);let t=roomTotals(r);card.querySelector(".rn").textContent=fmt(t.none);card.querySelector(".rw").textContent=fmt(t.withR);updateRoomSideNav()}
 
 
 function bindMeasureDrag(handle,row,sec,m){
@@ -6014,7 +6063,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.23",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.24",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -6263,8 +6312,10 @@ $("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)
 $("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
 $("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
 $("#memoDrawingInput").onchange=e=>{const files=e.target.files;if(files?.length&&memoDrawingTargetPageId)addMemoDrawingFiles(files,memoDrawingTargetPageId)};
-$("#siteName").oninput=save;$("#siteDate").onchange=save;$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary")};
-$("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary")};
+$("#siteName").oninput=save;$("#siteDate").onchange=save;$("#roomPrevBtn").onclick=()=>moveActiveRoom(-1);
+$("#roomNextBtn").onclick=()=>moveActiveRoom(1);
+$("#editBtn").onclick=()=>{$("#calcView").classList.remove("active");$("#editView").classList.remove("hidden");$("#editBtn").classList.add("primary");$("#calcBtn").classList.remove("primary");updateRoomSideNav()};
+$("#calcBtn").onclick=()=>{save();buildCalc();$("#editView").classList.add("hidden");$("#calcView").classList.add("active");$("#calcBtn").classList.add("primary");$("#editBtn").classList.remove("primary");updateRoomSideNav()};
 function setCalcMode(mode){
   calcMode=mode;
   $("#byRoom").classList.toggle("active",mode==="room");
