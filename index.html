@@ -1444,7 +1444,7 @@ header .room-actions .site-list-btn{
 
 </style>
 </head>
-<body data-build="v2.4.21">
+<body data-build="v2.4.22">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1864,7 +1864,7 @@ function registerProduct(product,repeat){
 
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,activeGenericEnter=null,keypadMode="measure",numberCursor=0,productCursor=0;
 
-const KEYPAD_PREF_KEY="gencho-keypad-layout-v3";
+const KEYPAD_PREF_KEY="gencho-keypad-layout-v4";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
 
 const PRODUCT_KEYPAD_PREF_KEY="gencho-product-keypad-layout-v1";
@@ -2307,7 +2307,7 @@ function syncGenericNumber(){
 
 function ensureMeasureKeypadDefaultBottomRight(){
   const kp=$("#measureKeypad");if(!kp)return;
-  // v3でユーザーが移動済みなら、その保存位置を優先。
+  // v4でユーザーが移動済みなら、その保存位置を優先。
   let hasSaved=false;
   try{hasSaved=!!localStorage.getItem(KEYPAD_PREF_KEY)}catch{}
   if(hasSaved)return;
@@ -4839,9 +4839,46 @@ function drawCutDifferenceLine(ctx,x,baseline,value,repeatV){
   ctx.fillText(diff,x,baseline);
   ctx.restore();
 }
-function buildRoomImageCanvas(r,siteObj=state){
+function roomExportUsefulSections(r){
+  return (r.sections||[]).filter(sec=>sec.measures?.some(m=>String(m.value||"").trim()));
+}
+function roomExportSectionHeight(sec){
+  const measureCount=(sec.measures||[]).filter(m=>String(m.value||"").trim()).length;
+  return 40 + measureCount*50 + 70 + 28;
+}
+function roomExportHeaderHeight(siteName,width=1240,pad=56,cardPad=44){
+  const c=document.createElement("canvas"),ctx=c.getContext("2d");
+  ctx.font='700 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  const contentWidth=width-pad*2-cardPad*2;
+  return 44 + splitWrapped(ctx,siteName,contentWidth).length*40 + 24 + 58;
+}
+function paginateRoomSections(r,siteObj=state){
   const siteName=(siteObj?.siteName||"現場名未入力").trim()||"現場名未入力";
-  const usefulSections=r.sections.filter(sec=>sec.measures.some(m=>String(m.value||"").trim()));
+  const sections=roomExportUsefulSections(r);
+  if(!sections.length)return [];
+  // A4縦に収まりやすい高さ。区分は可能な限り丸ごと次ページへ送る。
+  const maxContentH=1450;
+  const headerH=roomExportHeaderHeight(siteName);
+  const footerH=140;
+  const groups=[];
+  let current=[],used=headerH+footerH;
+
+  for(const sec of sections){
+    const h=roomExportSectionHeight(sec);
+    if(current.length && used+h>maxContentH){
+      groups.push(current);
+      current=[];
+      used=headerH+footerH;
+    }
+    current.push(sec);
+    used+=h;
+  }
+  if(current.length)groups.push(current);
+  return groups;
+}
+function buildRoomImageCanvas(r,siteObj=state,sectionSubset=null,showRoomTotal=true){
+  const siteName=(siteObj?.siteName||"現場名未入力").trim()||"現場名未入力";
+  const usefulSections=(sectionSubset||roomExportUsefulSections(r)).filter(sec=>sec.measures.some(m=>String(m.value||"").trim()));
   const width=1240,pad=56,cardPad=44,measureH=50,sectionGap=28;
   const canvas=document.createElement("canvas");
   const ctx=canvas.getContext("2d");
@@ -4851,12 +4888,9 @@ function buildRoomImageCanvas(r,siteObj=state){
   let height=pad*2 + 44 + siteLines.length*40 + 24 + 58;
   usefulSections.forEach(sec=>{
     const measureCount=sec.measures.filter(m=>String(m.value||"").trim()).length;
-    height += 40; // header line
-    height += measureCount*measureH;
-    height += 70; // subtotal stacked lines
-    height += sectionGap;
+    height += 40 + measureCount*measureH + 70 + sectionGap;
   });
-  height += 140;
+  height += showRoomTotal?140:55;
   setupExportCanvas(canvas,ctx,width,height);
 
   ctx.fillStyle='#f5f3f0'; ctx.fillRect(0,0,width,height);
@@ -4890,13 +4924,12 @@ function buildRoomImageCanvas(r,siteObj=state){
     const productText=effectiveWallProduct(sec,siteObj);
     if(productText){
       ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(productText,x,y);
-      x += ctx.measureText(productText).width + 24;
+      ctx.fillText(productText,x,y); x += ctx.measureText(productText).width + 24;
     }
-    const rv=effectiveWallRepeatV(sec,siteObj),rh=effectiveWallRepeatH(sec,siteObj);if(rv){
+    const rv=effectiveWallRepeatV(sec,siteObj),rh=effectiveWallRepeatH(sec,siteObj);
+    if(rv){
       ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(`↕${rv}`,x,y);
-      x += ctx.measureText(`↕${rv}`).width + 18;
+      ctx.fillText(`↕${rv}`,x,y); x += ctx.measureText(`↕${rv}`).width + 18;
     }
     if(rh){
       ctx.fillStyle='#6f6862'; ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
@@ -4912,31 +4945,32 @@ function buildRoomImageCanvas(r,siteObj=state){
       y+=measureH;
     });
 
-    const rightX=cardX+cardW-cardPad;
-    const labelX=rightX-168;
-    const valueX=rightX;
+    const rightX=cardX+cardW-cardPad,labelX=rightX-168,valueX=rightX;
     drawRepeatSubtotalLine(ctx,labelX,valueX,y-12,'なし',fmt(subtotal.none));
     drawRepeatSubtotalLine(ctx,labelX,valueX,y+20,'あり',fmt(subtotal.withR));
     y+=58;
-
     ctx.strokeStyle='#eee6e1'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cardX+cardPad,y); ctx.lineTo(cardX+cardW-cardPad,y); ctx.stroke();
     y+=sectionGap;
   });
 
-  const total=roomTotals(r);
-  ctx.fillStyle='#efebe8';
-  const sumX=cardX+cardPad,sumY=y,sumW=cardW-cardPad*2,sumH=92;
-  const rr=20;
-  ctx.beginPath();
-  ctx.moveTo(sumX+rr,sumY); ctx.arcTo(sumX+sumW,sumY,sumX+sumW,sumY+sumH,rr); ctx.arcTo(sumX+sumW,sumY+sumH,sumX,sumY+sumH,rr); ctx.arcTo(sumX,sumY+sumH,sumX,sumY,rr); ctx.arcTo(sumX,sumY,sumX+sumW,sumY,rr); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#766f69'; ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText('部屋合計',sumX+24,sumY+30);
-  ctx.fillStyle='#272522'; ctx.font='800 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText(`リピートなし ${fmt(total.none)}`,sumX+24,sumY+64);
-  const withLabel=`リピートあり ${fmt(total.withR)}`;
-  const withW=ctx.measureText(withLabel).width;
-  ctx.fillText(withLabel,sumX+sumW-24-withW,sumY+64);
+  if(showRoomTotal){
+    const total=roomTotals(r);
+    ctx.fillStyle='#efebe8';
+    const sumX=cardX+cardPad,sumY=y,sumW=cardW-cardPad*2,sumH=92,rr=20;
+    ctx.beginPath();
+    ctx.moveTo(sumX+rr,sumY); ctx.arcTo(sumX+sumW,sumY,sumX+sumW,sumY+sumH,rr); ctx.arcTo(sumX+sumW,sumY+sumH,sumX,sumY+sumH,rr); ctx.arcTo(sumX,sumY+sumH,sumX,sumY,rr); ctx.arcTo(sumX,sumY,sumX+sumW,sumY,rr); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#766f69'; ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText('部屋合計',sumX+24,sumY+30);
+    ctx.fillStyle='#272522'; ctx.font='800 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText(`リピートなし ${fmt(total.none)}`,sumX+24,sumY+64);
+    const withLabel=`リピートあり ${fmt(total.withR)}`,withW=ctx.measureText(withLabel).width;
+    ctx.fillText(withLabel,sumX+sumW-24-withW,sumY+64);
+  }
   return canvas;
+}
+function buildRoomExportCanvases(r,siteObj=state){
+  const groups=paginateRoomSections(r,siteObj);
+  return groups.map((secs,i)=>buildRoomImageCanvas(r,siteObj,secs,i===groups.length-1));
 }
 const EXPORT_RENDER_SCALE=2;
 function setupExportCanvas(canvas,ctx,width,height){
@@ -5163,8 +5197,8 @@ async function buildRoomsPdfFile(siteObj,rooms,fileName,includeSiteTotal=false){
   if(!useful.length)throw new Error("NO_DATA");
   const images=[];
   for(const r of useful){
-    const canvas=buildRoomImageCanvas(r,siteObj);
-    images.push(await canvasToJpegInfo(canvas));
+    const canvases=buildRoomExportCanvases(r,siteObj);
+    for(const canvas of canvases)images.push(await canvasToJpegInfo(canvas));
   }
   if(includeSiteTotal)images.push(await canvasToJpegInfo(buildSiteTotalCanvas(siteObj)));
   const blob=makePdfFromJpegs(images);
@@ -5970,7 +6004,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.21",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.22",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
