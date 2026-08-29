@@ -1444,7 +1444,7 @@ header .room-actions .site-list-btn{
 
 </style>
 </head>
-<body data-build="v2.4.22">
+<body data-build="v2.4.23">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -4970,7 +4970,11 @@ function buildRoomImageCanvas(r,siteObj=state,sectionSubset=null,showRoomTotal=t
 }
 function buildRoomExportCanvases(r,siteObj=state){
   const groups=paginateRoomSections(r,siteObj);
-  return groups.map((secs,i)=>buildRoomImageCanvas(r,siteObj,secs,i===groups.length-1));
+  return groups.map((secs,i)=>{
+    const c=buildRoomImageCanvas(r,siteObj,secs,i===groups.length-1);
+    c._appA4Page=true;
+    return c;
+  });
 }
 const EXPORT_RENDER_SCALE=2;
 function setupExportCanvas(canvas,ctx,width,height){
@@ -5711,7 +5715,11 @@ async function buildSelectedExportCanvases(parts,siteObj=state){
   if(parts.includes("wall")){
     safe("wall",()=>{
       const out=[];
-      (siteObj.rooms||[]).filter(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))).forEach(r=>out.push(buildRoomImageCanvas(r,siteObj)));
+      (siteObj.rooms||[]).filter(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))).forEach(r=>{
+        // 現場まとめPDFでも、部屋PDFと同じ「区分単位」のページを使う。
+        // これにより長い1枚画像をA4位置で機械的に切って空白ページが出るのを防ぐ。
+        out.push(...buildRoomExportCanvases(r,siteObj));
+      });
       if((siteObj.rooms||[]).some(r=>r.sections?.some(sec=>sec.measures?.some(m=>String(m.value||"").trim()))))out.push(buildSiteTotalCanvas(siteObj));
       return out;
     });
@@ -5790,6 +5798,8 @@ async function exportSelectedAsPdf(){
           im.pageW=canvas._pdfPageW;
           im.pageH=canvas._pdfPageH;
           images.push(im);
+        }else if(canvas._appA4Page){
+          images.push(await canvasToJpegInfo(canvas));
         }else{
           const pages=await canvasToPdfJpegs(canvas);
           images.push(...pages);
@@ -6004,7 +6014,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.22",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.23",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{

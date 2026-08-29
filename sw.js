@@ -1,4 +1,4 @@
-const CACHE="gencho-v2422-section-paging-keypad-v4";
+const CACHE="gencho-v2423-selected-section-pages";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
