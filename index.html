@@ -1580,9 +1580,39 @@ header .room-actions .site-list-btn{
 .keypad.glue-qty-mode [data-key="."],.keypad.glue-qty-mode [data-key="*"],.keypad.glue-qty-mode [data-key="-"],.keypad.glue-qty-mode [data-key="left"],.keypad.glue-qty-mode [data-key="right"]{visibility:hidden!important}
 .keypad.glue-qty-mode .key-enter{grid-row:span 2}
 
+
+/* ===== v2.4.30 面積計算 ===== */
+.area-calc-wrap{display:flex;flex-direction:column;gap:12px;padding-bottom:120px}
+.area-calc-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.area-calc-title{font-size:20px;font-weight:900}.area-calc-note{font-size:12px;color:#827971;font-weight:700;margin-top:3px}
+.area-calc-total{margin-left:auto;background:#f1ece8;border:1px solid #ded5cf;border-radius:14px;padding:10px 14px;min-width:150px;text-align:right}
+.area-calc-total span{display:block;font-size:11px;color:#7d746e;font-weight:800}.area-calc-total strong{font-size:24px}
+.area-shape-tools{display:flex;gap:7px;flex-wrap:wrap}
+.area-shape-tools button,.area-add-btn{border:1px solid #d8d0ca;background:#fff;border-radius:11px;padding:9px 12px;font-weight:850;color:var(--ink)}
+.area-add-btn{background:var(--accent);color:#fff;border-color:var(--accent)}
+.area-item{background:#fff;border:1px solid #e1d9d3;border-radius:15px;padding:12px;box-shadow:0 2px 8px rgba(70,55,45,.05)}
+.area-item-head{display:grid;grid-template-columns:auto minmax(100px,1fr) auto;gap:8px;align-items:center;margin-bottom:10px}
+.area-sign{width:42px;height:40px;border:1px solid #d9d1ca;background:#f8f6f4;border-radius:10px;font-size:22px;font-weight:950}
+.area-sign.minus{background:#fff0f0;color:#a03232;border-color:#e6c6c6}
+.area-name{width:100%;border:1px solid #ddd5cf;border-radius:10px;padding:9px 10px;font-size:16px;font-weight:800;background:#faf9f7}
+.area-delete{border:0;background:#f1eeeb;color:#70655e;border-radius:9px;padding:8px 10px;font-weight:800}
+.area-type-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.area-type-row button{border:1px solid #dcd4ce;background:#faf8f6;border-radius:9px;padding:7px 9px;font-size:13px;font-weight:850}
+.area-type-row button.active{background:#6c625c;color:#fff;border-color:#6c625c}
+.area-submode{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 10px}.area-submode button{border:1px solid #dcd4ce;background:#fff;border-radius:9px;padding:6px 9px;font-size:12px;font-weight:800}.area-submode button.active{background:#ece7e3;border-color:#a99d95}
+.area-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.area-field{display:flex;flex-direction:column;gap:4px}.area-field label{font-size:11px;color:#7f756f;font-weight:850}.area-num-btn{min-height:44px;border:1px solid #d7cfc9;border-radius:10px;background:#fff;text-align:right;padding:7px 10px;font-size:19px;font-weight:900}.area-num-btn.empty{color:#aaa19a;font-weight:700}.area-unit{font-size:11px;color:#8a817a;font-weight:700;margin-left:2px}
+.area-formula-line{margin-top:9px;padding-top:9px;border-top:1px dashed #ded7d1;display:flex;justify-content:space-between;align-items:center;gap:10px}.area-formula{font-size:12px;color:#817771;font-weight:700}.area-result{font-size:20px;font-weight:950;white-space:nowrap}.area-invalid{color:#b03939;font-size:12px;font-weight:800}
+.area-free-input{width:100%;border:1px solid #d7cfc9;border-radius:10px;padding:10px;font-size:17px;font-weight:800;background:#fff}.area-free-help{font-size:11px;color:#8a817a;margin-top:5px}
+.area-empty{padding:28px 12px;text-align:center;color:#8c827b;font-weight:800;background:#fff;border:1px dashed #d8d0ca;border-radius:14px}
+@media(max-width:600px){.area-calc-total{width:100%;margin-left:0}.area-item-head{grid-template-columns:auto 1fr auto}.area-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.area-shape-tools button{flex:1 1 calc(33% - 7px)}}
+/* 面積計算追加で全10タブ */
+.work-page-tabs{grid-template-columns:repeat(10,minmax(0,1fr))!important}
+@media(max-width:600px){.work-page-tabs{grid-template-columns:repeat(10,minmax(0,1fr))!important}.work-page-tabs button{font-size:7.7px!important}}
+
 </style>
 </head>
-<body data-build="v2.4.29">
+<body data-build="v2.4.30">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1595,6 +1625,7 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-page="photo">写真・動画</button>
   <button type="button" data-work-page="drawing">図面</button>
   <button type="button" data-work-page="memo">メモ</button>
+  <button type="button" data-work-page="area">面積計算</button>
   <button type="button" data-work-page="glue">糊付け</button>
   <button type="button" data-work-page="order">発注</button>
 </div>
@@ -1622,6 +1653,9 @@ header .room-actions .site-list-btn{
 </div>
 <div id="drawingWorkPage" class="work-page">
   <div id="drawingPageArea"></div>
+</div>
+<div id="areaWorkPage" class="work-page">
+  <div id="areaPageArea"></div>
 </div>
 <div id="glueWorkPage" class="work-page">
   <div id="gluePageArea"></div>
@@ -1839,7 +1873,7 @@ function localDateYmd(d=new Date()){
   return `${y}-${m}-${day}`;
 }
 function makeSite(name=""){
-  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",memoPages:[],glueChecks:{},status:"active",createdAt:Date.now(),updatedAt:Date.now()}
+  return {id:"site-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),siteName:name,siteDate:localDateYmd(),rooms:[],finishRooms:[],memo:"",memoPages:[],areaCalc:{items:[]},glueChecks:{},status:"active",createdAt:Date.now(),updatedAt:Date.now()}
 }
 function loadSites(){
   try{
@@ -4706,6 +4740,112 @@ function renderGluePage(){
   area.appendChild(wrap);
 }
 
+
+function ensureAreaCalc(siteObj=state){
+  if(!siteObj.areaCalc||typeof siteObj.areaCalc!=="object")siteObj.areaCalc={items:[]};
+  if(!Array.isArray(siteObj.areaCalc.items))siteObj.areaCalc.items=[];
+  siteObj.areaCalc.items.forEach(x=>{
+    if(!x.id)x.id="area-"+uid();
+    if(!x.type)x.type="rect";
+    if(x.sign!==-1)x.sign=1;
+    if(typeof x.name!=="string")x.name="";
+    if(!x.values||typeof x.values!=="object")x.values={};
+    if(!x.triMode)x.triMode="bh";
+    if(!x.circleMode)x.circleMode="circumference";
+    if(typeof x.expression!=="string")x.expression="";
+  });
+  return siteObj.areaCalc;
+}
+function areaNum(v){const n=parseFloat(String(v??"").replace(",","."));return Number.isFinite(n)?n:NaN}
+function areaValue(item){
+  const v=item.values||{},cm2ToM2=x=>x/10000;
+  if(item.type==="rect"){
+    const a=areaNum(v.a),b=areaNum(v.b);return Number.isFinite(a)&&Number.isFinite(b)?cm2ToM2(a*b):NaN;
+  }
+  if(item.type==="triangle"){
+    if(item.triMode==="sss"){
+      const a=areaNum(v.a),b=areaNum(v.b),c=areaNum(v.c);
+      if(![a,b,c].every(Number.isFinite)||a<=0||b<=0||c<=0||a+b<=c||a+c<=b||b+c<=a)return NaN;
+      const sp=(a+b+c)/2;return cm2ToM2(Math.sqrt(sp*(sp-a)*(sp-b)*(sp-c)));
+    }
+    const a=areaNum(v.base),h=areaNum(v.height);return Number.isFinite(a)&&Number.isFinite(h)?cm2ToM2(a*h/2):NaN;
+  }
+  if(item.type==="trapezoid"){
+    const a=areaNum(v.top),b=areaNum(v.bottom),h=areaNum(v.height);return [a,b,h].every(Number.isFinite)?cm2ToM2((a+b)*h/2):NaN;
+  }
+  if(item.type==="circle"){
+    const x=areaNum(v.circle);if(!Number.isFinite(x)||x<0)return NaN;
+    let r=item.circleMode==="radius"?x:item.circleMode==="diameter"?x/2:x/(2*Math.PI);
+    return cm2ToM2(Math.PI*r*r);
+  }
+  if(item.type==="free"){
+    let exp=String(item.expression||"").trim();if(!exp)return NaN;
+    exp=exp.replace(/[×xX]/g,"*").replace(/[÷]/g,"/").replace(/[＋]/g,"+").replace(/[−ー]/g,"-").replace(/，/g,",");
+    if(!/^[0-9+\-*/().\s]+$/.test(exp))return NaN;
+    try{const val=Function('"use strict";return ('+exp+')')();return Number.isFinite(val)?val/10000:NaN}catch{return NaN}
+  }
+  return NaN;
+}
+function areaFormulaText(item){
+  const v=item.values||{},show=x=>String(x||"?");
+  if(item.type==="rect")return `${show(v.a)} × ${show(v.b)} ÷ 10000`;
+  if(item.type==="triangle"&&item.triMode==="sss")return `3辺 ${show(v.a)} / ${show(v.b)} / ${show(v.c)} cm`;
+  if(item.type==="triangle")return `${show(v.base)} × ${show(v.height)} ÷ 2 ÷ 10000`;
+  if(item.type==="trapezoid")return `(${show(v.top)} + ${show(v.bottom)}) × ${show(v.height)} ÷ 2 ÷ 10000`;
+  if(item.type==="circle")return `${item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周"} ${show(v.circle)} cm`;
+  if(item.type==="free")return item.expression?`${item.expression} cm² ÷ 10000`:"式を入力";
+  return "";
+}
+function areaTypeLabel(t){return t==="rect"?"□ 長方形":t==="triangle"?"△ 三角形":t==="trapezoid"?"台形":t==="circle"?"○ 円":"自由計算"}
+function newAreaItem(type="rect"){
+  return {id:"area-"+uid(),name:"",type,sign:1,triMode:"bh",circleMode:"circumference",values:{},expression:""};
+}
+function areaField(label,key,item,placeholder="cm"){
+  const val=String(item.values?.[key]||"");
+  return `<div class="area-field"><label>${esc(label)}</label><button type="button" class="area-num-btn ${val?"":"empty"}" data-area-key="${esc(key)}" data-placeholder="${esc(placeholder)}">${esc(val||placeholder)}</button></div>`;
+}
+function renderAreaPage(){
+  const area=$("#areaPageArea");if(!area)return;
+  const data=ensureAreaCalc(state),items=data.items;
+  const total=items.reduce((sum,it)=>{const a=areaValue(it);return Number.isFinite(a)?sum+(it.sign||1)*a:sum},0);
+  area.innerHTML=`<div class="area-calc-wrap">
+    <div class="area-calc-head"><div><div class="area-calc-title">面積計算</div><div class="area-calc-note">寸法はcm入力。各項目を＋ / −で合計します。</div></div><div class="area-calc-total"><span>合計面積</span><strong>${total.toFixed(2)}㎡</strong></div></div>
+    <div class="area-shape-tools"><button data-area-add="rect">□ 長方形</button><button data-area-add="triangle">△ 三角形</button><button data-area-add="trapezoid">台形</button><button data-area-add="circle">○ 円</button><button data-area-add="free">自由計算</button></div>
+    <div id="areaItems"></div>
+  </div>`;
+  const list=area.querySelector("#areaItems");
+  if(!items.length)list.innerHTML='<div class="area-empty">上の図形を押して計算を追加してください</div>';
+  items.forEach((item,index)=>{
+    const result=areaValue(item),card=document.createElement("div");card.className="area-item";card.dataset.areaId=item.id;
+    const types=[["rect","□ 長方形"],["triangle","△ 三角形"],["trapezoid","台形"],["circle","○ 円"],["free","自由計算"]];
+    let extra="";
+    if(item.type==="triangle")extra=`<div class="area-submode"><button data-tri-mode="bh" class="${item.triMode!=="sss"?"active":""}">底辺×高さ</button><button data-tri-mode="sss" class="${item.triMode==="sss"?"active":""}">3辺から</button></div>`;
+    if(item.type==="circle")extra=`<div class="area-submode"><button data-circle-mode="circumference" class="${item.circleMode==="circumference"?"active":""}">円周</button><button data-circle-mode="diameter" class="${item.circleMode==="diameter"?"active":""}">直径</button><button data-circle-mode="radius" class="${item.circleMode==="radius"?"active":""}">半径</button></div>`;
+    let fields="";
+    if(item.type==="rect")fields=areaField("縦",'a',item)+areaField("横",'b',item);
+    else if(item.type==="triangle"&&item.triMode==="sss")fields=areaField("辺A",'a',item)+areaField("辺B",'b',item)+areaField("辺C",'c',item);
+    else if(item.type==="triangle")fields=areaField("底辺",'base',item)+areaField("高さ",'height',item);
+    else if(item.type==="trapezoid")fields=areaField("上底",'top',item)+areaField("下底",'bottom',item)+areaField("高さ",'height',item);
+    else if(item.type==="circle")fields=areaField(item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周",'circle',item);
+    else fields=`<div class="area-field"><label>式（cm）</label><input class="area-free-input" value="${esc(item.expression||"")}" placeholder="例：320*245+180*120/2" inputmode="decimal"><div class="area-free-help">× は *、÷ は / でも入力できます</div></div>`;
+    card.innerHTML=`<div class="area-item-head"><button class="area-sign ${item.sign===-1?"minus":""}" title="加算・減算">${item.sign===-1?"−":"＋"}</button><input class="area-name" value="${esc(item.name||"")}" placeholder="例：LDK① / 柱型"><button class="area-delete">削除</button></div>
+      <div class="area-type-row">${types.map(([k,l])=>`<button data-area-type="${k}" class="${item.type===k?"active":""}">${l}</button>`).join("")}</div>${extra}<div class="area-fields">${fields}</div>
+      <div class="area-formula-line"><div class="area-formula">${esc(areaFormulaText(item))}</div><div class="area-result">${Number.isFinite(result)?(item.sign===-1?"−":"")+result.toFixed(3)+"㎡":"—"}</div></div>`;
+    card.querySelector(".area-sign").onclick=()=>{item.sign=item.sign===-1?1:-1;save();renderAreaPage()};
+    card.querySelector(".area-name").oninput=e=>{item.name=e.target.value;save()};
+    card.querySelector(".area-delete").onclick=()=>{data.items=data.items.filter(x=>x.id!==item.id);save();renderAreaPage()};
+    card.querySelectorAll("[data-area-type]").forEach(b=>b.onclick=()=>{item.type=b.dataset.areaType;save();renderAreaPage()});
+    card.querySelectorAll("[data-tri-mode]").forEach(b=>b.onclick=()=>{item.triMode=b.dataset.triMode;save();renderAreaPage()});
+    card.querySelectorAll("[data-circle-mode]").forEach(b=>b.onclick=()=>{item.circleMode=b.dataset.circleMode;save();renderAreaPage()});
+    card.querySelectorAll("[data-area-key]").forEach(btn=>{
+      btn.onclick=()=>showGenericNumberKeypad(btn,item.values,btn.dataset.areaKey,"面積寸法",()=>{renderAreaPage()},null,()=>hideMeasureKeypad());
+    });
+    const free=card.querySelector(".area-free-input");if(free)free.oninput=e=>{item.expression=e.target.value;save();const r=areaValue(item);card.querySelector(".area-formula").textContent=areaFormulaText(item);card.querySelector(".area-result").textContent=Number.isFinite(r)?(item.sign===-1?"−":"")+r.toFixed(3)+"㎡":"—";const t=data.items.reduce((sum,it)=>{const a=areaValue(it);return Number.isFinite(a)?sum+(it.sign||1)*a:sum},0);area.querySelector(".area-calc-total strong").textContent=t.toFixed(2)+"㎡"};
+    list.appendChild(card);
+  });
+  area.querySelectorAll("[data-area-add]").forEach(b=>b.onclick=()=>{data.items.push(newAreaItem(b.dataset.areaAdd));save();renderAreaPage();setTimeout(()=>area.querySelectorAll('.area-item')[data.items.length-1]?.scrollIntoView({behavior:'smooth',block:'center'}),20)});
+}
+
 function setWorkPage(page){
   activeWorkPage=page;
   document.querySelectorAll("[data-work-page]").forEach(b=>b.classList.toggle("active",b.dataset.workPage===page));
@@ -4714,6 +4854,7 @@ function setWorkPage(page){
   $("#photoWorkPage").classList.toggle("active",page==="photo");
   $("#memoWorkPage").classList.toggle("active",page==="memo");
   $("#drawingWorkPage").classList.toggle("active",page==="drawing");
+  $("#areaWorkPage").classList.toggle("active",page==="area");
   $("#glueWorkPage").classList.toggle("active",page==="glue");
   $("#orderWorkPage").classList.toggle("active",page==="order");
   hideMeasureKeypad();hideProductKeypad();
@@ -4721,6 +4862,7 @@ function setWorkPage(page){
   else if(page==="photo")renderPhotoPage();
   else if(page==="memo")renderMemoPage();
   else if(page==="drawing")renderDrawingPage();
+  else if(page==="area")renderAreaPage();
   else if(page==="glue")renderGluePage();
   else if(page==="order")renderOrderPage();
   else renderFinishPage();
@@ -6385,7 +6527,7 @@ function importBackupData(obj){
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
 }
 
-function render(){ensureGlueChecks(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){ensureAreaCalc(state);ensureGlueChecks(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="area"){renderAreaPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
@@ -6752,7 +6894,7 @@ document.addEventListener("click",e=>{const pk=$("#productKeypad");if(!pk||!pk.c
 const WORK_PAGE_ORDER_KEY="gencho-work-page-order-v1";
 function applyWorkPageOrder(){
  const box=document.querySelector(".work-page-tabs");if(!box)return;
- const defs=["wall","floor","sheet","other","photo","drawing","memo","glue","order"];let order=defs;
+ const defs=["wall","floor","sheet","other","photo","drawing","memo","area","glue","order"];let order=defs;
  try{const a=JSON.parse(localStorage.getItem(WORK_PAGE_ORDER_KEY)||"null");if(Array.isArray(a))order=[...a.filter(x=>defs.includes(x)),...defs.filter(x=>!a.includes(x))]}catch{}
  order.forEach(k=>{const b=box.querySelector(`[data-work-page="${k}"]`);if(b)box.appendChild(b)});
 }
