@@ -4805,6 +4805,34 @@ function areaField(label,key,item,placeholder="cm"){
   const val=String(item.values?.[key]||"");
   return `<div class="area-field"><label>${esc(label)}</label><button type="button" class="area-num-btn ${val?"":"empty"}" data-area-key="${esc(key)}" data-placeholder="${esc(placeholder)}">${esc(val||placeholder)}</button></div>`;
 }
+function areaInputKeys(item){
+  if(item.type==="rect")return ["a","b"];
+  if(item.type==="triangle")return item.triMode==="sss"?["a","b","c"]:["base","height"];
+  if(item.type==="trapezoid")return ["top","bottom","height"];
+  if(item.type==="circle")return ["circle"];
+  return [];
+}
+function moveToNextAreaField(itemId,currentKey){
+  const data=ensureAreaCalc(state),idx=data.items.findIndex(x=>x.id===itemId);
+  if(idx<0){hideMeasureKeypad();return}
+  const item=data.items[idx],keys=areaInputKeys(item),keyIndex=keys.indexOf(currentKey);
+  if(keyIndex>=0&&keyIndex<keys.length-1){
+    const nextKey=keys[keyIndex+1];
+    const card=document.querySelector(`.area-item[data-area-id="${itemId}"]`);
+    const nextBtn=card?.querySelector(`[data-area-key="${nextKey}"]`);
+    if(nextBtn){showGenericNumberKeypad(nextBtn,item.values,nextKey,"面積寸法",()=>{renderAreaPage()},null,()=>moveToNextAreaField(itemId,nextKey));return}
+  }
+  // 同じカードの最後なら、次のカードに数値入力欄があればそこへ進む。
+  for(let i=idx+1;i<data.items.length;i++){
+    const nextItem=data.items[i],nextKeys=areaInputKeys(nextItem);
+    if(!nextKeys.length)continue;
+    const nextKey=nextKeys[0];
+    const card=document.querySelector(`.area-item[data-area-id="${nextItem.id}"]`);
+    const nextBtn=card?.querySelector(`[data-area-key="${nextKey}"]`);
+    if(nextBtn){showGenericNumberKeypad(nextBtn,nextItem.values,nextKey,"面積寸法",()=>{renderAreaPage()},null,()=>moveToNextAreaField(nextItem.id,nextKey));return}
+  }
+  hideMeasureKeypad();
+}
 function renderAreaPage(){
   const area=$("#areaPageArea");if(!area)return;
   const data=ensureAreaCalc(state),items=data.items;
@@ -4839,7 +4867,10 @@ function renderAreaPage(){
     card.querySelectorAll("[data-tri-mode]").forEach(b=>b.onclick=()=>{item.triMode=b.dataset.triMode;save();renderAreaPage()});
     card.querySelectorAll("[data-circle-mode]").forEach(b=>b.onclick=()=>{item.circleMode=b.dataset.circleMode;save();renderAreaPage()});
     card.querySelectorAll("[data-area-key]").forEach(btn=>{
-      btn.onclick=()=>showGenericNumberKeypad(btn,item.values,btn.dataset.areaKey,"面積寸法",()=>{renderAreaPage()},null,()=>hideMeasureKeypad());
+      btn.onclick=()=>{
+        const key=btn.dataset.areaKey;
+        showGenericNumberKeypad(btn,item.values,key,"面積寸法",()=>{renderAreaPage()},null,()=>moveToNextAreaField(item.id,key));
+      };
     });
     const free=card.querySelector(".area-free-input");if(free)free.oninput=e=>{item.expression=e.target.value;save();const r=areaValue(item);card.querySelector(".area-formula").textContent=areaFormulaText(item);card.querySelector(".area-result").textContent=Number.isFinite(r)?(item.sign===-1?"−":"")+r.toFixed(3)+"㎡":"—";const t=data.items.reduce((sum,it)=>{const a=areaValue(it);return Number.isFinite(a)?sum+(it.sign||1)*a:sum},0);area.querySelector(".area-calc-total strong").textContent=t.toFixed(2)+"㎡"};
     list.appendChild(card);
