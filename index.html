@@ -1604,7 +1604,8 @@ header .room-actions .site-list-btn{
 .area-field{display:flex;flex-direction:column;gap:4px}.area-field label{font-size:11px;color:#7f756f;font-weight:850}.area-num-btn{min-height:44px;border:1px solid #d7cfc9;border-radius:10px;background:#fff;text-align:right;padding:7px 10px;font-size:19px;font-weight:900}.area-num-btn.empty{color:#aaa19a;font-weight:700}.area-unit{font-size:11px;color:#8a817a;font-weight:700;margin-left:2px}
 .area-formula-line{margin-top:9px;padding-top:9px;border-top:1px dashed #ded7d1;display:flex;justify-content:space-between;align-items:center;gap:10px}.area-formula{font-size:12px;color:#817771;font-weight:700}.area-result{font-size:20px;font-weight:950;white-space:nowrap}.area-invalid{color:#b03939;font-size:12px;font-weight:800}
 .area-derived{margin-top:7px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:850;color:#6f655f}.area-derived span{background:#f5f1ee;border:1px solid #e2dad4;border-radius:8px;padding:5px 8px}
-.area-free-input{width:100%;border:1px solid #d7cfc9;border-radius:10px;padding:10px;font-size:17px;font-weight:800;background:#fff}.area-free-help{font-size:11px;color:#8a817a;margin-top:5px}
+.area-free-input{width:100%;min-height:46px;border:1px solid #d7cfc9;border-radius:10px;padding:10px;font-size:17px;font-weight:800;background:#fff;text-align:left}.area-free-input.empty{color:#aaa19a}.area-free-help{font-size:11px;color:#8a817a;margin-top:5px}
+.formula-key-row{display:none;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:7px}.formula-mode .formula-key-row{display:grid}.formula-key-row button{min-height:38px;border:0;border-radius:9px;background:#eeeae6;font-size:18px;font-weight:900;color:var(--ink)}
 .area-empty{padding:28px 12px;text-align:center;color:#8c827b;font-weight:800;background:#fff;border:1px dashed #d8d0ca;border-radius:14px}
 @media(max-width:600px){.area-calc-total{width:100%;margin-left:0}.area-item-head{grid-template-columns:auto 1fr auto}.area-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.area-shape-tools button{flex:1 1 calc(33% - 7px)}}
 /* 面積計算追加で全10タブ */
@@ -1712,6 +1713,14 @@ header .room-actions .site-list-btn{
     <button type="button" data-key="*">＊</button>
     <button type="button" data-key="0">0</button>
     <button type="button" data-key="-">−</button>
+  </div>
+  <div class="formula-key-row">
+    <button type="button" data-key="f+">＋</button>
+    <button type="button" data-key="f-">−</button>
+    <button type="button" data-key="f*">×</button>
+    <button type="button" data-key="f/">÷</button>
+    <button type="button" data-key="f(">(</button>
+    <button type="button" data-key="f)">)</button>
   </div>
   <div class="keypad-cursor-row">
     <button type="button" data-key="left">◀</button>
@@ -2175,7 +2184,7 @@ function renderNumberCursor(){
     activeRepeatButton.classList.toggle("empty",!v);
     return;
   }
-  if(keypadMode==="generic"&&activeGenericInput&&activeGenericObject&&activeGenericKey){
+  if((keypadMode==="generic"||keypadMode==="formula")&&activeGenericInput&&activeGenericObject&&activeGenericKey){
     activeGenericInput.innerHTML=caretHtml(activeGenericObject[activeGenericKey],numberCursor,activeGenericInput.dataset.placeholder||"");
   }
 }
@@ -2435,8 +2444,10 @@ function finishItemCandidates(current=""){
 
 
 function setNumberKeypadSpecial(mode){
-  const star=$("#measureKeypad")?.querySelector('[data-key="*"]');
-  const minus=$("#measureKeypad")?.querySelector('[data-key="-"]');
+  const kp=$("#measureKeypad");
+  const star=kp?.querySelector('[data-key="*"]');
+  const minus=kp?.querySelector('[data-key="-"]');
+  kp?.classList.toggle("formula-mode",mode==="formula");
   if(star){star.textContent="＊";star.style.visibility=mode==="measure"?"visible":"hidden"}
   if(minus){minus.textContent="−";minus.style.visibility=mode==="measure"?"visible":"hidden"}
 }
@@ -2487,6 +2498,16 @@ function showGenericNumberKeypad(inp,obj,key,label="数量入力",onUpdate=null,
   clearActiveNumberEditor();
   keypadMode="generic";setNumberKeypadSpecial("generic");
   activeGenericInput=inp;activeGenericObject=obj;activeGenericKey=key;activeGenericUpdate=onUpdate;activeGenericEnter=onEnter;numberCursor=String(obj[key]||"").length;inp?.classList.add("active-input");renderNumberCursor();
+  $("#keypadLabel").textContent=label;
+  const kp=$("#measureKeypad");
+  if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
+}
+function showFormulaKeypad(inp,obj,key,label="自由計算",onUpdate=null){
+  ensureMeasureKeypadDefaultBottomRight();
+  hideProductKeypad();
+  clearActiveNumberEditor();
+  keypadMode="formula";setNumberKeypadSpecial("formula");
+  activeGenericInput=inp;activeGenericObject=obj;activeGenericKey=key;activeGenericUpdate=onUpdate;activeGenericEnter=null;numberCursor=String(obj[key]||"").length;inp?.classList.add("active-input");renderNumberCursor();
   $("#keypadLabel").textContent=label;
   const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
@@ -2569,6 +2590,19 @@ function moveToNextMeasure(){
   }
 }
 function keypadPress(key){
+  if(keypadMode==="formula"){
+    if(!activeGenericObject||!activeGenericKey)return;
+    let v=String(activeGenericObject[activeGenericKey]||"");
+    if(key==="enter"){hideMeasureKeypad();return}
+    if(key==="left"){numberCursor=Math.max(0,numberCursor-1);renderNumberCursor();return}
+    if(key==="right"){numberCursor=Math.min(v.length,numberCursor+1);renderNumberCursor();return}
+    if(key==="back"){const x=backspaceAtCursor(v,numberCursor);v=x.value;numberCursor=x.cursor}
+    else if(key==="."){if(!v.slice(Math.max(0,v.lastIndexOf("+")+1,v.lastIndexOf("-")+1,v.lastIndexOf("*")+1,v.lastIndexOf("/")+1)).includes(".")){const x=insertAtCursor(v,numberCursor,".");v=x.value;numberCursor=x.cursor}}
+    else if(/^\d$/.test(key)){const x=insertAtCursor(v,numberCursor,key);v=x.value;numberCursor=x.cursor}
+    else if(/^f[+\-*/()]$/.test(key)){const ch=key.slice(1);const x=insertAtCursor(v,numberCursor,ch);v=x.value;numberCursor=x.cursor}
+    else return;
+    activeGenericObject[activeGenericKey]=v;syncGenericNumber();return;
+  }
   if(keypadMode==="generic"){
     if(!activeGenericObject||!activeGenericKey)return;
     let v=String(activeGenericObject[activeGenericKey]||"");
@@ -4897,7 +4931,7 @@ function renderAreaPage(){
     else if(item.type==="trapezoid")fields=areaField("上底",'top',item)+areaField("下底",'bottom',item)+areaField("高さ",'height',item);
     else if(item.type==="circle")fields=areaField(item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周",'circle',item);
     else if(item.type==="arc")fields=areaField("弦の幅",'chord',item)+areaField("矢高",'sagitta',item);
-    else fields=`<div class="area-field"><label>式（cm）</label><input class="area-free-input" value="${esc(item.expression||"")}" placeholder="例：320*245+180*120/2" inputmode="decimal"><div class="area-free-help">× は *、÷ は / でも入力できます</div></div>`;
+    else fields=`<div class="area-field"><label>式（cm）</label><button type="button" class="area-free-input ${item.expression?"":"empty"}" data-area-expression data-placeholder="例：320×245+180×120÷2">${esc(item.expression?item.expression.replace(/\*/g,"×").replace(/\//g,"÷"):"例：320×245+180×120÷2")}</button><div class="area-free-help">＋ − × ÷（ ）を専用テンキーから入力できます</div></div>`;
     card.innerHTML=`<div class="area-item-head"><button class="area-sign ${item.sign===-1?"minus":""}" title="加算・減算">${item.sign===-1?"−":"＋"}</button><input class="area-name" value="${esc(item.name||"")}" placeholder="例：LDK① / 柱型"><button class="area-delete">削除</button></div>
       <div class="area-type-row">${types.map(([k,l])=>`<button data-area-type="${k}" class="${item.type===k?"active":""}">${l}</button>`).join("")}</div>${extra}<div class="area-fields">${fields}</div>
       <div class="area-formula-line"><div class="area-formula">${esc(areaFormulaText(item))}</div><div class="area-result">${Number.isFinite(result)?(item.sign===-1?"−":"")+result.toFixed(3)+"㎡":"—"}</div></div>
@@ -4914,7 +4948,15 @@ function renderAreaPage(){
         showGenericNumberKeypad(btn,item.values,key,"面積寸法",()=>{renderAreaPage()},null,()=>moveToNextAreaField(item.id,key));
       };
     });
-    const free=card.querySelector(".area-free-input");if(free)free.oninput=e=>{item.expression=e.target.value;save();const r=areaValue(item);card.querySelector(".area-formula").textContent=areaFormulaText(item);card.querySelector(".area-result").textContent=Number.isFinite(r)?(item.sign===-1?"−":"")+r.toFixed(3)+"㎡":"—";const t=data.items.reduce((sum,it)=>{const a=areaValue(it);return Number.isFinite(a)?sum+(it.sign||1)*a:sum},0);area.querySelector(".area-calc-total strong").textContent=t.toFixed(2)+"㎡"};
+    const free=card.querySelector(".area-free-input");if(free)free.onclick=()=>{
+      showFormulaKeypad(free,item,"expression","自由計算",()=>{
+        const r=areaValue(item);
+        card.querySelector(".area-formula").textContent=areaFormulaText(item).replace(/\*/g,"×").replace(/\//g,"÷");
+        card.querySelector(".area-result").textContent=Number.isFinite(r)?(item.sign===-1?"−":"")+r.toFixed(3)+"㎡":"—";
+        const t=data.items.reduce((sum,it)=>{const a=areaValue(it);return Number.isFinite(a)?sum+(it.sign||1)*a:sum},0);
+        area.querySelector(".area-calc-total strong").textContent=t.toFixed(2)+"㎡";
+      });
+    };
     list.appendChild(card);
   });
   area.querySelectorAll("[data-area-add]").forEach(b=>b.onclick=()=>{data.items.push(newAreaItem(b.dataset.areaAdd));save();renderAreaPage();setTimeout(()=>area.querySelectorAll('.area-item')[data.items.length-1]?.scrollIntoView({behavior:'smooth',block:'center'}),20)});
@@ -6898,7 +6940,7 @@ document.addEventListener("click",e=>{
   const kp=$("#measureKeypad");
   if(!kp)return;
   if($("#glueQtySheet")?.classList.contains("show"))return;
-  if(kp.contains(e.target) || e.target.classList?.contains("measure-input") || e.target.closest?.(".area-num-btn"))return;
+  if(kp.contains(e.target) || e.target.classList?.contains("measure-input") || e.target.closest?.(".area-num-btn,.area-free-input"))return;
   if(e.target.closest?.(".bottom"))return;
   hideMeasureKeypad();
 });
