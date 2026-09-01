@@ -4775,6 +4775,16 @@ function areaValue(item){
   if(item.type==="trapezoid"){
     const a=areaNum(v.top),b=areaNum(v.bottom),h=areaNum(v.height);return [a,b,h].every(Number.isFinite)?cm2ToM2((a+b)*h/2):NaN;
   }
+  if(item.type==="arc"){
+    const c=areaNum(v.chord),h=areaNum(v.sagitta);
+    if(!Number.isFinite(c)||!Number.isFinite(h)||c<=0||h<=0)return NaN;
+    const r=(c*c)/(8*h)+h/2;
+    if(!Number.isFinite(r)||r<=0||h>2*r)return NaN;
+    const ratio=Math.max(-1,Math.min(1,(r-h)/r));
+    const theta=2*Math.acos(ratio);
+    const segCm2=0.5*r*r*(theta-Math.sin(theta));
+    return cm2ToM2(segCm2);
+  }
   if(item.type==="circle"){
     const x=areaNum(v.circle);if(!Number.isFinite(x)||x<0)return NaN;
     let r=item.circleMode==="radius"?x:item.circleMode==="diameter"?x/2:x/(2*Math.PI);
@@ -4790,6 +4800,15 @@ function areaValue(item){
 }
 function areaDerivedInfo(item){
   const v=item.values||{};
+  if(item.type==="arc"){
+    const c=areaNum(v.chord),h=areaNum(v.sagitta);
+    if(!Number.isFinite(c)||!Number.isFinite(h)||c<=0||h<=0)return [];
+    const r=(c*c)/(8*h)+h/2;
+    if(!Number.isFinite(r)||r<=0||h>2*r)return [];
+    const center=Math.abs(r-h);
+    const side=Math.abs(r-h)<0.005?"弦上":(h>r?"円弧側":"円弧の反対側");
+    return [`半径 ${r.toFixed(2)}cm`,`直径 ${(r*2).toFixed(2)}cm`,`中心まで ${center.toFixed(2)}cm（${side}）`];
+  }
   if(item.type==="circle"){
     const x=areaNum(v.circle);if(!Number.isFinite(x)||x<0)return [];
     const r=item.circleMode==="radius"?x:item.circleMode==="diameter"?x/2:x/(2*Math.PI);
@@ -4812,11 +4831,12 @@ function areaFormulaText(item){
   if(item.type==="triangle"&&item.triMode==="sss")return `底辺 ${show(v.a)} / 辺① ${show(v.b)} / 辺② ${show(v.c)} cm`;
   if(item.type==="triangle")return `${show(v.base)} × ${show(v.height)} ÷ 2 ÷ 10000`;
   if(item.type==="trapezoid")return `(${show(v.top)} + ${show(v.bottom)}) × ${show(v.height)} ÷ 2 ÷ 10000`;
+  if(item.type==="arc")return `弦 ${show(v.chord)} × 矢高 ${show(v.sagitta)} cm`;
   if(item.type==="circle")return `${item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周"} ${show(v.circle)} cm`;
   if(item.type==="free")return item.expression?`${item.expression} cm² ÷ 10000`:"式を入力";
   return "";
 }
-function areaTypeLabel(t){return t==="rect"?"□ 長方形":t==="triangle"?"△ 三角形":t==="trapezoid"?"台形":t==="circle"?"○ 円":"自由計算"}
+function areaTypeLabel(t){return t==="rect"?"□ 長方形":t==="triangle"?"△ 三角形":t==="trapezoid"?"台形":t==="circle"?"○ 円":t==="arc"?"⌒ 円弧":"自由計算"}
 function newAreaItem(type="rect"){
   return {id:"area-"+uid(),name:"",type,sign:1,triMode:"bh",circleMode:"circumference",values:{},expression:""};
 }
@@ -4829,6 +4849,7 @@ function areaInputKeys(item){
   if(item.type==="triangle")return item.triMode==="sss"?["a","b","c"]:["base","height"];
   if(item.type==="trapezoid")return ["top","bottom","height"];
   if(item.type==="circle")return ["circle"];
+  if(item.type==="arc")return ["chord","sagitta"];
   return [];
 }
 function moveToNextAreaField(itemId,currentKey){
@@ -4858,14 +4879,14 @@ function renderAreaPage(){
   const total=items.reduce((sum,it)=>{const a=areaValue(it);return Number.isFinite(a)?sum+(it.sign||1)*a:sum},0);
   area.innerHTML=`<div class="area-calc-wrap">
     <div class="area-calc-head"><div><div class="area-calc-title">面積計算</div><div class="area-calc-note">寸法はcm入力。各項目を＋ / −で合計します。</div></div><div class="area-calc-total"><span>合計面積</span><strong>${total.toFixed(2)}㎡</strong></div></div>
-    <div class="area-shape-tools"><button data-area-add="rect">□ 長方形</button><button data-area-add="triangle">△ 三角形</button><button data-area-add="trapezoid">台形</button><button data-area-add="circle">○ 円</button><button data-area-add="free">自由計算</button></div>
+    <div class="area-shape-tools"><button data-area-add="rect">□ 長方形</button><button data-area-add="triangle">△ 三角形</button><button data-area-add="trapezoid">台形</button><button data-area-add="circle">○ 円</button><button data-area-add="arc">⌒ 円弧</button><button data-area-add="free">自由計算</button></div>
     <div id="areaItems"></div>
   </div>`;
   const list=area.querySelector("#areaItems");
   if(!items.length)list.innerHTML='<div class="area-empty">上の図形を押して計算を追加してください</div>';
   items.forEach((item,index)=>{
     const result=areaValue(item),card=document.createElement("div");card.className="area-item";card.dataset.areaId=item.id;
-    const types=[["rect","□ 長方形"],["triangle","△ 三角形"],["trapezoid","台形"],["circle","○ 円"],["free","自由計算"]];
+    const types=[["rect","□ 長方形"],["triangle","△ 三角形"],["trapezoid","台形"],["circle","○ 円"],["arc","⌒ 円弧"],["free","自由計算"]];
     let extra="";
     if(item.type==="triangle")extra=`<div class="area-submode"><button data-tri-mode="bh" class="${item.triMode!=="sss"?"active":""}">底辺×高さ</button><button data-tri-mode="sss" class="${item.triMode==="sss"?"active":""}">3辺から</button></div>`;
     if(item.type==="circle")extra=`<div class="area-submode"><button data-circle-mode="circumference" class="${item.circleMode==="circumference"?"active":""}">円周</button><button data-circle-mode="diameter" class="${item.circleMode==="diameter"?"active":""}">直径</button><button data-circle-mode="radius" class="${item.circleMode==="radius"?"active":""}">半径</button></div>`;
@@ -4875,6 +4896,7 @@ function renderAreaPage(){
     else if(item.type==="triangle")fields=areaField("底辺",'base',item)+areaField("高さ",'height',item);
     else if(item.type==="trapezoid")fields=areaField("上底",'top',item)+areaField("下底",'bottom',item)+areaField("高さ",'height',item);
     else if(item.type==="circle")fields=areaField(item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周",'circle',item);
+    else if(item.type==="arc")fields=areaField("弦の幅",'chord',item)+areaField("矢高",'sagitta',item);
     else fields=`<div class="area-field"><label>式（cm）</label><input class="area-free-input" value="${esc(item.expression||"")}" placeholder="例：320*245+180*120/2" inputmode="decimal"><div class="area-free-help">× は *、÷ は / でも入力できます</div></div>`;
     card.innerHTML=`<div class="area-item-head"><button class="area-sign ${item.sign===-1?"minus":""}" title="加算・減算">${item.sign===-1?"−":"＋"}</button><input class="area-name" value="${esc(item.name||"")}" placeholder="例：LDK① / 柱型"><button class="area-delete">削除</button></div>
       <div class="area-type-row">${types.map(([k,l])=>`<button data-area-type="${k}" class="${item.type===k?"active":""}">${l}</button>`).join("")}</div>${extra}<div class="area-fields">${fields}</div>
