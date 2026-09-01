@@ -1603,6 +1603,7 @@ header .room-actions .site-list-btn{
 .area-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
 .area-field{display:flex;flex-direction:column;gap:4px}.area-field label{font-size:11px;color:#7f756f;font-weight:850}.area-num-btn{min-height:44px;border:1px solid #d7cfc9;border-radius:10px;background:#fff;text-align:right;padding:7px 10px;font-size:19px;font-weight:900}.area-num-btn.empty{color:#aaa19a;font-weight:700}.area-unit{font-size:11px;color:#8a817a;font-weight:700;margin-left:2px}
 .area-formula-line{margin-top:9px;padding-top:9px;border-top:1px dashed #ded7d1;display:flex;justify-content:space-between;align-items:center;gap:10px}.area-formula{font-size:12px;color:#817771;font-weight:700}.area-result{font-size:20px;font-weight:950;white-space:nowrap}.area-invalid{color:#b03939;font-size:12px;font-weight:800}
+.area-derived{margin-top:7px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:850;color:#6f655f}.area-derived span{background:#f5f1ee;border:1px solid #e2dad4;border-radius:8px;padding:5px 8px}
 .area-free-input{width:100%;border:1px solid #d7cfc9;border-radius:10px;padding:10px;font-size:17px;font-weight:800;background:#fff}.area-free-help{font-size:11px;color:#8a817a;margin-top:5px}
 .area-empty{padding:28px 12px;text-align:center;color:#8c827b;font-weight:800;background:#fff;border:1px dashed #d8d0ca;border-radius:14px}
 @media(max-width:600px){.area-calc-total{width:100%;margin-left:0}.area-item-head{grid-template-columns:auto 1fr auto}.area-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.area-shape-tools button{flex:1 1 calc(33% - 7px)}}
@@ -4787,10 +4788,28 @@ function areaValue(item){
   }
   return NaN;
 }
+function areaDerivedInfo(item){
+  const v=item.values||{};
+  if(item.type==="circle"){
+    const x=areaNum(v.circle);if(!Number.isFinite(x)||x<0)return [];
+    const r=item.circleMode==="radius"?x:item.circleMode==="diameter"?x/2:x/(2*Math.PI);
+    const d=r*2;
+    return [`半径 ${r.toFixed(2)}cm`,`直径 ${d.toFixed(2)}cm`];
+  }
+  if(item.type==="triangle"&&item.triMode==="sss"){
+    const base=areaNum(v.a),b=areaNum(v.b),c=areaNum(v.c);
+    if(![base,b,c].every(Number.isFinite)||base<=0||b<=0||c<=0||base+b<=c||base+c<=b||b+c<=base)return [];
+    const sp=(base+b+c)/2;
+    const areaCm2=Math.sqrt(sp*(sp-base)*(sp-b)*(sp-c));
+    const h=2*areaCm2/base;
+    return [`高さ ${h.toFixed(2)}cm`];
+  }
+  return [];
+}
 function areaFormulaText(item){
   const v=item.values||{},show=x=>String(x||"?");
   if(item.type==="rect")return `${show(v.a)} × ${show(v.b)} ÷ 10000`;
-  if(item.type==="triangle"&&item.triMode==="sss")return `3辺 ${show(v.a)} / ${show(v.b)} / ${show(v.c)} cm`;
+  if(item.type==="triangle"&&item.triMode==="sss")return `底辺 ${show(v.a)} / 辺① ${show(v.b)} / 辺② ${show(v.c)} cm`;
   if(item.type==="triangle")return `${show(v.base)} × ${show(v.height)} ÷ 2 ÷ 10000`;
   if(item.type==="trapezoid")return `(${show(v.top)} + ${show(v.bottom)}) × ${show(v.height)} ÷ 2 ÷ 10000`;
   if(item.type==="circle")return `${item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周"} ${show(v.circle)} cm`;
@@ -4852,14 +4871,15 @@ function renderAreaPage(){
     if(item.type==="circle")extra=`<div class="area-submode"><button data-circle-mode="circumference" class="${item.circleMode==="circumference"?"active":""}">円周</button><button data-circle-mode="diameter" class="${item.circleMode==="diameter"?"active":""}">直径</button><button data-circle-mode="radius" class="${item.circleMode==="radius"?"active":""}">半径</button></div>`;
     let fields="";
     if(item.type==="rect")fields=areaField("縦",'a',item)+areaField("横",'b',item);
-    else if(item.type==="triangle"&&item.triMode==="sss")fields=areaField("辺A",'a',item)+areaField("辺B",'b',item)+areaField("辺C",'c',item);
+    else if(item.type==="triangle"&&item.triMode==="sss")fields=areaField("底辺",'a',item)+areaField("辺①",'b',item)+areaField("辺②",'c',item);
     else if(item.type==="triangle")fields=areaField("底辺",'base',item)+areaField("高さ",'height',item);
     else if(item.type==="trapezoid")fields=areaField("上底",'top',item)+areaField("下底",'bottom',item)+areaField("高さ",'height',item);
     else if(item.type==="circle")fields=areaField(item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周",'circle',item);
     else fields=`<div class="area-field"><label>式（cm）</label><input class="area-free-input" value="${esc(item.expression||"")}" placeholder="例：320*245+180*120/2" inputmode="decimal"><div class="area-free-help">× は *、÷ は / でも入力できます</div></div>`;
     card.innerHTML=`<div class="area-item-head"><button class="area-sign ${item.sign===-1?"minus":""}" title="加算・減算">${item.sign===-1?"−":"＋"}</button><input class="area-name" value="${esc(item.name||"")}" placeholder="例：LDK① / 柱型"><button class="area-delete">削除</button></div>
       <div class="area-type-row">${types.map(([k,l])=>`<button data-area-type="${k}" class="${item.type===k?"active":""}">${l}</button>`).join("")}</div>${extra}<div class="area-fields">${fields}</div>
-      <div class="area-formula-line"><div class="area-formula">${esc(areaFormulaText(item))}</div><div class="area-result">${Number.isFinite(result)?(item.sign===-1?"−":"")+result.toFixed(3)+"㎡":"—"}</div></div>`;
+      <div class="area-formula-line"><div class="area-formula">${esc(areaFormulaText(item))}</div><div class="area-result">${Number.isFinite(result)?(item.sign===-1?"−":"")+result.toFixed(3)+"㎡":"—"}</div></div>
+      ${areaDerivedInfo(item).length?`<div class="area-derived">${areaDerivedInfo(item).map(x=>`<span>${esc(x)}</span>`).join("")}</div>`:""}`;
     card.querySelector(".area-sign").onclick=()=>{item.sign=item.sign===-1?1:-1;save();renderAreaPage()};
     card.querySelector(".area-name").oninput=e=>{item.name=e.target.value;save()};
     card.querySelector(".area-delete").onclick=()=>{data.items=data.items.filter(x=>x.id!==item.id);save();renderAreaPage()};
