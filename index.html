@@ -6329,7 +6329,7 @@ function buildAreaExportCanvas(siteObj=state){
 
   rows.forEach(({item,value})=>{
     const sign=(item.sign||1)<0?"−":"＋";
-    const name=String(item.name||"").trim()||areaTypeLabel(item.type).replace(/^[□△○⌒]\s*/,"");
+    const name=String(item.name||"").trim();
     const formula=areaExportFormula(item);
 
     ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;
