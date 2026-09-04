@@ -1807,6 +1807,7 @@ header .room-actions .site-list-btn{
       <label class="export-select-item"><input type="checkbox" data-export-part="other">その他</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="photo">写真・動画</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="memo">メモ</label>
+      <label class="export-select-item"><input type="checkbox" data-export-part="area">面積計算</label>
       <label class="export-select-item"><input type="checkbox" data-export-part="drawing">図面</label>
       <div id="exportDrawingChoices" class="export-drawing-choices" style="display:none"></div>
       <label class="export-select-item"><input type="checkbox" data-export-part="order">発注一覧</label>
@@ -6162,7 +6163,7 @@ function selectedExportParts(){
   return [...document.querySelectorAll("#exportSheet [data-export-part]:checked")].map(x=>x.dataset.exportPart);
 }
 function selectedExportLabel(parts){
-  const labels={wall:"クロス",floor:"床",sheet:"シート",other:"その他",photo:"写真・動画",memo:"メモ",drawing:"図面",order:"発注一覧"};
+  const labels={wall:"クロス",floor:"床",sheet:"シート",other:"その他",photo:"写真・動画",memo:"メモ",area:"面積計算",drawing:"図面",order:"発注一覧"};
   return (parts||[]).map(x=>labels[x]).filter(Boolean).join("・");
 }
 function selectedExportTitle(parts){
@@ -6290,6 +6291,80 @@ async function buildDrawingExportCanvases(siteObj=state,selectedIds=null){
   }
   return out;
 }
+
+function areaExportFormula(item){
+  const v=item.values||{},show=x=>String(x??"").trim()||"?";
+  if(item.type==="rect")return `${show(v.a)} × ${show(v.b)} ÷ 10000`;
+  if(item.type==="triangle"&&item.triMode==="sss")return `底辺 ${show(v.a)} / 辺① ${show(v.b)} / 辺② ${show(v.c)}`;
+  if(item.type==="triangle")return `${show(v.base)} × ${show(v.height)} ÷ 2 ÷ 10000`;
+  if(item.type==="trapezoid")return `(${show(v.top)} + ${show(v.bottom)}) × ${show(v.height)} ÷ 2 ÷ 10000`;
+  if(item.type==="arc")return `弦 ${show(v.chord)} / 矢高 ${show(v.sagitta)}`;
+  if(item.type==="circle")return `${item.circleMode==="radius"?"半径":item.circleMode==="diameter"?"直径":"円周"} ${show(v.circle)}`;
+  if(item.type==="free")return String(item.expression||"").replace(/\*/g,"×").replace(/\//g,"÷");
+  return areaFormulaText(item);
+}
+function buildAreaExportCanvas(siteObj=state){
+  const data=ensureAreaCalc(siteObj);
+  const rows=(data.items||[]).map(item=>({item,value:areaValue(item)})).filter(x=>Number.isFinite(x.value));
+  if(!rows.length)return null;
+
+  const plus=rows.reduce((sum,x)=>(x.item.sign||1)>0?sum+x.value:sum,0);
+  const minus=rows.reduce((sum,x)=>(x.item.sign||1)<0?sum+x.value:sum,0);
+  const total=plus-minus;
+  const rowH=82,summaryH=190;
+  const base=exportCanvasBase("面積計算","部屋名・計算式・答え",Math.max(900,390+rows.length*rowH+summaryH));
+  const {c,ctx,pad,width}=base;let y=base.y;
+  const left=pad+30,right=width-pad-30;
+  const nameX=left+22,formulaX=left+300,resultX=right-20;
+
+  // table header
+  ctx.fillStyle="#f2eeeb";
+  roundedRect(ctx,left,y,right-left,54,12,"#f2eeeb");
+  ctx.fillStyle="#776f69";
+  ctx.font='800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.fillText("部屋名",nameX,y+35);
+  ctx.fillText("計算式",formulaX,y+35);
+  ctx.textAlign="right";ctx.fillText("答え",resultX,y+35);ctx.textAlign="left";
+  y+=66;
+
+  rows.forEach(({item,value})=>{
+    const sign=(item.sign||1)<0?"−":"＋";
+    const name=String(item.name||"").trim()||areaTypeLabel(item.type).replace(/^[□△○⌒]\s*/,"");
+    const formula=areaExportFormula(item);
+
+    ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(left,y+rowH-8);ctx.lineTo(right,y+rowH-8);ctx.stroke();
+
+    ctx.fillStyle=(item.sign||1)<0?"#a03a3a":"#403b37";
+    ctx.font='900 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText(`${sign} ${name}`,nameX,y+32);
+
+    ctx.fillStyle="#69615b";
+    ctx.font='700 19px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    const maxFormula=resultX-formulaX-180;
+    const lines=wrapCanvasText(ctx,formula,maxFormula).slice(0,2);
+    lines.forEach((line,i)=>ctx.fillText(line,formulaX,y+28+i*24));
+
+    ctx.fillStyle="#272522";
+    ctx.font='900 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.textAlign="right";ctx.fillText(`${value.toFixed(2)}㎡`,resultX,y+36);ctx.textAlign="left";
+    y+=rowH;
+  });
+
+  y+=18;
+  roundedRect(ctx,left,y,right-left,154,18,"#efebe8");
+  const sx=left+30,rv=right-30;
+  ctx.font='800 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.fillStyle="#55504b";ctx.fillText("＋ 合計",sx,y+38);
+  ctx.textAlign="right";ctx.fillText(`${plus.toFixed(2)}㎡`,rv,y+38);
+  ctx.fillStyle="#8d3b3b";ctx.textAlign="left";ctx.fillText("− 合計",sx,y+78);
+  ctx.textAlign="right";ctx.fillText(`${minus.toFixed(2)}㎡`,rv,y+78);
+  ctx.fillStyle="#272522";ctx.font='900 28px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+  ctx.textAlign="left";ctx.fillText("合計数量",sx,y+126);
+  ctx.textAlign="right";ctx.fillText(`${total.toFixed(2)}㎡`,rv,y+126);ctx.textAlign="left";
+  return c;
+}
+
 async function buildSelectedExportCanvases(parts,siteObj=state){
   const canvases=[];
   const safe=(label,fn)=>{try{const v=fn();if(Array.isArray(v))canvases.push(...v);else if(v)canvases.push(v)}catch(e){console.error(label+" export",e)}};
@@ -6314,6 +6389,7 @@ async function buildSelectedExportCanvases(parts,siteObj=state){
   if(parts.includes("memo")){
     try{canvases.push(...await buildMemoExportCanvases(siteObj,{excludeDrawings:true}))}catch(e){console.error("memo export",e)}
   }
+  if(parts.includes("area"))safe("area",()=>buildAreaExportCanvas(siteObj));
   if(parts.includes("drawing")){
     try{
       const ids=selectedDrawingExportIds();
