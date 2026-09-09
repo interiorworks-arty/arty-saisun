@@ -2122,7 +2122,7 @@ function registerProduct(product,repeat){
 let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,activeGenericEnter=null,keypadMode="measure",numberCursor=0,productCursor=0;
 let activeGlueQtyKey=null,activeGlueQtyTotal=0,glueQtyDraft={value:""};
 
-const KEYPAD_PREF_KEY="gencho-keypad-layout-v6";
+const KEYPAD_PREF_KEY="gencho-keypad-layout-v7";
 let keypadLayout=(()=>{try{return JSON.parse(localStorage.getItem(KEYPAD_PREF_KEY))||null}catch{return null}})();
 
 const PRODUCT_KEYPAD_PREF_KEY="gencho-product-keypad-layout-v1";
@@ -2576,10 +2576,18 @@ function syncGenericNumber(){
   save();if(typeof activeGenericUpdate==="function")activeGenericUpdate();
 }
 
+let forceMeasureKeypadBottomRight=true;
+function resetMeasureKeypadBottomRight(){
+  keypadLayout=null;
+  forceMeasureKeypadBottomRight=true;
+  try{localStorage.removeItem(KEYPAD_PREF_KEY)}catch{}
+}
 function ensureMeasureKeypadDefaultBottomRight(){
   const kp=$("#measureKeypad");if(!kp)return;
-  keypadLayout=null;
-  try{localStorage.removeItem(KEYPAD_PREF_KEY)}catch{}
+  if(forceMeasureKeypadBottomRight){
+    keypadLayout=null;
+    forceMeasureKeypadBottomRight=false;
+  }
 }
 
 function hideMeasureKeypad(){
@@ -6831,7 +6839,7 @@ function addRoomFromSharedChoice(name){
     if(!fr.pages.includes(finishRoomPageTarget))fr.pages.push(finishRoomPageTarget);
     save();$("#roomSheet").classList.remove("show");renderFinishPage();return;
   }
-  let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;save();$("#roomSheet").classList.remove("show");render();
+  let r=newRoom(n);state.rooms.push(r);activeRoom=r.id;resetMeasureKeypadBottomRight();save();$("#roomSheet").classList.remove("show");render();
 }
 function openSharedRoomSheet(mode="wall",page="floor"){
   roomSheetMode=mode;finishRoomPageTarget=page;manageRooms=false;
@@ -7258,7 +7266,7 @@ function bindWorkPageTouchSortFallback(){
 bindWorkPageTabs();
 bindWorkPageTouchSortFallback();
 setWorkPage(activeWorkPage);
-render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+resetMeasureKeypadBottomRight();render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
 /* ===== v1.9.0 メモ図面フルスクリーンエディタ ===== */
 let memoEditorFiles=[];
