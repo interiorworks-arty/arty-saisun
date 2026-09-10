@@ -528,8 +528,8 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-card.photo-dragging{opacity:.72}
 .photo-thumb-wrap{aspect-ratio:4/3;background:#ece8e5;border-radius:9px;overflow:hidden;position:relative}
 .photo-thumb-error-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#6b645e;background:#ece8e5}
-.photo-card.size-1-3 .photo-thumb-wrap{aspect-ratio:16/7.6}
-.photo-card.size-1-2 .photo-thumb-wrap{aspect-ratio:16/9.2}
+.photo-card.size-1-3 .photo-thumb-wrap{aspect-ratio:16/6.2}
+.photo-card.size-1-2 .photo-thumb-wrap{aspect-ratio:16/9.8}
 .photo-thumb{width:100%;height:100%;display:block;object-fit:cover}
 .photo-card-tools{display:flex;gap:5px;align-items:center;margin-top:6px}
 .photo-drag,.photo-delete{border:0;border-radius:7px;background:#eeeae7;color:#665e58;padding:5px 8px;font-weight:900}
@@ -4116,7 +4116,7 @@ function applyPhotoCardSizeUI(card,size){
   card.style.gridColumn=s==="1/6"?"auto":"1 / -1";
   const wrap=card.querySelector(".photo-thumb-wrap");
   if(wrap){
-    wrap.style.aspectRatio=s==="1/6"?"4 / 3":(s==="1/3"?"16 / 7.6":"16 / 9.2");
+    wrap.style.aspectRatio=s==="1/6"?"4 / 3":(s==="1/3"?"16 / 6.2":"16 / 9.8");
   }
 }
 function photoMediaOrderKey(roomName){return `all::${roomName}`}
@@ -4850,9 +4850,10 @@ async function buildPhotoExportCanvasesFromRoomItems(roomEntries){
         const lines=photoTextLines(ctx,rec,boxW-6,lineLimit);
         const lineCount=Math.max(lines.length,1);
         const textBlockH=18+lineCount*22;
-        const targetImgH=item.size==='1/2'?590:(item.size==='1/3'?360:220);
-        const imgAreaH=Math.max(120,Math.min(item.h-textBlockH-32,targetImgH));
-        const cardH=Math.min(item.h,mediaPad+imgAreaH+textBlockH+16);
+        // 1/6=1ページ6枚、1/3=1ページ3枚、1/2=1ページ2枚。
+        // 割り当てたページ領域をカード全体で使うことで、サイズ差を明確にする。
+        const cardH=item.h;
+        const imgAreaH=Math.max(120,cardH-mediaPad-textBlockH-16);
         roundedRect(ctx,item.x,item.y,item.w,cardH,18,'#faf8f6');
         roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH,12,'#eeeae7');
         let drewMedia=false;
@@ -4920,9 +4921,9 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
         const lineCount=Math.max(lines.length,1);
         const textBlockH=18+lineCount*22;
         // 1/6・1/3・1/2で写真そのものの見た目の大きさも明確に変える
-        const targetImgH=item.size==="1/2"?590:(item.size==="1/3"?360:220);
-        const imgAreaH=Math.max(120,Math.min(item.h-textBlockH-32,targetImgH));
-        const cardH=Math.min(item.h,mediaPad+imgAreaH+textBlockH+16);
+        // 1/6=1ページ6枚、1/3=1ページ3枚、1/2=1ページ2枚。
+        const cardH=item.h;
+        const imgAreaH=Math.max(120,cardH-mediaPad-textBlockH-16);
         roundedRect(ctx,item.x,item.y,item.w,cardH,18,"#faf8f6");
         roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH,12,"#eeeae7");
         let drewMedia=false;
@@ -6618,7 +6619,7 @@ function selectedExportLabel(parts){
 }
 function selectedExportTitle(parts){
   const label=selectedExportLabel(parts);
-  return label?`現調まとめ［${label}］`:"現調まとめ";
+  return label?`現調アプリ［${label}］`:"現調アプリ";
 }
 
 function selectedDrawingExportIds(){
