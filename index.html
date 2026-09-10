@@ -4482,7 +4482,7 @@ async function renderPhotoPage(){
           ${selecting
             ? `<button type="button" class="photo-select-all">すべて選択</button><button type="button" class="photo-select-clear">選択解除</button><button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
             : `<button type="button" class="photo-select-toggle">□ 写真・動画を選択</button>`}
-        </div>
+        </div></div>
         <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ アルバムから選択</button></div>
         <div class="photo-grid"></div>
         ${selecting?`<div class="photo-select-bottom"><button type="button" class="photo-select-delete photo-select-delete-bottom">選択した${selectedCount}件を削除</button></div>`:""}`;
