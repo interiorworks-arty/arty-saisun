@@ -4704,10 +4704,29 @@ function imageFromBlob(blob){
   });
 }
 function drawImageCover(ctx,img,x,y,w,h){
-  const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+  const iw=img.naturalWidth||img.videoWidth||img.width,ih=img.naturalHeight||img.videoHeight||img.height;
   if(!iw||!ih||!w||!h)return;
   const scale=Math.max(w/iw,h/ih),dw=iw*scale,dh=ih*scale,dx=x+(w-dw)/2,dy=y+(h-dh)/2;
   ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.drawImage(img,dx,dy,dw,dh);ctx.restore();
+}
+async function drawBlobCover(ctx,blob,x,y,w,h){
+  if(!blob)return false;
+  if(typeof createImageBitmap==="function"){
+    try{
+      const bmp=await createImageBitmap(blob);
+      drawImageCover(ctx,bmp,x,y,w,h);
+      try{bmp.close?.()}catch{}
+      return true;
+    }catch(e){}
+  }
+  try{
+    const loaded=await imageFromBlob(blob);
+    drawImageCover(ctx,loaded.img,x,y,w,h);
+    try{loaded.cleanup?.()}catch{}
+    return true;
+  }catch(e){
+    return false;
+  }
 }
 function showPhotoThumbLoadError(wrapEl,text="画像を再読み込みしてください"){
   if(!wrapEl)return;
@@ -4721,16 +4740,24 @@ async function bindBlobToImageElement(imgEl,blob,wrapEl=null){
   if(!imgEl||!blob)return false;
   if(wrapEl)wrapEl.querySelectorAll('.photo-thumb-error-label').forEach(el=>el.remove());
   try{
-    const loaded=await imageFromBlob(blob);
-    const src=loaded.img.src;
-    const cleanup=loaded.cleanup;
-    imgEl.onload=()=>{try{cleanup?.()}catch{}};
-    imgEl.onerror=()=>{try{cleanup?.()}catch{};if(wrapEl)showPhotoThumbLoadError(wrapEl)};
-    imgEl.src=src;
+    const dataUrl=await blobToDataUrl(blob);
+    imgEl.onload=()=>{};
+    imgEl.onerror=()=>{if(wrapEl)showPhotoThumbLoadError(wrapEl)};
+    imgEl.src=dataUrl;
     return true;
   }catch(e){
-    if(wrapEl)showPhotoThumbLoadError(wrapEl);
-    return false;
+    try{
+      const loaded=await imageFromBlob(blob);
+      const src=loaded.img.src;
+      const cleanup=loaded.cleanup;
+      imgEl.onload=()=>{try{cleanup?.()}catch{}};
+      imgEl.onerror=()=>{try{cleanup?.()}catch{};if(wrapEl)showPhotoThumbLoadError(wrapEl)};
+      imgEl.src=src;
+      return true;
+    }catch(err){
+      if(wrapEl)showPhotoThumbLoadError(wrapEl);
+      return false;
+    }
   }
 }
 async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilter=null){
@@ -4776,12 +4803,7 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
         roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH,12,"#eeeae7");
         let drewMedia=false;
         if(previewBlob){
-          try{
-            const loaded=await imageFromBlob(previewBlob);
-            drawImageCover(ctx,loaded.img,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH);
-            try{loaded.cleanup?.()}catch{}
-            drewMedia=true;
-          }catch{}
+          drewMedia=await drawBlobCover(ctx,previewBlob,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH);
         }
         if(!drewMedia){
           ctx.fillStyle="#6f6862";
