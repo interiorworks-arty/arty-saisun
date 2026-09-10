@@ -4483,7 +4483,6 @@ async function renderPhotoPage(){
             ? `<button type="button" class="photo-select-all">すべて選択</button><button type="button" class="photo-select-clear">選択解除</button><button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
             : `<button type="button" class="photo-select-toggle">□ 写真・動画を選択</button>`}
         </div>
-      </div>
         <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ アルバムから選択</button></div>
         <div class="photo-grid"></div>
         ${selecting?`<div class="photo-select-bottom"><button type="button" class="photo-select-delete photo-select-delete-bottom">選択した${selectedCount}件を削除</button></div>`:""}`;
@@ -4687,9 +4686,9 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
     for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
       const subtitle=pageCount>1?`${displayRoom}　${pageIndex+1}/${pageCount}`:displayRoom;
       const base=exportCanvasBase("写真・動画",subtitle,1700),{c,ctx}=base;
+      c._appA4Page=true;
       const cfg=photoCanvasLayout(base);
       const pageItems=createPhotoPagePlan(list,cfg)[pageIndex]||[];
-      pageItems.forEach(item=>roundedRect(ctx,item.x,item.y,item.w,item.h,18,"#faf8f6"));
 
       for(const item of pageItems){
         const rec=item.rec;
@@ -4697,16 +4696,23 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
         const previewBlob=isVideo?(rec.thumbBlob||null):rec.blob;
         const mediaPad=14;
         const stage=photoStageOf(rec);
-        const textH=Math.max(52,item.size==="1/2"?92:72);
-        const imgAreaH=Math.max(40,item.h-textH-18);
-        ctx.fillStyle="#eeeae7";roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,item.w-mediaPad*2,imgAreaH,12,"#eeeae7");
+        const boxW=item.w-mediaPad*2;
+        const lineLimit=item.size==="1/2"?4:3;
+        ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        const lines=photoTextLines(ctx,rec,boxW-6,lineLimit);
+        const lineCount=Math.max(lines.length,1);
+        const textBlockH=18+lineCount*22;
+        const targetImgH=item.size==="1/2"?430:(item.size==="1/3"?260:310);
+        const imgAreaH=Math.max(120,Math.min(item.h-textBlockH-32,targetImgH));
+        const cardH=Math.min(item.h,mediaPad+imgAreaH+textBlockH+16);
+        roundedRect(ctx,item.x,item.y,item.w,cardH,18,"#faf8f6");
+        roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH,12,"#eeeae7");
         if(previewBlob){
           try{
             const {img,url}=await imageFromBlob(previewBlob);
-            const boxW=item.w-mediaPad*2,boxH=imgAreaH;
             const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
-            const scale=Math.min(boxW/iw,boxH/ih),dw=iw*scale,dh=ih*scale;
-            ctx.drawImage(img,item.x+mediaPad+(boxW-dw)/2,item.y+mediaPad+(boxH-dh)/2,dw,dh);URL.revokeObjectURL(url);
+            const scale=Math.min(boxW/iw,imgAreaH/ih),dw=iw*scale,dh=ih*scale;
+            ctx.drawImage(img,item.x+mediaPad+(boxW-dw)/2,item.y+mediaPad+(imgAreaH-dh)/2,dw,dh);URL.revokeObjectURL(url);
           }catch{}
         }
         if(isVideo){
@@ -4714,17 +4720,10 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
           ctx.fillStyle="#fff";ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
           ctx.fillText("🎥 動画",item.x+mediaPad+27,item.y+mediaPad+33);
         }
-        ctx.fillStyle="#5e5751";
-        ctx.font='700 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        const lines=photoTextLines(ctx,rec,item.w-mediaPad*2-6,item.size==="1/2"?4:3);
-        if(stage!=="unset"){
-          ctx.fillStyle="#6d655f";
-          ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-        }
         lines.forEach((line,li)=>{
           ctx.fillStyle=li===0&&stage!=="unset"&&line===`[${photoStageLabel(stage)}]`?"#6d655f":"#5e5751";
           ctx.font=(li===0&&stage!=="unset"&&line===`[${photoStageLabel(stage)}]`)?'800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif':'600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-          ctx.fillText(line,item.x+mediaPad+3,item.y+mediaPad+imgAreaH+25+li*22);
+          ctx.fillText(line,item.x+mediaPad+3,item.y+mediaPad+imgAreaH+24+li*22);
         });
       }
       out.push(c);
