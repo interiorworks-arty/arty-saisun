@@ -507,6 +507,21 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-add-actions{display:flex;gap:7px;margin:8px 0 12px}
 .photo-add-actions button{flex:1;border:0;border-radius:10px;padding:10px;background:#e8e2de;color:#514a45;font-weight:900}
 .photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+/* v2.4.47 写真ページ：6枚ごとの出力ページ境界を見える化 */
+.photo-output-page-start{
+  grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin:2px 0 0;
+  color:#766d66;font-size:11px;font-weight:900;
+}
+.photo-output-page-start::before,.photo-output-page-start::after{
+  content:"";height:1px;background:#d9d1cb;flex:1;
+}
+.photo-output-page-start.first{margin-top:0}
+.photo-output-page-break{
+  grid-column:1 / -1;display:flex;align-items:center;justify-content:center;gap:10px;
+  margin:8px -2px 2px;padding:9px 10px;border-top:2px dashed #a79c94;border-bottom:2px dashed #a79c94;
+  background:#f1ede9;border-radius:8px;color:#5c544e;font-size:12px;font-weight:900;
+}
+.photo-output-page-break span{white-space:nowrap}
 .photo-card{border:1px solid #e5dfda;border-radius:12px;padding:7px;background:#faf9f7;position:relative}
 .photo-card.drag-target{outline:2px solid #a89d95;outline-offset:2px}
 .photo-card.photo-dragging{opacity:.72}
@@ -4348,6 +4363,29 @@ async function deleteSelectedPhotos(roomName){
   clearPhotoSelection();
   await renderPhotoPage();
 }
+function insertPhotoPageMarkers(grid){
+  if(!grid)return;
+  grid.querySelectorAll(".photo-output-page-start,.photo-output-page-break").forEach(el=>el.remove());
+  const cards=[...grid.querySelectorAll(":scope > .photo-card")];
+  if(!cards.length)return;
+  const perPage=6,total=Math.ceil(cards.length/perPage);
+  for(let page=total-1;page>=0;page--){
+    const startIndex=page*perPage;
+    const firstCard=cards[startIndex];
+    if(!firstCard)continue;
+    const start=document.createElement("div");
+    start.className="photo-output-page-start"+(page===0?" first":"");
+    start.textContent=`出力 ${page+1}ページ目（最大6枚）`;
+    grid.insertBefore(start,firstCard);
+    if(page>0){
+      const br=document.createElement("div");
+      br.className="photo-output-page-break";
+      br.innerHTML=`<span>↑ ${page}ページ目ここまで</span><span>↓ ${page+1}ページ目ここから</span>`;
+      grid.insertBefore(br,start);
+    }
+  }
+}
+
 async function renderPhotoPage(){
   const area=$("#photoPageArea");if(!area)return;
   const renderSiteId=state.id;
@@ -4559,12 +4597,16 @@ async function renderPhotoPage(){
             pc.classList.remove("photo-dragging");
             try{drag.releasePointerCapture?.(pointerId)}catch{}
             drag.removeEventListener("pointermove",move);drag.removeEventListener("pointerup",finish);drag.removeEventListener("pointercancel",finish);
-            if(changed)savePhotoMediaDomOrder(roomName,activePhotoStage,grid);
+            if(changed){
+              savePhotoMediaDomOrder(roomName,activePhotoStage,grid);
+              insertPhotoPageMarkers(grid);
+            }
           };
           drag.addEventListener("pointermove",move);drag.addEventListener("pointerup",finish);drag.addEventListener("pointercancel",finish);
         };
         grid.appendChild(pc);
       });
+      insertPhotoPageMarkers(grid);
       wrap.appendChild(card);
     });
     if(state.id!==renderSiteId)return;
