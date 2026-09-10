@@ -4143,7 +4143,7 @@ function createPhotoPagePlan(records,cfg={}){
 function photoCanvasLayout(base){
   const bodyTop=base.y,bodyLeft=base.pad+25,bodyRight=base.width-base.pad-25,bodyWidth=bodyRight-bodyLeft;
   const gap=26,colGap=26,bottomPad=64;
-  // Canvas は高解像度化のため2倍だが、描画座標は論理サイズ(1700px基準)で計算する。
+  // canvas は高解像度化で実ピクセルが2倍なので、配置計算は論理サイズへ戻す
   const logicalHeight=base.c.height/EXPORT_RENDER_SCALE;
   const bodyHeight=Math.max(1,logicalHeight-bodyTop-bottomPad);
   const thirdBlockH=Math.floor((bodyHeight-gap*2)/3);
@@ -4380,14 +4380,6 @@ function openPhotoPreview(rec){
   $("#photoLightbox").onclick=e=>{if(e.target.id==="photoLightbox")closeMediaPreview()};
 }
 
-function cleanupPhotoThumbUrls(root=document){
-  root.querySelectorAll?.('.photo-thumb[data-object-url]').forEach(img=>{
-    const u=img.dataset.objectUrl;
-    if(u){try{URL.revokeObjectURL(u)}catch{}}
-    delete img.dataset.objectUrl;
-  });
-}
-
 let photoSelectRoom=null,photoSelectedIds=new Set();
 function photoHitTargetAtPoint(clientX,clientY,draggedEl,selector,container){
   if(!draggedEl)return null;
@@ -4461,7 +4453,6 @@ function insertPhotoPageMarkers(grid,records=[]){
 
 async function renderPhotoPage(){
   const area=$("#photoPageArea");if(!area)return;
-  cleanupPhotoThumbUrls(area);
   const renderSiteId=state.id;
   area.innerHTML='<div class="photo-loading">写真・動画を読み込み中...</div>';
   try{
@@ -4573,15 +4564,8 @@ async function renderPhotoPage(){
         const sourceBlob=isVideo?(rec.thumbBlob||null):rec.blob;
         if(sourceBlob){
           const url=URL.createObjectURL(sourceBlob);
-          // Safari/iPad でサイズ変更・再レイアウト後に画像が消えることがあるため、
-          // 表示中は Object URL を保持し、再描画時にまとめて解放する。
-          img.dataset.objectUrl=url;
-          img.onerror=()=>{
-            try{URL.revokeObjectURL(url)}catch{}
-            delete img.dataset.objectUrl;
-            img.removeAttribute("src");
-            img.alt="画像を再読み込みしてください";
-          };
+          img.onload=()=>{try{URL.revokeObjectURL(url)}catch{}};
+          img.onerror=()=>{try{URL.revokeObjectURL(url)}catch{}};
           img.src=url;
         }else{
           const c=document.createElement("canvas");c.width=640;c.height=360;const x=c.getContext("2d");
@@ -4625,7 +4609,19 @@ async function renderPhotoPage(){
 
         pc.querySelector(".photo-note").onchange=async e=>{rec.note=e.target.value;await photoDbPut(rec)};
         pc.querySelector(".photo-stage-select").onchange=async e=>{rec.stage=e.target.value;await photoDbPut(rec)};
-        pc.querySelector(".photo-size-select").onchange=async e=>{rec.size=e.target.value;await photoDbPut(rec);await renderPhotoPage()};
+        pc.querySelector(".photo-size-select").onchange=async e=>{
+          rec.size=e.target.value;
+          await photoDbPut(rec);
+          pc.classList.remove("size-1-6","size-1-3","size-1-2");
+          pc.classList.add(photoSizeClass(rec.size));
+          pc.dataset.size=rec.size;
+          // 全写真を再読み込みせず、その場でレイアウトとページ境界だけ更新する
+          const ordered=[...grid.querySelectorAll('.photo-card[data-photo-id]')].map(el=>roomPhotos.find(r=>r.id===el.dataset.photoId)).filter(Boolean);
+          insertPhotoPageMarkers(grid,ordered);
+          const count=card.querySelector('.photo-room-count');
+          const plan=createPhotoPagePlan(ordered,{bodyTop:0,bodyHeight:3,bodyLeft:0,bodyWidth:2,colGap:0.14,gap:0,thirdBlockH:1,halfBlockH:1.5});
+          if(count)count.textContent=`${ordered.length}件 / ${plan.length||1}ページ`;
+        };
         pc.querySelector(".photo-delete").onclick=async()=>{if(confirm(`この${isVideo?"動画":"写真"}を削除しますか？`)){await photoDbDelete(rec.id);await renderPhotoPage()}};
 
         const drag=pc.querySelector(".photo-drag");
@@ -4720,7 +4716,8 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
         const lines=photoTextLines(ctx,rec,boxW-6,lineLimit);
         const lineCount=Math.max(lines.length,1);
         const textBlockH=18+lineCount*22;
-        const targetImgH=item.size==="1/2"?430:(item.size==="1/3"?260:310);
+        // 1/6・1/3・1/2で写真そのものの見た目の大きさも明確に変える
+        const targetImgH=item.size==="1/2"?590:(item.size==="1/3"?360:220);
         const imgAreaH=Math.max(120,Math.min(item.h-textBlockH-32,targetImgH));
         const cardH=Math.min(item.h,mediaPad+imgAreaH+textBlockH+16);
         roundedRect(ctx,item.x,item.y,item.w,cardH,18,"#faf8f6");
