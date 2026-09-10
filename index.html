@@ -507,7 +507,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-add-actions{display:flex;gap:7px;margin:8px 0 12px}
 .photo-add-actions button{flex:1;border:0;border-radius:10px;padding:10px;background:#e8e2de;color:#514a45;font-weight:900}
 .photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-/* v2.4.47 写真ページ：6枚ごとの出力ページ境界を見える化 */
+/* v2.4.48 写真ページ：個別区分・個別サイズ・出力ページ境界対応 */
 .photo-output-page-start{
   grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin:2px 0 0;
   color:#766d66;font-size:11px;font-weight:900;
@@ -523,14 +523,19 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 }
 .photo-output-page-break span{white-space:nowrap}
 .photo-card{border:1px solid #e5dfda;border-radius:12px;padding:7px;background:#faf9f7;position:relative}
+.photo-card.size-1-3,.photo-card.size-1-2{grid-column:1 / -1}
 .photo-card.drag-target{outline:2px solid #a89d95;outline-offset:2px}
 .photo-card.photo-dragging{opacity:.72}
-.photo-thumb-wrap{aspect-ratio:4/3;background:#ece8e5;border-radius:9px;overflow:hidden}
+.photo-thumb-wrap{aspect-ratio:4/3;background:#ece8e5;border-radius:9px;overflow:hidden;position:relative}
+.photo-card.size-1-3 .photo-thumb-wrap{aspect-ratio:16/7.6}
+.photo-card.size-1-2 .photo-thumb-wrap{aspect-ratio:16/9.2}
 .photo-thumb{width:100%;height:100%;display:block;object-fit:cover}
 .photo-card-tools{display:flex;gap:5px;align-items:center;margin-top:6px}
 .photo-drag,.photo-delete{border:0;border-radius:7px;background:#eeeae7;color:#665e58;padding:5px 8px;font-weight:900}
 .photo-drag{touch-action:none;font-size:17px;cursor:grab}
 .photo-delete{margin-left:auto;color:#9c6262}
+.photo-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+.photo-stage-select,.photo-size-select{width:100%;border:1px solid #ddd6d1;border-radius:8px;background:#fff;padding:7px 8px;font-size:12px;color:var(--ink)}
 .photo-note{width:100%;box-sizing:border-box;border:1px solid #ddd6d1;border-radius:8px;background:#fff;padding:7px 8px;margin-top:6px;font-size:12px;resize:vertical;min-height:42px;font-family:inherit}
 .photo-empty{font-size:12px;color:#948c86;padding:10px 2px}
 .photo-loading{background:#fff;border-radius:16px;padding:18px;color:#827a74}
@@ -551,7 +556,6 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-room-export{display:flex;gap:6px;align-items:center;margin-left:auto}
 .photo-room-export button{border:0;border-radius:8px;padding:7px 9px;background:#eeeae7;color:#514a45;font-size:11px;font-weight:900;white-space:nowrap}
 .photo-video-badge{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.68);color:#fff;border-radius:999px;padding:4px 7px;font-size:11px;font-weight:900;z-index:2}
-.photo-thumb-wrap{position:relative}
 .photo-thumb-wrap video{width:100%;height:100%;display:block;object-fit:cover}
 .photo-lightbox video{max-width:100%;max-height:88vh;object-fit:contain;border-radius:8px;background:#000}
 .photo-media-select{background:#e8e2de!important}
@@ -561,6 +565,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   .photo-room-export button{flex:1}
   .photo-add-actions{flex-wrap:wrap}
   .photo-add-actions button{min-width:45%}
+  .photo-meta-row{grid-template-columns:1fr}
 }
 
 .photo-select-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -578,7 +583,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
   font-size:16px;font-weight:900
 }
 .photo-card.selected .photo-select-check{background:#6f665f}
-.photo-card.select-mode .photo-delete,.photo-card.select-mode .photo-drag,.photo-card.select-mode .photo-note{pointer-events:none;opacity:.45}
+.photo-card.select-mode .photo-delete,.photo-card.select-mode .photo-drag,.photo-card.select-mode .photo-note,.photo-card.select-mode .photo-stage-select,.photo-card.select-mode .photo-size-select{pointer-events:none;opacity:.45}
 @media(max-width:600px){
   .photo-select-tools{width:100%}
 }
@@ -4089,12 +4094,68 @@ function renderOrderPage(){
 }
 
 const PHOTO_DB_NAME="gencho-photo-db-v1",PHOTO_STORE="photos",MEMO_FILE_STORE="memoFiles";
-const PHOTO_STAGES=["before","during","after"];
-const PHOTO_STAGE_LABELS={before:"施工前",during:"施工中",after:"施工後"};
-let activePhotoStage="before";
-let photoTargetRoom="共通",photoTargetStage="before";
-function photoStageOf(rec){return PHOTO_STAGES.includes(rec?.stage)?rec.stage:"before"}
-function photoStageLabel(stage){return PHOTO_STAGE_LABELS[stage]||PHOTO_STAGE_LABELS.before}
+const PHOTO_STAGES=["unset","before","during","after"];
+const PHOTO_STAGE_LABELS={unset:"未設定",before:"施工前",during:"施工中",after:"施工後"};
+const PHOTO_SIZES=["1/6","1/3","1/2"];
+const PHOTO_SIZE_LABELS={"1/6":"1/6表示","1/3":"1/3表示","1/2":"1/2表示"};
+let activePhotoStage="all";
+let photoTargetRoom="共通";
+function photoStageOf(rec){return PHOTO_STAGES.includes(rec?.stage)?rec.stage:"unset"}
+function photoStageLabel(stage){return PHOTO_STAGE_LABELS[stage]||PHOTO_STAGE_LABELS.unset}
+function photoSizeOf(rec){return PHOTO_SIZES.includes(rec?.size)?rec.size:"1/6"}
+function photoSizeLabel(size){return PHOTO_SIZE_LABELS[size]||PHOTO_SIZE_LABELS["1/6"]}
+function photoSizeClass(size){return size==="1/3"?"size-1-3":size==="1/2"?"size-1-2":"size-1-6"}
+function photoMediaOrderKey(roomName){return `all::${roomName}`}
+function createPhotoPagePlan(records,cfg={}){
+  const bodyTop=Number(cfg.bodyTop)||0,bodyHeight=Number(cfg.bodyHeight)||3,bodyWidth=Number(cfg.bodyWidth)||2,bodyLeft=Number(cfg.bodyLeft)||0;
+  const colGap=cfg.colGap==null?0.12:Number(cfg.colGap),gap=cfg.gap==null?0:Number(cfg.gap);
+  const thirdBlockH=cfg.thirdBlockH==null?1:Number(cfg.thirdBlockH),halfBlockH=cfg.halfBlockH==null?1.5:Number(cfg.halfBlockH);
+  const maxY=bodyTop+bodyHeight,halfW=(bodyWidth-colGap)/2,pages=[];
+  let items=[],currentY=bodyTop,halfRowOpen=false;
+  const pushPage=()=>{if(items.length)pages.push(items);items=[];currentY=bodyTop;halfRowOpen=false};
+  (records||[]).forEach(rec=>{
+    const size=photoSizeOf(rec);
+    if(size==="1/6"){
+      if(!halfRowOpen){
+        if(currentY+thirdBlockH>maxY&&items.length)pushPage();
+        items.push({rec,size,x:bodyLeft,y:currentY,w:halfW,h:thirdBlockH});
+        halfRowOpen=true;
+      }else{
+        items.push({rec,size,x:bodyLeft+halfW+colGap,y:currentY,w:halfW,h:thirdBlockH});
+        currentY+=thirdBlockH+gap;
+        halfRowOpen=false;
+      }
+      return;
+    }
+    if(halfRowOpen){
+      currentY+=thirdBlockH+gap;
+      halfRowOpen=false;
+      if(currentY>maxY&&items.length)pushPage();
+    }
+    const blockH=size==="1/2"?halfBlockH:thirdBlockH;
+    if(currentY+blockH>maxY&&items.length)pushPage();
+    items.push({rec,size,x:bodyLeft,y:currentY,w:bodyWidth,h:blockH});
+    currentY+=blockH+gap;
+  });
+  if(items.length)pages.push(items);
+  return pages;
+}
+function photoCanvasLayout(base){
+  const bodyTop=base.y,bodyLeft=base.pad+25,bodyRight=base.width-base.pad-25,bodyWidth=bodyRight-bodyLeft;
+  const gap=26,colGap=26,bottomPad=64;
+  const bodyHeight=Math.max(1,base.c.height-bodyTop-bottomPad);
+  const thirdBlockH=Math.floor((bodyHeight-gap*2)/3);
+  const halfBlockH=Math.floor((bodyHeight-gap)/2);
+  return {bodyTop,bodyLeft,bodyWidth,bodyHeight,gap,colGap,thirdBlockH,halfBlockH};
+}
+function photoTextLines(ctx,rec,maxWidth,maxLines){
+  const lines=[];
+  const stage=photoStageOf(rec);
+  if(stage!=="unset")lines.push(`[${photoStageLabel(stage)}]`);
+  const note=String(rec?.note||"").trim();
+  if(note)lines.push(...wrapCanvasText(ctx,note,maxWidth));
+  return lines.slice(0,maxLines);
+}
 function openPhotoDB(){
   return new Promise((resolve,reject)=>{
     const req=indexedDB.open(PHOTO_DB_NAME,2);
@@ -4244,23 +4305,23 @@ function videoThumbnailBlob(blob){
     v.src=url;v.load();
   });
 }
-async function addPhotoFiles(files,roomName,stage=activePhotoStage){
+async function addPhotoFiles(files,roomName){
   const arr=[...files].filter(f=>{
     const t=String(f?.type||"").toLowerCase();
     return f&&(t.startsWith("image/")||t.startsWith("video/"));
   });
   if(!arr.length)return;
-  const existing=(await photoDbAllForSite(state.id)).filter(p=>p.roomName===roomName&&photoStageOf(p)===stage);
+  const existing=(await photoDbAllForSite(state.id)).filter(p=>p.roomName===roomName);
   let order=existing.length?Math.max(...existing.map(x=>Number(x.order)||0))+1:1;
   for(const file of arr){
     try{
       const isVideo=String(file.type||"").toLowerCase().startsWith("video/");
       if(isVideo){
         const thumbBlob=await videoThumbnailBlob(file);
-        await photoDbPut({id:uid(),siteId:state.id,roomName,stage,blob:file,thumbBlob,mediaType:"video",mimeType:file.type||"video/mp4",note:"",order:order++,createdAt:Date.now()});
+        await photoDbPut({id:uid(),siteId:state.id,roomName,stage:"unset",size:"1/6",blob:file,thumbBlob,mediaType:"video",mimeType:file.type||"video/mp4",note:"",order:order++,createdAt:Date.now()});
       }else{
         const blob=await compressPhotoFile(file);
-        await photoDbPut({id:uid(),siteId:state.id,roomName,stage,blob,mediaType:"image",mimeType:"image/jpeg",note:"",order:order++,createdAt:Date.now()});
+        await photoDbPut({id:uid(),siteId:state.id,roomName,stage:"unset",size:"1/6",blob,mediaType:"image",mimeType:"image/jpeg",note:"",order:order++,createdAt:Date.now()});
       }
     }catch(e){console.error(e);alert("写真・動画の追加に失敗したものがあります")}
   }
@@ -4269,10 +4330,9 @@ async function addPhotoFiles(files,roomName,stage=activePhotoStage){
 function ensurePhotoMediaOrder(siteObj=state){
   if(!siteObj.photoMediaOrder||typeof siteObj.photoMediaOrder!=="object"||Array.isArray(siteObj.photoMediaOrder))siteObj.photoMediaOrder={};
 }
-function photoMediaOrderKey(roomName,stage=activePhotoStage){return `${stage}::${roomName}`}
-function sortPhotoRecordsForView(records,roomName,stage=activePhotoStage,siteObj=state){
+function sortPhotoRecordsForView(records,roomName,siteObj=state){
   ensurePhotoMediaOrder(siteObj);
-  const key=photoMediaOrderKey(roomName,stage);
+  const key=photoMediaOrderKey(roomName);
   const saved=Array.isArray(siteObj.photoMediaOrder[key])?siteObj.photoMediaOrder[key]:[];
   const byId=new Map(records.map(r=>[r.id,r]));
   const out=[];
@@ -4281,20 +4341,20 @@ function sortPhotoRecordsForView(records,roomName,stage=activePhotoStage,siteObj
   siteObj.photoMediaOrder[key]=out.map(r=>r.id);
   return out;
 }
-function savePhotoMediaDomOrder(roomName,stage,grid){
+function savePhotoMediaDomOrder(roomName,grid){
   ensurePhotoMediaOrder(state);
   const ids=[...grid.querySelectorAll(".photo-card[data-photo-id]")].map(el=>el.dataset.photoId).filter(Boolean);
-  state.photoMediaOrder[photoMediaOrderKey(roomName,stage)]=ids;
+  state.photoMediaOrder[photoMediaOrderKey(roomName)]=ids;
   save();
 }
-async function reorderPhoto(roomName,fromId,toId,stage=activePhotoStage){
+async function reorderPhoto(roomName,fromId,toId){
   if(fromId===toId)return;
   const all=await photoDbAllForSite(state.id);
-  const room=sortPhotoRecordsForView(all.filter(p=>p.roomName===roomName&&photoStageOf(p)===stage),roomName,stage,state);
+  const room=sortPhotoRecordsForView(all.filter(p=>p.roomName===roomName),roomName,state);
   const ids=room.map(x=>x.id),from=ids.indexOf(fromId),to=ids.indexOf(toId);
   if(from<0||to<0||from===to)return;
   const [m]=ids.splice(from,1);ids.splice(to,0,m);
-  ensurePhotoMediaOrder(state);state.photoMediaOrder[photoMediaOrderKey(roomName,stage)]=ids;save();
+  ensurePhotoMediaOrder(state);state.photoMediaOrder[photoMediaOrderKey(roomName)]=ids;save();
   await renderPhotoPage();
 }
 function closeMediaPreview(){
@@ -4363,19 +4423,22 @@ async function deleteSelectedPhotos(roomName){
   clearPhotoSelection();
   await renderPhotoPage();
 }
-function insertPhotoPageMarkers(grid){
+function insertPhotoPageMarkers(grid,records=[]){
   if(!grid)return;
   grid.querySelectorAll(".photo-output-page-start,.photo-output-page-break").forEach(el=>el.remove());
   const cards=[...grid.querySelectorAll(":scope > .photo-card")];
   if(!cards.length)return;
-  const perPage=6,total=Math.ceil(cards.length/perPage);
-  for(let page=total-1;page>=0;page--){
-    const startIndex=page*perPage;
-    const firstCard=cards[startIndex];
+  const plan=createPhotoPagePlan(records,{bodyTop:0,bodyHeight:3,bodyLeft:0,bodyWidth:2,colGap:0.14,gap:0,thirdBlockH:1,halfBlockH:1.5});
+  if(!plan.length)return;
+  let cursor=0;
+  const starts=[];
+  plan.forEach(page=>{starts.push(cursor);cursor+=page.length});
+  for(let page=plan.length-1;page>=0;page--){
+    const firstCard=cards[starts[page]];
     if(!firstCard)continue;
     const start=document.createElement("div");
     start.className="photo-output-page-start"+(page===0?" first":"");
-    start.textContent=`出力 ${page+1}ページ目（最大6枚）`;
+    start.textContent=`出力 ${page+1}ページ目`;
     grid.insertBefore(start,firstCard);
     if(page>0){
       const br=document.createElement("div");
@@ -4396,31 +4459,19 @@ async function renderPhotoPage(){
     const rooms=photoRoomNamesFromSite(state,photos);
     const wrap=document.createElement("div");wrap.className="photo-page";
 
-    const stageTabs=document.createElement("div");stageTabs.className="photo-stage-tabs";
-    PHOTO_STAGES.forEach(stage=>{
-      const b=document.createElement("button");b.type="button";b.className="photo-stage-tab"+(stage===activePhotoStage?" active":"");
-      b.textContent=photoStageLabel(stage);
-      b.onclick=()=>{if(activePhotoStage===stage)return;activePhotoStage=stage;clearPhotoSelection();renderPhotoPage()};
-      stageTabs.appendChild(b);
-    });
-    wrap.appendChild(stageTabs);
-
-    const stageNote=document.createElement("div");stageNote.className="photo-stage-note";
-    stageNote.textContent=`${photoStageLabel(activePhotoStage)}の写真・動画`;
-    wrap.appendChild(stageNote);
-
     rooms.forEach(roomName=>{
       const allRoomPhotos=photos.filter(p=>p.roomName===roomName);
-      const roomPhotos=sortPhotoRecordsForView(allRoomPhotos.filter(p=>photoStageOf(p)===activePhotoStage),roomName,activePhotoStage,state);
-      const imageCount=roomPhotos.filter(x=>mediaTypeOf(x)==="image").length;
-      const videoCount=roomPhotos.length-imageCount;
+      const roomPhotos=sortPhotoRecordsForView(allRoomPhotos,roomName,state);
+      if(!allRoomPhotos.length&&roomName!=="共通")return;
+
       const selecting=photoSelectRoom===roomName;
       const selectedCount=selecting?photoSelectedIds.size:0;
+      const pagePlan=createPhotoPagePlan(roomPhotos,{bodyTop:0,bodyHeight:3,bodyLeft:0,bodyWidth:2,colGap:0.14,gap:0,thirdBlockH:1,halfBlockH:1.5});
+      const countText=roomPhotos.length?`${roomPhotos.length}件 / ${pagePlan.length||1}ページ`:`0件`;
 
       const card=document.createElement("div");card.className="photo-room";
-      const countText=[imageCount?`${imageCount}枚`:"",videoCount?`${videoCount}動画`:""].filter(Boolean).join("・")||"0枚";
       const roomDisplayName=photoRoomDisplayName(roomName,state);
-      card.dataset.roomName=roomName;
+      card.dataset.photoRoom=roomName;
       card.innerHTML=`<div class="photo-room-head">
         <div class="photo-room-title-line"><button type="button" class="photo-room-move" title="部屋を移動">≡</button><h2>${esc(roomDisplayName)}</h2><div class="photo-room-count">${countText}</div></div>
         <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div>
@@ -4431,29 +4482,28 @@ async function renderPhotoPage(){
           ${selecting
             ? `<button type="button" class="photo-select-all">すべて選択</button><button type="button" class="photo-select-clear">選択解除</button><button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
             : `<button type="button" class="photo-select-toggle">□ 写真・動画を選択</button>`}
-        </div></div>
+        </div>
         <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ アルバムから選択</button></div>
         <div class="photo-grid"></div>
         ${selecting?`<div class="photo-select-bottom"><button type="button" class="photo-select-delete photo-select-delete-bottom">選択した${selectedCount}件を削除</button></div>`:""}`;
 
-      card.querySelector(".photo-camera").onclick=()=>{photoTargetRoom=roomName;photoTargetStage=activePhotoStage;const inp=$("#photoCameraInput");inp.value="";inp.click()};
-      card.querySelector(".video-camera").onclick=()=>{photoTargetRoom=roomName;photoTargetStage=activePhotoStage;const inp=$("#videoCameraInput");inp.value="";inp.click()};
-      card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;photoTargetStage=activePhotoStage;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
-      card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName,activePhotoStage);
-      card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName,activePhotoStage);
+      card.querySelector(".photo-camera").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoCameraInput");inp.value="";inp.click()};
+      card.querySelector(".video-camera").onclick=()=>{photoTargetRoom=roomName;const inp=$("#videoCameraInput");inp.value="";inp.click()};
+      card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
+      card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName);
+      card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName);
 
       const roomEdit=card.querySelector(".photo-room-edit");
-      if(roomEdit)roomEdit.onclick=async()=>{
-        if(editPhotoRoomName(roomName,rooms))await renderPhotoPage();
-      };
+      if(roomEdit)roomEdit.onclick=()=>{if(editPhotoRoomName(roomName,rooms))renderPhotoPage()};
 
       const roomRemove=card.querySelector(".photo-room-remove");
       if(roomRemove)roomRemove.onclick=async()=>{
         if(allRoomPhotos.length){
-          alert("この部屋には写真・動画があります。施工前・施工中・施工後の写真・動画を先に削除してください。");
+          alert("この部屋には写真・動画があります。先に削除してください。");
           return;
         }
-        if(confirm(`「${photoRoomDisplayName(roomName,state)}」を写真・動画ページから削除しますか？\n※クロス・床・シートなど他ページの部屋は削除されません。`)){
+        if(confirm(`「${photoRoomDisplayName(roomName,state)}」を写真・動画ページから削除しますか？
+※クロス・床・シートなど他ページの部屋は削除されません。`)){
           hidePhotoRoom(roomName);
           if(photoSelectRoom===roomName)clearPhotoSelection();
           await renderPhotoPage();
@@ -4463,36 +4513,31 @@ async function renderPhotoPage(){
       const roomMove=card.querySelector(".photo-room-move");
       if(roomMove)roomMove.onpointerdown=e=>{
         e.preventDefault();e.stopPropagation();
-        roomMove.setPointerCapture?.(e.pointerId);
-        let targetName=null,targetCard=null;
+        const pointerId=e.pointerId;
+        try{roomMove.setPointerCapture?.(pointerId)}catch{}
+        let targetRoom=null,targetCard=null;
         const move=ev=>{
           wrap.querySelectorAll(".photo-room.drag-target").forEach(x=>x.classList.remove("drag-target"));
           const el=photoHitTargetAtPoint(ev.clientX,ev.clientY,card,".photo-room",wrap);
-          if(el&&el!==card){
-            const targetRoom=el.dataset.roomName;
-            if(targetRoom){targetName=targetRoom;targetCard=el;el.classList.add("drag-target")}
-          }
+          if(el&&el!==card&&el.dataset.photoRoom){targetRoom=el.dataset.photoRoom;targetCard=el;el.classList.add("drag-target");}
+          else{targetRoom=null;targetCard=null}
         };
-        const up=async()=>{
+        const finish=()=>{
           targetCard?.classList.remove("drag-target");
-          roomMove.removeEventListener("pointermove",move);
-          roomMove.removeEventListener("pointerup",up);
-          roomMove.removeEventListener("pointercancel",up);
-          if(targetName){reorderPhotoRoom(roomName,targetName,rooms);await renderPhotoPage()}
+          roomMove.removeEventListener("pointermove",move);roomMove.removeEventListener("pointerup",finish);roomMove.removeEventListener("pointercancel",finish);
+          try{roomMove.releasePointerCapture?.(pointerId)}catch{}
+          if(targetRoom){reorderPhotoRoom(roomName,targetRoom,rooms);renderPhotoPage()}
         };
-        roomMove.addEventListener("pointermove",move);
-        roomMove.addEventListener("pointerup",up);
-        roomMove.addEventListener("pointercancel",up);
+        roomMove.addEventListener("pointermove",move);roomMove.addEventListener("pointerup",finish);roomMove.addEventListener("pointercancel",finish);
       };
 
       const toggle=card.querySelector(".photo-select-toggle");
       if(toggle)toggle.onclick=()=>{photoSelectRoom=roomName;photoSelectedIds=new Set();renderPhotoPage()};
       const cancel=card.querySelector(".photo-select-cancel");
       if(cancel)cancel.onclick=()=>{clearPhotoSelection();renderPhotoPage()};
-      const delSelected=card.querySelector(".photo-select-delete");
       card.querySelectorAll(".photo-select-delete").forEach(btn=>btn.onclick=()=>deleteSelectedPhotos(roomName));
       const selectAll=card.querySelector(".photo-select-all");
-      if(selectAll)selectAll.onclick=()=>selectAllPhotosForRoom(roomName,roomPhotos.map(x=>x.id),card);
+      if(selectAll)selectAll.onclick=()=>selectAllPhotosForRoom(roomName,roomPhotos.map(r=>r.id),card);
       const clearAll=card.querySelector(".photo-select-clear");
       if(clearAll)clearAll.onclick=()=>clearAllPhotosForRoom(roomName,card);
 
@@ -4502,11 +4547,15 @@ async function renderPhotoPage(){
       roomPhotos.forEach(rec=>{
         const isVideo=mediaTypeOf(rec)==="video";
         const selected=selecting&&photoSelectedIds.has(rec.id);
+        const stageOptions=PHOTO_STAGES.map(stage=>`<option value="${stage}"${photoStageOf(rec)===stage?" selected":""}>${photoStageLabel(stage)}</option>`).join("");
+        const sizeOptions=PHOTO_SIZES.map(size=>`<option value="${size}"${photoSizeOf(rec)===size?" selected":""}>${photoSizeLabel(size)}</option>`).join("");
         const pc=document.createElement("div");
-        pc.className="photo-card"+(selecting?" select-mode":"")+(selected?" selected":"");
+        pc.className="photo-card "+photoSizeClass(photoSizeOf(rec))+(selecting?" select-mode":"")+(selected?" selected":"");
         pc.dataset.photoId=rec.id;
+        pc.dataset.size=photoSizeOf(rec);
         pc.innerHTML=`<div class="photo-thumb-wrap">${isVideo?'<span class="photo-video-badge">🎥 動画</span>':""}${selecting?`<span class="photo-select-check">${selected?"✓":""}</span>`:""}<img class="photo-thumb" alt="${esc(photoRoomDisplayName(roomName,state))}の${isVideo?"動画":"写真"}"></div>
           <div class="photo-card-tools"><button type="button" class="photo-drag">≡</button><button type="button" class="photo-delete">削除</button></div>
+          <div class="photo-meta-row"><select class="photo-stage-select">${stageOptions}</select><select class="photo-size-select">${sizeOptions}</select></div>
           <textarea class="photo-note" placeholder="${isVideo?"動画":"写真"}メモ">${esc(rec.note||"")}</textarea>`;
 
         const img=pc.querySelector(".photo-thumb");
@@ -4532,7 +4581,7 @@ async function renderPhotoPage(){
             updatePhotoSelectionUI(card,roomName);
           };
           pc.onpointerdown=e=>{
-            if(e.target.closest("textarea,button"))return;
+            if(e.target.closest("textarea,button,select"))return;
             e.preventDefault();
             selectPointerId=e.pointerId;dragSelecting=false;lastHitId=null;startX=e.clientX;startY=e.clientY;
             pc.setPointerCapture?.(e.pointerId);
@@ -4548,22 +4597,17 @@ async function renderPhotoPage(){
             if(!dragSelecting){
               togglePhotoSelection(roomName,rec.id);
               updatePhotoSelectionUI(card,roomName);
-            }else{
-              applyHit(e.clientX,e.clientY);
-            }
+            }else applyHit(e.clientX,e.clientY);
             try{pc.releasePointerCapture?.(e.pointerId)}catch{}
             selectPointerId=null;dragSelecting=false;lastHitId=null;
           };
           pc.onpointerup=finishSelect;
-          pc.onpointercancel=e=>{
-            try{pc.releasePointerCapture?.(e.pointerId)}catch{}
-            selectPointerId=null;dragSelecting=false;lastHitId=null;
-          };
-        }else{
-          img.onclick=()=>openPhotoPreview(rec);
-        }
+          pc.onpointercancel=e=>{try{pc.releasePointerCapture?.(e.pointerId)}catch{};selectPointerId=null;dragSelecting=false;lastHitId=null;};
+        }else img.onclick=()=>openPhotoPreview(rec);
 
         pc.querySelector(".photo-note").onchange=async e=>{rec.note=e.target.value;await photoDbPut(rec)};
+        pc.querySelector(".photo-stage-select").onchange=async e=>{rec.stage=e.target.value;await photoDbPut(rec)};
+        pc.querySelector(".photo-size-select").onchange=async e=>{rec.size=e.target.value;await photoDbPut(rec);await renderPhotoPage()};
         pc.querySelector(".photo-delete").onclick=async()=>{if(confirm(`この${isVideo?"動画":"写真"}を削除しますか？`)){await photoDbDelete(rec.id);await renderPhotoPage()}};
 
         const drag=pc.querySelector(".photo-drag");
@@ -4573,7 +4617,7 @@ async function renderPhotoPage(){
           const pointerId=e.pointerId;
           pc.classList.add("photo-dragging");
           try{drag.setPointerCapture?.(pointerId)}catch{}
-          let changed=false,lastTarget=null;
+          let changed=false;
           const move=ev=>{
             if(ev.pointerId!==pointerId)return;
             const cards=[...grid.querySelectorAll(".photo-card")].filter(el=>el!==pc);
@@ -4583,8 +4627,8 @@ async function renderPhotoPage(){
               if(ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom){hit=el;break}
             }
             grid.querySelectorAll(".photo-card.drag-target").forEach(x=>x.classList.remove("drag-target"));
-            if(!hit){lastTarget=null;return}
-            hit.classList.add("drag-target");lastTarget=hit;
+            if(!hit)return;
+            hit.classList.add("drag-target");
             const all=[...grid.querySelectorAll(".photo-card")];
             const from=all.indexOf(pc),to=all.indexOf(hit);
             if(from<0||to<0||from===to)return;
@@ -4598,15 +4642,16 @@ async function renderPhotoPage(){
             try{drag.releasePointerCapture?.(pointerId)}catch{}
             drag.removeEventListener("pointermove",move);drag.removeEventListener("pointerup",finish);drag.removeEventListener("pointercancel",finish);
             if(changed){
-              savePhotoMediaDomOrder(roomName,activePhotoStage,grid);
-              insertPhotoPageMarkers(grid);
+              savePhotoMediaDomOrder(roomName,grid);
+              const ordered=[...grid.querySelectorAll('.photo-card[data-photo-id]')].map(el=>roomPhotos.find(r=>r.id===el.dataset.photoId)).filter(Boolean);
+              insertPhotoPageMarkers(grid,ordered);
             }
           };
           drag.addEventListener("pointermove",move);drag.addEventListener("pointerup",finish);drag.addEventListener("pointercancel",finish);
         };
         grid.appendChild(pc);
       });
-      insertPhotoPageMarkers(grid);
+      insertPhotoPageMarkers(grid,roomPhotos);
       wrap.appendChild(card);
     });
     if(state.id!==renderSiteId)return;
@@ -4615,6 +4660,7 @@ async function renderPhotoPage(){
     console.error(e);area.innerHTML='<div class="photo-loading">写真・動画ストレージを開けませんでした</div>';
   }
 }
+
 function imageFromBlob(blob){
   return new Promise((resolve,reject)=>{
     const url=URL.createObjectURL(blob),img=new Image();
@@ -4623,79 +4669,90 @@ function imageFromBlob(blob){
 }
 async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilter=null){
   const media=await photoDbAllForSite(siteObj.id);if(!media.length)return [];
-  const stages=stageFilter?[stageFilter]:PHOTO_STAGES.filter(stage=>media.some(p=>photoStageOf(p)===stage));
+  const filtered=stageFilter?media.filter(p=>photoStageOf(p)===stageFilter):media;
+  if(!filtered.length)return [];
   const out=[];
-  const perPage=6,pageHeight=1700,rowH=430,gap=28,imgH=310;
+  const rooms=(roomFilter?[roomFilter]:photoRoomNamesFromSite(siteObj,filtered)).filter(n=>filtered.some(p=>p.roomName===n));
 
-  for(const stage of stages){
-    const stageMedia=media.filter(p=>photoStageOf(p)===stage);
-    if(!stageMedia.length)continue;
-    const rooms=(roomFilter?[roomFilter]:photoRoomNamesFromSite(siteObj,media)).filter(n=>stageMedia.some(p=>p.roomName===n));
+  for(const roomName of rooms){
+    const list=sortPhotoRecordsForView(filtered.filter(p=>p.roomName===roomName),roomName,siteObj);
+    if(!list.length)continue;
+    const displayRoom=photoRoomDisplayName(roomName,siteObj);
+    const probeBase=exportCanvasBase("写真・動画",displayRoom,1700);
+    const layout=photoCanvasLayout(probeBase);
+    const pages=createPhotoPagePlan(list,layout);
+    const pageCount=pages.length||1;
 
-    for(const roomName of rooms){
-      const list=sortPhotoRecordsForView(stageMedia.filter(p=>p.roomName===roomName),roomName,stage,siteObj);
-      const pageCount=Math.ceil(list.length/perPage);
-      for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
-        const chunk=list.slice(pageIndex*perPage,(pageIndex+1)*perPage);
-        const displayRoom=photoRoomDisplayName(roomName,siteObj);
-        const baseSub=`${photoStageLabel(stage)}　${displayRoom}`;
-        const subtitle=pageCount>1?`${baseSub}　${pageIndex+1}/${pageCount}`:baseSub;
-        const base=exportCanvasBase("写真・動画",subtitle,pageHeight),{c,ctx,pad,width}=base;
-        const y=base.y,colW=(width-pad*2-gap-50)/2;
+    for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
+      const subtitle=pageCount>1?`${displayRoom}　${pageIndex+1}/${pageCount}`:displayRoom;
+      const base=exportCanvasBase("写真・動画",subtitle,1700),{c,ctx}=base;
+      const cfg=photoCanvasLayout(base);
+      const pageItems=createPhotoPagePlan(list,cfg)[pageIndex]||[];
+      pageItems.forEach(item=>roundedRect(ctx,item.x,item.y,item.w,item.h,18,"#faf8f6"));
 
-        for(let i=0;i<chunk.length;i++){
-          const col=i%2,row=Math.floor(i/2),x=pad+25+col*(colW+gap),top=y+row*rowH,rec=chunk[i];
-          const isVideo=mediaTypeOf(rec)==="video";
-          const previewBlob=isVideo?(rec.thumbBlob||null):rec.blob;
-          ctx.fillStyle="#eeeae7";ctx.fillRect(x,top,colW,imgH);
-          if(previewBlob){
-            try{
-              const {img,url}=await imageFromBlob(previewBlob);
-              const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
-              const scale=Math.min(colW/iw,imgH/ih),dw=iw*scale,dh=ih*scale;
-              ctx.drawImage(img,x+(colW-dw)/2,top+(imgH-dh)/2,dw,dh);URL.revokeObjectURL(url);
-            }catch{}
-          }
-          if(isVideo){
-            ctx.fillStyle="rgba(0,0,0,.68)";roundedRect(ctx,x+12,top+12,105,34,17,"rgba(0,0,0,.68)");
-            ctx.fillStyle="#fff";ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-            ctx.fillText("🎥 動画",x+28,top+35);
-          }
-          if(rec.note){
-            ctx.fillStyle="#5e5751";ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-            const lines=wrapCanvasText(ctx,rec.note,colW-8).slice(0,3);
-            lines.forEach((line,li)=>ctx.fillText(line,x+4,top+imgH+27+li*23));
-          }
+      for(const item of pageItems){
+        const rec=item.rec;
+        const isVideo=mediaTypeOf(rec)==="video";
+        const previewBlob=isVideo?(rec.thumbBlob||null):rec.blob;
+        const mediaPad=14;
+        const stage=photoStageOf(rec);
+        const textH=Math.max(52,item.size==="1/2"?92:72);
+        const imgAreaH=Math.max(40,item.h-textH-18);
+        ctx.fillStyle="#eeeae7";roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,item.w-mediaPad*2,imgAreaH,12,"#eeeae7");
+        if(previewBlob){
+          try{
+            const {img,url}=await imageFromBlob(previewBlob);
+            const boxW=item.w-mediaPad*2,boxH=imgAreaH;
+            const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+            const scale=Math.min(boxW/iw,boxH/ih),dw=iw*scale,dh=ih*scale;
+            ctx.drawImage(img,item.x+mediaPad+(boxW-dw)/2,item.y+mediaPad+(boxH-dh)/2,dw,dh);URL.revokeObjectURL(url);
+          }catch{}
         }
-        out.push(c);
+        if(isVideo){
+          roundedRect(ctx,item.x+mediaPad+10,item.y+mediaPad+10,108,34,17,"rgba(0,0,0,.68)");
+          ctx.fillStyle="#fff";ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+          ctx.fillText("🎥 動画",item.x+mediaPad+27,item.y+mediaPad+33);
+        }
+        ctx.fillStyle="#5e5751";
+        ctx.font='700 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        const lines=photoTextLines(ctx,rec,item.w-mediaPad*2-6,item.size==="1/2"?4:3);
+        if(stage!=="unset"){
+          ctx.fillStyle="#6d655f";
+          ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        }
+        lines.forEach((line,li)=>{
+          ctx.fillStyle=li===0&&stage!=="unset"&&line===`[${photoStageLabel(stage)}]`?"#6d655f":"#5e5751";
+          ctx.font=(li===0&&stage!=="unset"&&line===`[${photoStageLabel(stage)}]`)?'800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif':'600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+          ctx.fillText(line,item.x+mediaPad+3,item.y+mediaPad+imgAreaH+25+li*22);
+        });
       }
+      out.push(c);
     }
   }
   return out;
 }
-async function exportPhotoRoomImage(roomName,stage=activePhotoStage){
+async function exportPhotoRoomImage(roomName){
   try{
-    const canvases=await buildPhotoExportCanvases(state,roomName,stage);
-    if(!canvases.length){alert(`この部屋の${photoStageLabel(stage)}に写真・動画がありません`);return}
+    const canvases=await buildPhotoExportCanvases(state,roomName);
+    if(!canvases.length){alert("この部屋に写真・動画がありません");return}
     const canvas=combineCanvasesVertically(canvases);
     const displayRoom=photoRoomDisplayName(roomName,state);
-    const stageLabel=photoStageLabel(stage);
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_${sanitizeFilename(stageLabel)}_写真・動画.png`;
+    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_写真・動画.png`;
     const file=await canvasToPngFile(canvas,fn);
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} ${stageLabel} 写真・動画`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} 写真・動画`);
   }catch(e){console.error(e);alert("画像作成に失敗しました")}
 }
-async function exportPhotoRoomPdf(roomName,stage=activePhotoStage){
+async function exportPhotoRoomPdf(roomName){
   try{
-    const canvases=await buildPhotoExportCanvases(state,roomName,stage);
-    if(!canvases.length){alert(`この部屋の${photoStageLabel(stage)}に写真・動画がありません`);return}
+    const canvases=await buildPhotoExportCanvases(state,roomName);
+    if(!canvases.length){alert("この部屋に写真・動画がありません");return}
     const images=[];
     for(const canvas of canvases)images.push(await canvasToJpegInfo(canvas));
     const blob=makePdfFromJpegs(images);
-    const displayRoom=photoRoomDisplayName(roomName,state),stageLabel=photoStageLabel(stage);
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_${sanitizeFilename(stageLabel)}_写真・動画.pdf`;
+    const displayRoom=photoRoomDisplayName(roomName,state);
+    const fn=`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(displayRoom)}_写真・動画.pdf`;
     const file=new File([blob],fn,{type:"application/pdf"});
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} ${stageLabel} 写真・動画 PDF`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${displayRoom} 写真・動画 PDF`);
   }catch(e){console.error(e);alert("PDF作成に失敗しました")}
 }
 
@@ -7090,9 +7147,9 @@ updateSectionSheetMode();
 $("#manageSections").onclick=()=>{manageSections=!manageSections;renderSectionChoices()};
 $("#resetSections").onclick=()=>{if(confirm("区分候補を初期状態に戻しますか？\n入力済みの現場データは消えません。")){savedSections=[];deletedSections=[];sectionOrder=[...CATS];saveList(SECTION_MASTER_KEY,savedSections);saveList(SECTION_DELETED_KEY,deletedSections);saveSectionOrder();renderSectionChoices()}};
 $("#closeSection").onclick=()=>closeSectionSheet();$("#addCustomSection").onclick=()=>{let n=$("#customSection").value.trim(),r=room();if(n&&r){addUniqueText(SECTION_MASTER_KEY,savedSections,n);if(!sectionOrder.includes(n)){sectionOrder.push(n);saveSectionOrder()}renderSectionChoices();const editing=getEditingSection();if(editing){editing.name=n}else{r.sections.push(newSec(n))}$("#customSection").value="";save();closeSectionSheet();render()}};
-$("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
-$("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
-$("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom,photoTargetStage)};
+$("#photoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom)};
+$("#videoCameraInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom)};
+$("#photoLibraryInput").onchange=e=>{const files=e.target.files;if(files?.length)addPhotoFiles(files,photoTargetRoom)};
 $("#memoDrawingInput").onchange=e=>{const files=e.target.files;if(files?.length&&memoDrawingTargetPageId)addMemoDrawingFiles(files,memoDrawingTargetPageId)};
 $("#siteName").oninput=save;$("#siteDate").onchange=save;$("#roomPrevBtn").onclick=()=>moveActiveRoom(-1);
 $("#roomNextBtn").onclick=()=>moveActiveRoom(1);
