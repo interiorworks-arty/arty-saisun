@@ -4143,7 +4143,9 @@ function createPhotoPagePlan(records,cfg={}){
 function photoCanvasLayout(base){
   const bodyTop=base.y,bodyLeft=base.pad+25,bodyRight=base.width-base.pad-25,bodyWidth=bodyRight-bodyLeft;
   const gap=26,colGap=26,bottomPad=64;
-  const bodyHeight=Math.max(1,base.c.height-bodyTop-bottomPad);
+  // Canvas は高解像度化のため2倍だが、描画座標は論理サイズ(1700px基準)で計算する。
+  const logicalHeight=base.c.height/EXPORT_RENDER_SCALE;
+  const bodyHeight=Math.max(1,logicalHeight-bodyTop-bottomPad);
   const thirdBlockH=Math.floor((bodyHeight-gap*2)/3);
   const halfBlockH=Math.floor((bodyHeight-gap)/2);
   return {bodyTop,bodyLeft,bodyWidth,bodyHeight,gap,colGap,thirdBlockH,halfBlockH};
@@ -4378,6 +4380,14 @@ function openPhotoPreview(rec){
   $("#photoLightbox").onclick=e=>{if(e.target.id==="photoLightbox")closeMediaPreview()};
 }
 
+function cleanupPhotoThumbUrls(root=document){
+  root.querySelectorAll?.('.photo-thumb[data-object-url]').forEach(img=>{
+    const u=img.dataset.objectUrl;
+    if(u){try{URL.revokeObjectURL(u)}catch{}}
+    delete img.dataset.objectUrl;
+  });
+}
+
 let photoSelectRoom=null,photoSelectedIds=new Set();
 function photoHitTargetAtPoint(clientX,clientY,draggedEl,selector,container){
   if(!draggedEl)return null;
@@ -4451,6 +4461,7 @@ function insertPhotoPageMarkers(grid,records=[]){
 
 async function renderPhotoPage(){
   const area=$("#photoPageArea");if(!area)return;
+  cleanupPhotoThumbUrls(area);
   const renderSiteId=state.id;
   area.innerHTML='<div class="photo-loading">写真・動画を読み込み中...</div>';
   try{
@@ -4562,8 +4573,15 @@ async function renderPhotoPage(){
         const sourceBlob=isVideo?(rec.thumbBlob||null):rec.blob;
         if(sourceBlob){
           const url=URL.createObjectURL(sourceBlob);
-          img.onload=()=>{try{URL.revokeObjectURL(url)}catch{}};
-          img.onerror=()=>{try{URL.revokeObjectURL(url)}catch{}};
+          // Safari/iPad でサイズ変更・再レイアウト後に画像が消えることがあるため、
+          // 表示中は Object URL を保持し、再描画時にまとめて解放する。
+          img.dataset.objectUrl=url;
+          img.onerror=()=>{
+            try{URL.revokeObjectURL(url)}catch{}
+            delete img.dataset.objectUrl;
+            img.removeAttribute("src");
+            img.alt="画像を再読み込みしてください";
+          };
           img.src=url;
         }else{
           const c=document.createElement("canvas");c.width=640;c.height=360;const x=c.getContext("2d");
