@@ -4106,6 +4106,19 @@ function photoStageLabel(stage){return PHOTO_STAGE_LABELS[stage]||PHOTO_STAGE_LA
 function photoSizeOf(rec){return PHOTO_SIZES.includes(rec?.size)?rec.size:"1/6"}
 function photoSizeLabel(size){return PHOTO_SIZE_LABELS[size]||PHOTO_SIZE_LABELS["1/6"]}
 function photoSizeClass(size){return size==="1/3"?"size-1-3":size==="1/2"?"size-1-2":"size-1-6"}
+function applyPhotoCardSizeUI(card,size){
+  if(!card)return;
+  const s=PHOTO_SIZES.includes(size)?size:"1/6";
+  card.classList.remove("size-1-6","size-1-3","size-1-2");
+  card.classList.add(photoSizeClass(s));
+  card.dataset.size=s;
+  // iPad/SafariでCSS再配置が遅れることがあるため、重要なレイアウトは直接指定する
+  card.style.gridColumn=s==="1/6"?"auto":"1 / -1";
+  const wrap=card.querySelector(".photo-thumb-wrap");
+  if(wrap){
+    wrap.style.aspectRatio=s==="1/6"?"4 / 3":(s==="1/3"?"16 / 7.6":"16 / 9.2");
+  }
+}
 function photoMediaOrderKey(roomName){return `all::${roomName}`}
 function createPhotoPagePlan(records,cfg={}){
   const bodyTop=Number(cfg.bodyTop)||0,bodyHeight=Number(cfg.bodyHeight)||3,bodyWidth=Number(cfg.bodyWidth)||2,bodyLeft=Number(cfg.bodyLeft)||0;
@@ -4560,6 +4573,7 @@ async function renderPhotoPage(){
           <div class="photo-card-tools"><button type="button" class="photo-drag">≡</button><button type="button" class="photo-delete">削除</button></div>
           <div class="photo-meta-row"><select class="photo-stage-select">${stageOptions}</select><select class="photo-size-select">${sizeOptions}</select></div>
           <textarea class="photo-note" placeholder="${isVideo?"動画":"写真"}メモ">${esc(rec.note||"")}</textarea>`;
+        applyPhotoCardSizeUI(pc,photoSizeOf(rec));
 
         const img=pc.querySelector(".photo-thumb");
         const thumbWrap=pc.querySelector(".photo-thumb-wrap");
@@ -4608,18 +4622,18 @@ async function renderPhotoPage(){
 
         pc.querySelector(".photo-note").onchange=async e=>{rec.note=e.target.value;await photoDbPut(rec)};
         pc.querySelector(".photo-stage-select").onchange=async e=>{rec.stage=e.target.value;await photoDbPut(rec)};
-        pc.querySelector(".photo-size-select").onchange=async e=>{
-          rec.size=e.target.value;
-          await photoDbPut(rec);
-          pc.classList.remove("size-1-6","size-1-3","size-1-2");
-          pc.classList.add(photoSizeClass(rec.size));
-          pc.dataset.size=rec.size;
+        pc.querySelector(".photo-size-select").onchange=e=>{
+          const newSize=PHOTO_SIZES.includes(e.target.value)?e.target.value:"1/6";
+          rec.size=newSize;
+          // 先に画面へ反映。保存待ちで見た目が変わらない状態を防ぐ
+          applyPhotoCardSizeUI(pc,newSize);
           // 全写真を再読み込みせず、その場でレイアウトとページ境界だけ更新する
           const ordered=[...grid.querySelectorAll('.photo-card[data-photo-id]')].map(el=>roomPhotos.find(r=>r.id===el.dataset.photoId)).filter(Boolean);
           insertPhotoPageMarkers(grid,ordered);
           const count=card.querySelector('.photo-room-count');
           const plan=createPhotoPagePlan(ordered,{bodyTop:0,bodyHeight:3,bodyLeft:0,bodyWidth:2,colGap:0.14,gap:0,thirdBlockH:1,halfBlockH:1.5});
           if(count)count.textContent=`${ordered.length}件 / ${plan.length||1}ページ`;
+          photoDbPut(rec).catch(err=>console.error("photo size save",err));
         };
         pc.querySelector(".photo-delete").onclick=async()=>{if(confirm(`この${isVideo?"動画":"写真"}を削除しますか？`)){await photoDbDelete(rec.id);await renderPhotoPage()}};
 
@@ -4770,7 +4784,107 @@ async function bindBlobToImageElement(imgEl,blob,wrapEl=null){
     }
   }
 }
+function collectRenderedPhotoExportRooms(siteObj=state,roomFilter=null,stageFilter=null){
+  const roomEls=[...document.querySelectorAll('.photo-room[data-photo-room]')];
+  if(!roomEls.length)return [];
+  const rooms=[];
+  roomEls.forEach(roomEl=>{
+    const roomName=roomEl.dataset.photoRoom||"";
+    if(roomFilter&&roomName!==roomFilter)return;
+    const items=[...roomEl.querySelectorAll('.photo-grid .photo-card[data-photo-id]')].map((pc,index)=>{
+      const img=pc.querySelector('.photo-thumb');
+      const stage=pc.querySelector('.photo-stage-select')?.value||pc.dataset.stage||'unset';
+      const size=pc.querySelector('.photo-size-select')?.value||pc.dataset.size||'1/6';
+      const note=pc.querySelector('.photo-note')?.value||'';
+      const isVideo=!!pc.querySelector('.photo-video-badge');
+      return {
+        id:pc.dataset.photoId||`rendered-${roomName}-${index}`,
+        roomName,
+        stage,
+        size,
+        note,
+        mediaType:isVideo?'video':'image',
+        previewSrc:img?.currentSrc||img?.src||'',
+        sortIndex:index
+      };
+    }).filter(rec=>!stageFilter||photoStageOf(rec)===stageFilter);
+    if(items.length)rooms.push({roomName,displayRoom:photoRoomDisplayName(roomName,siteObj),items});
+  });
+  return rooms;
+}
+async function drawSrcCover(ctx,src,x,y,w,h){
+  if(!src)return false;
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{try{drawImageCover(ctx,img,x,y,w,h);resolve(true)}catch(e){resolve(false)}};
+    img.onerror=()=>resolve(false);
+    img.src=src;
+  });
+}
+async function buildPhotoExportCanvasesFromRoomItems(roomEntries){
+  const out=[];
+  for(const entry of roomEntries){
+    const list=(entry.items||[]).slice();
+    if(!list.length)continue;
+    const displayRoom=entry.displayRoom||entry.roomName||'写真・動画';
+    const probeBase=exportCanvasBase('写真・動画',displayRoom,1700);
+    const layout=photoCanvasLayout(probeBase);
+    const pages=createPhotoPagePlan(list,layout);
+    const pageCount=pages.length||1;
+    for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
+      const subtitle=pageCount>1?`${displayRoom}　${pageIndex+1}/${pageCount}`:displayRoom;
+      const base=exportCanvasBase('写真・動画',subtitle,1700),{c,ctx}=base;
+      c._appA4Page=true;
+      const cfg=photoCanvasLayout(base);
+      const pageItems=createPhotoPagePlan(list,cfg)[pageIndex]||[];
+      for(const item of pageItems){
+        const rec=item.rec;
+        const previewBlob=rec.previewBlob||null;
+        const previewSrc=rec.previewSrc||'';
+        const isVideo=(rec.mediaType||mediaTypeOf(rec))==='video';
+        const mediaPad=14;
+        const stage=photoStageOf(rec);
+        const boxW=item.w-mediaPad*2;
+        const lineLimit=item.size==='1/2'?4:3;
+        ctx.font='600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        const lines=photoTextLines(ctx,rec,boxW-6,lineLimit);
+        const lineCount=Math.max(lines.length,1);
+        const textBlockH=18+lineCount*22;
+        const targetImgH=item.size==='1/2'?590:(item.size==='1/3'?360:220);
+        const imgAreaH=Math.max(120,Math.min(item.h-textBlockH-32,targetImgH));
+        const cardH=Math.min(item.h,mediaPad+imgAreaH+textBlockH+16);
+        roundedRect(ctx,item.x,item.y,item.w,cardH,18,'#faf8f6');
+        roundedRect(ctx,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH,12,'#eeeae7');
+        let drewMedia=false;
+        if(previewSrc)drewMedia=await drawSrcCover(ctx,previewSrc,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH);
+        if(!drewMedia&&previewBlob)drewMedia=await drawBlobCover(ctx,previewBlob,item.x+mediaPad,item.y+mediaPad,boxW,imgAreaH);
+        if(!drewMedia){
+          ctx.fillStyle='#6f6862';
+          ctx.font='700 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+          ctx.fillText('画像を再読み込みしてください',item.x+mediaPad+18,item.y+mediaPad+34);
+        }
+        if(isVideo){
+          roundedRect(ctx,item.x+mediaPad+10,item.y+mediaPad+10,108,34,17,'rgba(0,0,0,.68)');
+          ctx.fillStyle='#fff';ctx.font='800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+          ctx.fillText('🎥 動画',item.x+mediaPad+27,item.y+mediaPad+33);
+        }
+        lines.forEach((line,li)=>{
+          ctx.fillStyle=li===0&&stage!=='unset'&&line===`[${photoStageLabel(stage)}]`?'#6d655f':'#5e5751';
+          ctx.font=(li===0&&stage!=='unset'&&line===`[${photoStageLabel(stage)}]`)?'800 16px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif':'600 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+          ctx.fillText(line,item.x+mediaPad+3,item.y+mediaPad+imgAreaH+24+li*22);
+        });
+      }
+      out.push(c);
+    }
+  }
+  return out;
+}
+
 async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilter=null){
+  const renderedRooms=collectRenderedPhotoExportRooms(siteObj,roomFilter,stageFilter);
+  if(renderedRooms.length){
+    return await buildPhotoExportCanvasesFromRoomItems(renderedRooms);
+  }
   const media=await photoDbAllForSite(siteObj.id);if(!media.length)return [];
   const filtered=stageFilter?media.filter(p=>photoStageOf(p)===stageFilter):media;
   if(!filtered.length)return [];
