@@ -4711,20 +4711,30 @@ function drawImageCover(ctx,img,x,y,w,h){
 }
 async function drawBlobCover(ctx,blob,x,y,w,h){
   if(!blob)return false;
-  if(typeof createImageBitmap==="function"){
-    try{
-      const bmp=await createImageBitmap(blob);
-      drawImageCover(ctx,bmp,x,y,w,h);
-      try{bmp.close?.()}catch{}
-      return true;
-    }catch(e){}
-  }
+  try{
+    const dataUrl=await blobToDataUrl(blob);
+    await new Promise((resolve,reject)=>{
+      const img=new Image();
+      img.onload=()=>{try{drawImageCover(ctx,img,x,y,w,h);resolve()}catch(e){reject(e)}};
+      img.onerror=()=>reject(new Error("PHOTO_LOAD"));
+      img.src=dataUrl;
+    });
+    return true;
+  }catch(e){}
   try{
     const loaded=await imageFromBlob(blob);
     drawImageCover(ctx,loaded.img,x,y,w,h);
     try{loaded.cleanup?.()}catch{}
     return true;
   }catch(e){
+    if(typeof createImageBitmap==="function"){
+      try{
+        const bmp=await createImageBitmap(blob);
+        drawImageCover(ctx,bmp,x,y,w,h);
+        try{bmp.close?.()}catch{}
+        return true;
+      }catch(err){}
+    }
     return false;
   }
 }
