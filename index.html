@@ -539,6 +539,11 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .photo-delete{margin-left:auto;color:#9c6262}
 .photo-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
 .photo-stage-select,.photo-size-select{width:100%;border:1px solid #ddd6d1;border-radius:8px;background:#fff;padding:7px 8px;font-size:12px;color:var(--ink)}
+.photo-room-stage-bulk{display:flex;align-items:center;gap:8px;margin:8px 0 12px;padding:9px 10px;background:#f4f1ee;border-radius:10px}
+.photo-room-stage-bulk label{font-size:12px;font-weight:900;color:#5d554f;white-space:nowrap}
+.photo-room-stage-bulk select{flex:1;min-width:0;border:1px solid #d9d1cb;border-radius:8px;background:#fff;padding:8px 9px;font-size:13px;color:#4e4742;font-weight:800}
+.photo-room-stage-bulk button{border:0;border-radius:8px;background:#ded7d1;color:#4d4641;padding:8px 11px;font-size:12px;font-weight:900;white-space:nowrap}
+
 .photo-note{width:100%;box-sizing:border-box;border:1px solid #ddd6d1;border-radius:8px;background:#fff;padding:7px 8px;margin-top:6px;font-size:12px;resize:vertical;min-height:42px;font-family:inherit}
 .photo-empty{font-size:12px;color:#948c86;padding:10px 2px}
 .photo-loading{background:#fff;border-radius:16px;padding:18px;color:#827a74}
@@ -2805,13 +2810,13 @@ function createNewSite(name=""){
 function room(){return state.rooms.find(r=>r.id===activeRoom)}
 function activeRoomIndex(){return state.rooms.findIndex(r=>r.id===activeRoom)}
 let activePhotoNavRoom=null;
-let activeFinishNavRoomByPage={floor:null,sheet:null};
+let activeFinishNavRoomByPage={floor:null,sheet:null,other:null};
 let activePhotoNavTargets=[];
-let activeFinishNavTargetsByPage={floor:[],sheet:[]};
+let activeFinishNavTargetsByPage={floor:[],sheet:[],other:[]};
 function roomSideNavTargets(){
   if(activeWorkPage==="wall")return (state.rooms||[]).map(r=>({id:r.id,el:null}));
   if(activeWorkPage==="photo")return activePhotoNavTargets.map(id=>({id,el:document.querySelector(`#photoPageArea .photo-room[data-photo-room="${CSS.escape(id)}"]`)}));
-  if(activeWorkPage==="floor"||activeWorkPage==="sheet")return (activeFinishNavTargetsByPage[activeWorkPage]||[]).map(id=>({id,el:document.querySelector(`#finishPageArea .finish-page-room[data-finish-room-id="${CSS.escape(id)}"]`)}));
+  if(activeWorkPage==="floor"||activeWorkPage==="sheet"||activeWorkPage==="other")return (activeFinishNavTargetsByPage[activeWorkPage]||[]).map(id=>({id,el:document.querySelector(`#finishPageArea .finish-page-room[data-finish-room-id="${CSS.escape(id)}"]`)}));
   return [];
 }
 function roomSideNavActiveId(targets){
@@ -2820,7 +2825,7 @@ function roomSideNavActiveId(targets){
     if(!targets.some(x=>x.id===activePhotoNavRoom))activePhotoNavRoom=targets[0]?.id||null;
     return activePhotoNavRoom;
   }
-  if(activeWorkPage==="floor"||activeWorkPage==="sheet"){
+  if(activeWorkPage==="floor"||activeWorkPage==="sheet"||activeWorkPage==="other"){
     let cur=activeFinishNavRoomByPage[activeWorkPage];
     if(!targets.some(x=>x.id===cur))cur=activeFinishNavRoomByPage[activeWorkPage]=targets[0]?.id||null;
     return cur;
@@ -2832,9 +2837,9 @@ function updateRoomSideNav(){
   if(!nav||!prev||!next)return;
   const editing=!$("#editView")?.classList.contains("hidden");
   const targets=roomSideNavTargets();
-  const show=editing&&["wall","photo","floor","sheet"].includes(activeWorkPage)&&targets.length>0;
+  const show=editing&&["wall","photo","floor","sheet","other"].includes(activeWorkPage)&&targets.length>0;
   nav.classList.toggle("show",show);
-  nav.classList.toggle("secondary-room-nav",["photo","floor","sheet"].includes(activeWorkPage));
+  nav.classList.toggle("secondary-room-nav",["photo","floor","sheet","other"].includes(activeWorkPage));
   nav.setAttribute("aria-hidden",show?"false":"true");
   if(!show)return;
   const activeId=roomSideNavActiveId(targets);
@@ -2862,7 +2867,7 @@ function moveActiveRoom(step){
     activePhotoNavRoom=target.id;
     renderPhotoPage();
     return;
-  }else if(activeWorkPage==="floor"||activeWorkPage==="sheet"){
+  }else if(activeWorkPage==="floor"||activeWorkPage==="sheet"||activeWorkPage==="other"){
     activeFinishNavRoomByPage[activeWorkPage]=target.id;
     renderFinishPage();
     return;
@@ -4583,6 +4588,16 @@ async function renderPhotoPage(){
             ? `<button type="button" class="photo-select-all">すべて選択</button><button type="button" class="photo-select-clear">選択解除</button><button type="button" class="photo-select-delete">選択した${selectedCount}件を削除</button><button type="button" class="photo-select-cancel">キャンセル</button>`
             : `<button type="button" class="photo-select-toggle">□ 写真・動画を選択</button>`}
         </div></div>
+        <div class="photo-room-stage-bulk">
+          <label>部屋一括</label>
+          <select class="photo-room-stage-bulk-select">
+            <option value="unset">未設定</option>
+            <option value="before">施工前</option>
+            <option value="during">施工中</option>
+            <option value="after">施工後</option>
+          </select>
+          <button type="button" class="photo-room-stage-bulk-apply">一括反映</button>
+        </div>
         <div class="photo-add-actions"><button type="button" class="photo-camera">📷 写真撮影</button><button type="button" class="video-camera">🎥 動画撮影</button><button type="button" class="photo-library photo-media-select">＋ アルバムから選択</button></div>
         <div class="photo-grid"></div>
         ${selecting?`<div class="photo-select-bottom"><button type="button" class="photo-select-delete photo-select-delete-bottom">選択した${selectedCount}件を削除</button></div>`:""}`;
@@ -4592,6 +4607,23 @@ async function renderPhotoPage(){
       card.querySelector(".photo-library").onclick=()=>{photoTargetRoom=roomName;const inp=$("#photoLibraryInput");inp.value="";inp.click()};
       card.querySelector(".photo-room-image").onclick=()=>exportPhotoRoomImage(roomName);
       card.querySelector(".photo-room-pdf").onclick=()=>exportPhotoRoomPdf(roomName);
+      const bulkStageSelect=card.querySelector(".photo-room-stage-bulk-select");
+      const bulkStageApply=card.querySelector(".photo-room-stage-bulk-apply");
+      if(bulkStageApply)bulkStageApply.onclick=async()=>{
+        const newStage=PHOTO_STAGES.includes(bulkStageSelect?.value)?bulkStageSelect.value:"unset";
+        const targets=photos.filter(p=>p.roomName===roomName);
+        if(!targets.length){alert("この部屋には写真・動画がありません");return}
+        bulkStageApply.disabled=true;
+        try{
+          for(const rec of targets){
+            rec.stage=newStage;
+            await photoDbPut(rec);
+          }
+          card.querySelectorAll(".photo-stage-select").forEach(sel=>{sel.value=newStage});
+        }finally{
+          bulkStageApply.disabled=false;
+        }
+      };
 
       const roomEdit=card.querySelector(".photo-room-edit");
       if(roomEdit)roomEdit.onclick=()=>{if(editPhotoRoomName(roomName,rooms))renderPhotoPage()};
@@ -5123,9 +5155,9 @@ function renderFinishPage(){
     return hasPage||hasMaterial;
   });
 
-  if(page==="floor"||page==="sheet")activeFinishNavTargetsByPage[page]=shown.map(r=>r.id);
+  if(page==="floor"||page==="sheet"||page==="other")activeFinishNavTargetsByPage[page]=shown.map(r=>r.id);
   if(!shown.length){
-    if(page==="floor"||page==="sheet")activeFinishNavRoomByPage[page]=null;
+    if(page==="floor"||page==="sheet"||page==="other")activeFinishNavRoomByPage[page]=null;
     const empty=document.createElement("div");empty.className="finish-page-no-rooms";
     empty.textContent=`「＋ 部屋を追加」から${workPageLabel(page)}を施工する部屋を追加してください`;
     area.appendChild(empty);
@@ -5133,14 +5165,14 @@ function renderFinishPage(){
     return;
   }
 
-  if(page==="floor"||page==="sheet"){
+  if(page==="floor"||page==="sheet"||page==="other"){
     if(!shown.some(r=>r.id===activeFinishNavRoomByPage[page]))activeFinishNavRoomByPage[page]=shown[0].id;
     const tabs=document.createElement("div");tabs.className="sub-room-tabs";
     shown.forEach(r=>{const b=document.createElement("button");b.type="button";b.className="sub-room-tab"+(r.id===activeFinishNavRoomByPage[page]?" active":"");b.textContent=r.name;b.onclick=()=>{activeFinishNavRoomByPage[page]=r.id;renderFinishPage()};tabs.appendChild(b)});
     area.appendChild(tabs);
   }
 
-  const renderRooms=(page==="floor"||page==="sheet")?shown.filter(r=>r.id===activeFinishNavRoomByPage[page]):shown;
+  const renderRooms=(page==="floor"||page==="sheet"||page==="other")?shown.filter(r=>r.id===activeFinishNavRoomByPage[page]):shown;
   renderRooms.forEach(r=>{
     const items=(r.finishMaterials||[]).filter(x=>(x.page||finishPageFromKind(x.kind||x.type))===page);
     const card=document.createElement("div");card.className="finish-page-room";
