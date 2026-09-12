@@ -2796,25 +2796,61 @@ function createNewSite(name=""){
 
 function room(){return state.rooms.find(r=>r.id===activeRoom)}
 function activeRoomIndex(){return state.rooms.findIndex(r=>r.id===activeRoom)}
+let activePhotoNavRoom=null;
+let activeFinishNavRoomByPage={floor:null,sheet:null};
+function roomSideNavTargets(){
+  if(activeWorkPage==="wall")return (state.rooms||[]).map(r=>({id:r.id,el:null}));
+  if(activeWorkPage==="photo")return [...document.querySelectorAll('#photoPageArea .photo-room[data-photo-room]')].map(el=>({id:el.dataset.photoRoom,el}));
+  if(activeWorkPage==="floor"||activeWorkPage==="sheet")return [...document.querySelectorAll('#finishPageArea .finish-page-room[data-finish-room-id]')].map(el=>({id:el.dataset.finishRoomId,el}));
+  return [];
+}
+function roomSideNavActiveId(targets){
+  if(activeWorkPage==="wall")return activeRoom;
+  if(activeWorkPage==="photo"){
+    if(!targets.some(x=>x.id===activePhotoNavRoom))activePhotoNavRoom=targets[0]?.id||null;
+    return activePhotoNavRoom;
+  }
+  if(activeWorkPage==="floor"||activeWorkPage==="sheet"){
+    let cur=activeFinishNavRoomByPage[activeWorkPage];
+    if(!targets.some(x=>x.id===cur))cur=activeFinishNavRoomByPage[activeWorkPage]=targets[0]?.id||null;
+    return cur;
+  }
+  return null;
+}
 function updateRoomSideNav(){
   const nav=$("#roomSideNav"),prev=$("#roomPrevBtn"),next=$("#roomNextBtn");
   if(!nav||!prev||!next)return;
   const editing=!$("#editView")?.classList.contains("hidden");
-  const show=editing&&activeWorkPage==="wall"&&state.rooms.length>0;
+  const targets=roomSideNavTargets();
+  const show=editing&&["wall","photo","floor","sheet"].includes(activeWorkPage)&&targets.length>0;
   nav.classList.toggle("show",show);
   nav.setAttribute("aria-hidden",show?"false":"true");
   if(!show)return;
-  const idx=activeRoomIndex();
+  const activeId=roomSideNavActiveId(targets);
+  const idx=targets.findIndex(x=>x.id===activeId);
   prev.disabled=idx<=0;
-  next.disabled=idx<0||idx>=state.rooms.length-1;
+  next.disabled=idx<0||idx>=targets.length-1;
 }
 function moveActiveRoom(step){
-  const idx=activeRoomIndex(),nextIdx=idx+step;
-  if(idx<0||nextIdx<0||nextIdx>=state.rooms.length)return;
-  hideMeasureKeypad();hideProductKeypad();
-  activeRoom=state.rooms[nextIdx].id;
-  renderTabs();
-  renderRoom();
+  if(activeWorkPage==="wall"){
+    const idx=activeRoomIndex(),nextIdx=idx+step;
+    if(idx<0||nextIdx<0||nextIdx>=state.rooms.length)return;
+    hideMeasureKeypad();hideProductKeypad();
+    activeRoom=state.rooms[nextIdx].id;
+    renderTabs();
+    renderRoom();
+    return;
+  }
+  const targets=roomSideNavTargets();
+  if(!targets.length)return;
+  const activeId=roomSideNavActiveId(targets);
+  const idx=targets.findIndex(x=>x.id===activeId),nextIdx=idx+step;
+  if(idx<0||nextIdx<0||nextIdx>=targets.length)return;
+  const target=targets[nextIdx];
+  if(activeWorkPage==="photo")activePhotoNavRoom=target.id;
+  else if(activeWorkPage==="floor"||activeWorkPage==="sheet")activeFinishNavRoomByPage[activeWorkPage]=target.id;
+  target.el?.scrollIntoView({behavior:"smooth",block:"start"});
+  updateRoomSideNav();
 }
 function parse(v){let s=String(v||"").trim().replace(/\s/g,"").replace(/[＊※*]/g,"*").replace(/[×xX]/g,"-");const tail=s.match(/\*+$/);const starCount=tail?tail[0].length:0;if(starCount)s=s.slice(0,-starCount);let m=s.match(/^(\d+(?:\.\d+)?)-(\d+)$/);if(!m)return null;let len=+m[1],qty=+m[2];return len>0&&qty>0?{len,qty,star:starCount>0,starCount}:null}
 function calc(v,rep){let p=parse(v);if(!p)return null;let r=+rep||0,noneCm=p.len*p.qty,each=p.len;if(r>0)each=p.starCount>0?p.len+r*p.starCount:Math.ceil(p.len/r)*r;return {...p,r,each,noneM:noneCm/100,withM:each*p.qty/100}}
@@ -4973,8 +5009,8 @@ async function buildPhotoExportCanvases(siteObj=state,roomFilter=null,stageFilte
     }
   }
   return out;
-}
-async function exportPhotoRoomImage(roomName){
+  updateRoomSideNav();
+}async function exportPhotoRoomImage(roomName){
   try{
     const canvases=await buildPhotoExportCanvases(state,roomName);
     if(!canvases.length){alert("この部屋に写真・動画がありません");return}
@@ -5065,6 +5101,7 @@ function renderFinishPage(){
     const empty=document.createElement("div");empty.className="finish-page-no-rooms";
     empty.textContent=`「＋ 部屋を追加」から${workPageLabel(page)}を施工する部屋を追加してください`;
     area.appendChild(empty);
+    updateRoomSideNav();
     return;
   }
 
@@ -5092,6 +5129,7 @@ function renderFinishPage(){
   bottomToolbar.innerHTML='<button type="button">＋ 部屋を追加</button>';
   bottomToolbar.querySelector("button").onclick=()=>addFinishRoomForPage(page);
   area.appendChild(bottomToolbar);
+  updateRoomSideNav();
 }
 
 function ensureGlueChecks(siteObj=state){
