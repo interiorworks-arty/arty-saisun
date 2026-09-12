@@ -4611,17 +4611,32 @@ async function renderPhotoPage(){
       const bulkStageApply=card.querySelector(".photo-room-stage-bulk-apply");
       if(bulkStageApply)bulkStageApply.onclick=async()=>{
         const newStage=PHOTO_STAGES.includes(bulkStageSelect?.value)?bulkStageSelect.value:"unset";
-        const targets=photos.filter(p=>p.roomName===roomName);
-        if(!targets.length){alert("この部屋には写真・動画がありません");return}
         bulkStageApply.disabled=true;
+        const originalText=bulkStageApply.textContent;
+        bulkStageApply.textContent="反映中...";
         try{
+          // 毎回DBから最新の写真一覧を取り直して更新する。
+          // 一度一括変更した後でも、同じ部屋を何度でも別区分へ変更できるようにする。
+          const latest=await photoDbAllForSite(state.id);
+          const targets=latest.filter(p=>p.roomName===roomName);
+          if(!targets.length){alert("この部屋には写真・動画がありません");return}
           for(const rec of targets){
             rec.stage=newStage;
             await photoDbPut(rec);
           }
+          // 画面上の保持データも合わせて更新
+          photos.filter(p=>p.roomName===roomName).forEach(rec=>{rec.stage=newStage});
+          roomPhotos.forEach(rec=>{rec.stage=newStage});
           card.querySelectorAll(".photo-stage-select").forEach(sel=>{sel.value=newStage});
+          bulkStageSelect.value=newStage;
+          bulkStageApply.textContent="反映済み";
+          setTimeout(()=>{if(bulkStageApply)bulkStageApply.textContent=originalText},700);
+        }catch(err){
+          console.error("photo bulk stage",err);
+          alert("一括反映に失敗しました。もう一度お試しください");
         }finally{
           bulkStageApply.disabled=false;
+          if(bulkStageApply.textContent==="反映中...")bulkStageApply.textContent=originalText;
         }
       };
 
