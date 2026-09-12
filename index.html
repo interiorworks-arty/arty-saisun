@@ -5747,49 +5747,9 @@ async function buildSwitchCategoryCanvas(category,siteObj=state){
   }
   return c;
 }
-function compactSwitchExportCanvas(source){
-  // 電気ページは元画像を多数含むため、iPad共有で転送失敗しにくいA4相当サイズへ軽量化する。
-  const out=document.createElement("canvas");
-  out.width=Math.max(1,Math.round(source.width/EXPORT_RENDER_SCALE));
-  out.height=Math.max(1,Math.round(source.height/EXPORT_RENDER_SCALE));
-  const ctx=out.getContext("2d");
-  ctx.fillStyle="#fff";ctx.fillRect(0,0,out.width,out.height);
-  ctx.drawImage(source,0,0,out.width,out.height);
-  out._appA4Page=true;
-  return out;
-}
-async function switchCanvasToJpegInfo(canvas,quality=.86){
-  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("SWITCH_JPEG")),"image/jpeg",quality));
-  return {bytes:new Uint8Array(await blob.arrayBuffer()),width:canvas.width,height:canvas.height};
-}
-async function buildSwitchExportCanvases(siteObj=state){
-  const out=[];
-  for(const cat of SWITCH_CATEGORIES){
-    const c=await buildSwitchCategoryCanvas(cat,siteObj);
-    out.push(compactSwitchExportCanvas(c));
-  }
-  return out;
-}
-async function exportSwitchCurrentImage(){
-  try{
-    const raw=await buildSwitchCategoryCanvas(activeSwitchCategory,state);
-    const canvas=compactSwitchExportCanvas(raw);
-    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("SWITCH_IMAGE")),"image/jpeg",.9));
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気_${sanitizeFilename(activeSwitchCategory)}］.jpg`;
-    const file=new File([blob],fn,{type:"image/jpeg"});
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 ${activeSwitchCategory}`);
-  }catch(e){console.error(e);alert("画像保存に失敗しました")}
-}
-async function exportSwitchAllPdf(){
-  try{
-    const canvases=await buildSwitchExportCanvases(state),images=[];
-    for(const c of canvases)images.push(await switchCanvasToJpegInfo(c,.84));
-    const blob=makePdfFromJpegs(images);
-    const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気］.pdf`;
-    const file=new File([blob],fn,{type:"application/pdf"});
-    await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 PDF`);
-  }catch(e){console.error(e);alert("PDF作成に失敗しました")}
-}
+async function buildSwitchExportCanvases(siteObj=state){const out=[];for(const cat of SWITCH_CATEGORIES)out.push(await buildSwitchCategoryCanvas(cat,siteObj));return out}
+async function exportSwitchCurrentImage(){try{const canvas=await buildSwitchCategoryCanvas(activeSwitchCategory,state);const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気_${sanitizeFilename(activeSwitchCategory)}］.png`;const file=await canvasToPngFile(canvas,fn);await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 ${activeSwitchCategory}`)}catch(e){console.error(e);alert("画像保存に失敗しました")}}
+async function exportSwitchAllPdf(){try{const canvases=await buildSwitchExportCanvases(state),images=[];for(const c of canvases)images.push(await canvasToJpegInfo(c));const blob=makePdfFromJpegs(images);const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気］.pdf`;const file=new File([blob],fn,{type:"application/pdf"});await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 PDF`)}catch(e){console.error(e);alert("PDF作成に失敗しました")}}
 
 function setWorkPage(page){
   activeWorkPage=page;
