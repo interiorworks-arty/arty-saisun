@@ -500,6 +500,8 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 
 /* 写真ページ */
 .photo-page{display:flex;flex-direction:column;gap:12px}
+.photo-page-toolbar{display:flex;gap:8px;align-items:center}
+.photo-page-add-room{width:100%;border:0;border-radius:12px;padding:12px;background:#e8e2de;color:#514a45;font-weight:900}
 .photo-room{background:#fff;border-radius:16px;padding:14px}
 .photo-room-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .photo-room-head h2{margin:0;font-size:20px}
@@ -4217,12 +4219,29 @@ async function photoDbDelete(id){
 function ensurePhotoRoomPrefs(siteObj=state){
   if(!Array.isArray(siteObj.photoHiddenRooms))siteObj.photoHiddenRooms=[];
   if(!Array.isArray(siteObj.photoRoomOrder))siteObj.photoRoomOrder=[];
+  if(!Array.isArray(siteObj.photoCustomRooms))siteObj.photoCustomRooms=[];
   if(!siteObj.photoRoomAliases||typeof siteObj.photoRoomAliases!=="object"||Array.isArray(siteObj.photoRoomAliases))siteObj.photoRoomAliases={};
 }
 function photoRoomDisplayName(roomName,siteObj=state){
   ensurePhotoRoomPrefs(siteObj);
-  const fallback=roomName==="共通"?"その他":roomName;
+  const fallback=roomName==="共通"?"全室":roomName;
   return String(siteObj.photoRoomAliases?.[roomName]||fallback);
+}
+function addPhotoRoom(currentRooms=[]){
+  ensurePhotoRoomPrefs(state);
+  const value=prompt("写真・動画ページに追加する部屋名","");
+  if(value===null)return false;
+  const name=String(value).trim();
+  if(!name)return false;
+  const duplicate=(currentRooms||[]).some(n=>photoRoomDisplayName(n,state)===name);
+  if(duplicate){alert("同じ部屋名がすでにあります");return false}
+  const id=`写真部屋_${uid()}`;
+  state.photoCustomRooms.push(id);
+  state.photoRoomAliases[id]=name;
+  state.photoHiddenRooms=state.photoHiddenRooms.filter(n=>n!==id);
+  state.photoRoomOrder.push(id);
+  save();
+  return true;
 }
 function editPhotoRoomName(roomName,currentRooms=[]){
   ensurePhotoRoomPrefs(state);
@@ -4240,27 +4259,28 @@ function editPhotoRoomName(roomName,currentRooms=[]){
 function photoRoomNamesFromSite(siteObj=state,photos=[]){
   ensurePhotoRoomPrefs(siteObj);
   const raw=[],seen=new Set(),add=n=>{n=String(n||"").trim();if(!n||seen.has(n))return;seen.add(n);raw.push(n)};
-  // 初期順：他ページで使っている部屋を上から順に、その最後に「その他」
-  (siteObj.rooms||[]).forEach(r=>add(r.name));
-  (siteObj.finishRooms||[]).forEach(r=>add(r.name));
-  photos.forEach(p=>add(p.roomName));
+  // 写真ページは独立運用。初期は「全室」だけ、必要な部屋だけ自由追加する。
   add("共通");
+  (siteObj.photoCustomRooms||[]).forEach(add);
+  // 既存データ保護：過去に保存済みの写真がある部屋は引き続き表示する。
+  photos.forEach(p=>add(p.roomName));
 
   const hidden=new Set(siteObj.photoHiddenRooms||[]);
-  const visible=raw.filter(n=>!hidden.has(n));
-
-  // 保存済みの並び順があれば「その他」も含めてその順番を優先
+  const visible=raw.filter(n=>!hidden.has(n)||n==="共通");
   const saved=(siteObj.photoRoomOrder||[]).filter(n=>visible.includes(n));
   visible.forEach(n=>{if(!saved.includes(n))saved.push(n)});
-
-  // 初回のみ、raw が「各部屋 → その他」なのでその順になる
-  siteObj.photoRoomOrder=[...saved];
-  return saved;
+  // 全室は初期・基準部屋として必ず先頭に置く。
+  const withoutCommon=saved.filter(n=>n!=="共通");
+  siteObj.photoRoomOrder=["共通",...withoutCommon];
+  return siteObj.photoRoomOrder;
 }
 function hidePhotoRoom(roomName){
   ensurePhotoRoomPrefs(state);
+  if(roomName==="共通"){alert("全室は削除できません");return}
   if(!state.photoHiddenRooms.includes(roomName))state.photoHiddenRooms.push(roomName);
   state.photoRoomOrder=state.photoRoomOrder.filter(n=>n!==roomName);
+  state.photoCustomRooms=state.photoCustomRooms.filter(n=>n!==roomName);
+  delete state.photoRoomAliases[roomName];
   save();
 }
 function reorderPhotoRoom(fromName,toName,currentRooms=null){
@@ -4474,11 +4494,14 @@ async function renderPhotoPage(){
     if(state.id!==renderSiteId)return;
     const rooms=photoRoomNamesFromSite(state,photos);
     const wrap=document.createElement("div");wrap.className="photo-page";
+    const toolbar=document.createElement("div");toolbar.className="photo-page-toolbar";
+    toolbar.innerHTML='<button type="button" class="photo-page-add-room">＋ 部屋を追加</button>';
+    toolbar.querySelector(".photo-page-add-room").onclick=()=>{if(addPhotoRoom(rooms))renderPhotoPage()};
+    wrap.appendChild(toolbar);
 
     rooms.forEach(roomName=>{
       const allRoomPhotos=photos.filter(p=>p.roomName===roomName);
       const roomPhotos=sortPhotoRecordsForView(allRoomPhotos,roomName,state);
-      if(!allRoomPhotos.length&&roomName!=="共通")return;
 
       const selecting=photoSelectRoom===roomName;
       const selectedCount=selecting?photoSelectedIds.size:0;
@@ -4492,7 +4515,7 @@ async function renderPhotoPage(){
         <div class="photo-room-title-line"><button type="button" class="photo-room-move" title="部屋を移動">≡</button><h2>${esc(roomDisplayName)}</h2><div class="photo-room-count">${countText}</div></div>
         <div class="photo-room-export"><button type="button" class="photo-room-image">画像保存</button><button type="button" class="photo-room-pdf">部屋PDF</button></div>
         <div class="photo-room-manage">
-          <button type="button" class="photo-room-edit">名前編集</button><button type="button" class="photo-room-remove">部屋を削除</button>
+          <button type="button" class="photo-room-edit">名前編集</button>${roomName==="共通"?"":'<button type="button" class="photo-room-remove">部屋を削除</button>'}
         </div>
         <div class="photo-select-tools">
           ${selecting
