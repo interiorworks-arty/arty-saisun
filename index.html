@@ -1752,7 +1752,7 @@ header .room-actions .site-list-btn{
 
 </style>
 </head>
-<body data-build="v2.4.70">
+<body data-build="v2.4.71">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -5742,7 +5742,7 @@ async function buildSwitchCategoryCanvas(category,siteObj=state){
     ctx.fillStyle="#2f2b28";ctx.font='900 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(p.part,tx,y+70);
     if(p.pack){ctx.fillStyle="#8b5a45";ctx.font='800 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(p.pack,tx,y+92)}
     ctx.restore();
-    if(hasQty){ctx.save();ctx.strokeStyle="#cc4b3e";ctx.lineWidth=6;roundRectPath(ctx,x+3,y+3,colW-6,rowH-6,14);ctx.stroke();ctx.restore()}
+    if(hasQty){ctx.save();ctx.strokeStyle="#cc4b3e";ctx.lineWidth=6;ctx.strokeRect(x+4,y+4,colW-8,rowH-8);ctx.restore()}
     ctx.fillStyle=hasQty?"#2f2b28":"#d6ccc6";ctx.font='900 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.textAlign="right";ctx.fillText(`数量 ${qty}`,x+colW-12,y+rowH-16);ctx.textAlign="left";
   }
   return c;
@@ -7884,8 +7884,18 @@ document.addEventListener("click",e=>{const pk=$("#productKeypad");if(!pk||!pk.c
 const WORK_PAGE_ORDER_KEY="gencho-work-page-order-v1";
 function applyWorkPageOrder(){
  const box=document.querySelector(".work-page-tabs");if(!box)return;
- const defs=["wall","floor","sheet","other","photo","drawing","memo","area","glue","order"];let order=defs;
- try{const a=JSON.parse(localStorage.getItem(WORK_PAGE_ORDER_KEY)||"null");if(Array.isArray(a))order=[...a.filter(x=>defs.includes(x)),...defs.filter(x=>!a.includes(x))]}catch{}
+ // v2.4.71 初期並びを固定：上段6 / 下段6
+ const defs=["wall","floor","sheet","other","memo","order","glue","area","photo","drawing","switch","curtain"];
+ let order=defs;
+ try{
+   const a=JSON.parse(localStorage.getItem(WORK_PAGE_ORDER_KEY)||"null");
+   // 旧10タブ構成の保存順は、新12タブ構成では使わず希望順へリセット。
+   if(Array.isArray(a)&&a.length===defs.length&&defs.every(x=>a.includes(x))){
+     order=[...a];
+   }else{
+     localStorage.setItem(WORK_PAGE_ORDER_KEY,JSON.stringify(defs));
+   }
+ }catch{}
  order.forEach(k=>{const b=box.querySelector(`[data-work-page="${k}"]`);if(b)box.appendChild(b)});
 }
 function saveWorkPageOrder(){
