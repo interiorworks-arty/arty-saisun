@@ -4161,7 +4161,30 @@ const PHOTO_SIZES=["1/6","1/3","1/2"];
 const PHOTO_SIZE_LABELS={"1/6":"1/6表示","1/3":"1/3表示","1/2":"1/2表示"};
 let activePhotoStage="all";
 let photoTargetRoom="共通";
-function photoStageOf(rec){return PHOTO_STAGES.includes(rec?.stage)?rec.stage:"unset"}
+const PHOTO_STAGE_OVERRIDE_KEY="gencho-photo-stage-overrides-v1";
+function loadPhotoStageOverrides(){
+  try{const v=JSON.parse(localStorage.getItem(PHOTO_STAGE_OVERRIDE_KEY)||"{}");return v&&typeof v==="object"&&!Array.isArray(v)?v:{}}catch{return {}}
+}
+function savePhotoStageOverrides(map){
+  try{localStorage.setItem(PHOTO_STAGE_OVERRIDE_KEY,JSON.stringify(map||{}))}catch(e){console.error("photo stage override save",e)}
+}
+let photoStageOverrides=loadPhotoStageOverrides();
+function setPhotoStageOverride(id,stage){
+  if(!id)return;
+  const s=PHOTO_STAGES.includes(stage)?stage:"unset";
+  photoStageOverrides[id]=s;
+  savePhotoStageOverrides(photoStageOverrides);
+}
+function setPhotoStageOverrides(ids,stage){
+  const s=PHOTO_STAGES.includes(stage)?stage:"unset";
+  (ids||[]).forEach(id=>{if(id)photoStageOverrides[id]=s});
+  savePhotoStageOverrides(photoStageOverrides);
+}
+function photoStageOf(rec){
+  const override=rec?.id?photoStageOverrides[rec.id]:null;
+  if(PHOTO_STAGES.includes(override))return override;
+  return PHOTO_STAGES.includes(rec?.stage)?rec.stage:"unset";
+}
 function photoStageLabel(stage){return PHOTO_STAGE_LABELS[stage]||PHOTO_STAGE_LABELS.unset}
 function photoSizeOf(rec){return PHOTO_SIZES.includes(rec?.size)?rec.size:"1/6"}
 function photoSizeLabel(size){return PHOTO_SIZE_LABELS[size]||PHOTO_SIZE_LABELS["1/6"]}
@@ -4635,16 +4658,11 @@ async function renderPhotoPage(){
         const originalText=bulkStageApply.textContent;
         bulkStageApply.textContent="反映中...";
         try{
-          // 毎回DBから最新の写真一覧を取り直して更新する。
-          // 一度一括変更した後でも、同じ部屋を何度でも別区分へ変更できるようにする。
-          const latest=await photoDbAllForSite(state.id);
-          const targets=latest.filter(p=>p.roomName===roomName);
+          // 写真本体のBlobをIndexedDBへ再保存するとiPad/Safariで大量枚数時に失敗するため、
+          // 区分だけを軽量な別保存へ切り離す。これなら何度でも一括変更できる。
+          const targets=roomPhotos.slice();
           if(!targets.length){alert("この部屋には写真・動画がありません");return}
-          targets.forEach(rec=>{rec.stage=newStage});
-          // Safari / iPadでは大量の写真を1件ずつDB開閉すると途中で失敗しやすいので、
-          // 一括反映は1回のIndexedDBトランザクションでまとめて保存する。
-          await photoDbPutMany(targets);
-          // 画面上の保持データも合わせて更新
+          setPhotoStageOverrides(targets.map(rec=>rec.id),newStage);
           photos.filter(p=>p.roomName===roomName).forEach(rec=>{rec.stage=newStage});
           roomPhotos.forEach(rec=>{rec.stage=newStage});
           card.querySelectorAll(".photo-stage-select").forEach(sel=>{sel.value=newStage});
@@ -4772,7 +4790,11 @@ async function renderPhotoPage(){
         }else img.onclick=()=>openPhotoPreview(rec);
 
         pc.querySelector(".photo-note").onchange=async e=>{rec.note=e.target.value;await photoDbPut(rec)};
-        pc.querySelector(".photo-stage-select").onchange=async e=>{rec.stage=e.target.value;await photoDbPut(rec)};
+        pc.querySelector(".photo-stage-select").onchange=e=>{
+          const s=PHOTO_STAGES.includes(e.target.value)?e.target.value:"unset";
+          rec.stage=s;
+          setPhotoStageOverride(rec.id,s);
+        };
         pc.querySelector(".photo-size-select").onchange=e=>{
           const newSize=PHOTO_SIZES.includes(e.target.value)?e.target.value:"1/6";
           rec.size=newSize;
