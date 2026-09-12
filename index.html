@@ -4267,6 +4267,26 @@ async function photoDbPut(rec){
     tx.oncomplete=()=>{db.close();resolve(rec)};tx.onerror=()=>{db.close();reject(tx.error)};
   });
 }
+async function photoDbPutMany(records){
+  const list=(records||[]).filter(Boolean);
+  if(!list.length)return [];
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(PHOTO_STORE,"readwrite");
+    const st=tx.objectStore(PHOTO_STORE);
+    try{
+      list.forEach(rec=>st.put(rec));
+    }catch(err){
+      try{tx.abort()}catch{}
+      db.close();
+      reject(err);
+      return;
+    }
+    tx.oncomplete=()=>{db.close();resolve(list)};
+    tx.onerror=()=>{const err=tx.error||new Error("PHOTO_BATCH_SAVE");db.close();reject(err)};
+    tx.onabort=()=>{const err=tx.error||new Error("PHOTO_BATCH_ABORT");db.close();reject(err)};
+  });
+}
 async function photoDbDelete(id){
   const db=await openPhotoDB();
   return new Promise((resolve,reject)=>{
@@ -4620,10 +4640,10 @@ async function renderPhotoPage(){
           const latest=await photoDbAllForSite(state.id);
           const targets=latest.filter(p=>p.roomName===roomName);
           if(!targets.length){alert("この部屋には写真・動画がありません");return}
-          for(const rec of targets){
-            rec.stage=newStage;
-            await photoDbPut(rec);
-          }
+          targets.forEach(rec=>{rec.stage=newStage});
+          // Safari / iPadでは大量の写真を1件ずつDB開閉すると途中で失敗しやすいので、
+          // 一括反映は1回のIndexedDBトランザクションでまとめて保存する。
+          await photoDbPutMany(targets);
           // 画面上の保持データも合わせて更新
           photos.filter(p=>p.roomName===roomName).forEach(rec=>{rec.stage=newStage});
           roomPhotos.forEach(rec=>{rec.stage=newStage});
