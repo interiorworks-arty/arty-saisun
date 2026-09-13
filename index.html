@@ -7883,7 +7883,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.88",backupType:"complete",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.90",backupType:"complete",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -8041,6 +8041,11 @@ function mimeFromBackupMeta(meta,path){
   if(meta?.mimeType)return meta.mimeType;const p=String(path||"").toLowerCase();
   if(p.endsWith('.pdf'))return 'application/pdf';if(p.endsWith('.png'))return 'image/png';if(p.endsWith('.jpg')||p.endsWith('.jpeg'))return 'image/jpeg';if(p.endsWith('.mov'))return 'video/quicktime';if(p.endsWith('.mp4'))return 'video/mp4';return 'application/octet-stream';
 }
+async function rebuildBackupBlob(sourceBlob,mimeType){
+  if(!(sourceBlob instanceof Blob))return null;
+  const bytes=await sourceBlob.arrayBuffer();
+  return new Blob([bytes],{type:mimeType||sourceBlob.type||'application/octet-stream'});
+}
 async function replaceMediaDatabase(photoRecords,memoRecords){
   const db=await openPhotoDB();
   return new Promise((resolve,reject)=>{
@@ -8059,14 +8064,25 @@ async function importCompleteBackupZip(file){
   const photos=[];
   for(const meta of manifest.indexedDB?.photos||[]){
     const rec={...meta};delete rec.blobPath;delete rec.thumbBlobPath;
-    if(meta.blobPath){const b=entries.get(meta.blobPath);if(!b)throw new Error(`missing ${meta.blobPath}`);rec.blob=b.slice(0,b.size,mimeFromBackupMeta(meta,meta.blobPath))}
-    if(meta.thumbBlobPath){const b=entries.get(meta.thumbBlobPath);if(!b)throw new Error(`missing ${meta.thumbBlobPath}`);rec.thumbBlob=b.slice(0,b.size,"image/jpeg")}
+    if(meta.blobPath){
+      const b=entries.get(meta.blobPath);if(!b)throw new Error(`missing ${meta.blobPath}`);
+      rec.blob=await rebuildBackupBlob(b,mimeFromBackupMeta(meta,meta.blobPath));
+    }
+    if(meta.thumbBlobPath){
+      const b=entries.get(meta.thumbBlobPath);if(!b)throw new Error(`missing ${meta.thumbBlobPath}`);
+      rec.thumbBlob=await rebuildBackupBlob(b,"image/jpeg");
+    }
+    // iPhone/iPad SafariではZIP内のFile.slice由来BlobをIndexedDBへ保存すると、
+    // 復元後に画像デコーダが読めない場合があるため、必ず独立したBlobへ再生成する。
     photos.push(rec);
   }
   const memoFiles=[];
   for(const meta of manifest.indexedDB?.memoFiles||[]){
     const rec={...meta};delete rec.blobPath;
-    if(meta.blobPath){const b=entries.get(meta.blobPath);if(!b)throw new Error(`missing ${meta.blobPath}`);rec.blob=b.slice(0,b.size,mimeFromBackupMeta(meta,meta.blobPath))}
+    if(meta.blobPath){
+      const b=entries.get(meta.blobPath);if(!b)throw new Error(`missing ${meta.blobPath}`);
+      rec.blob=await rebuildBackupBlob(b,mimeFromBackupMeta(meta,meta.blobPath));
+    }
     memoFiles.push(rec);
   }
   if(!Array.isArray(manifest.appData.sites)||!manifest.appData.sites.length)throw new Error("invalid sites");
