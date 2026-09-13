@@ -2019,9 +2019,9 @@ header .room-actions .site-list-btn{
     </div>
     <div id="siteList" class="site-list"></div>
     <div class="site-backup-actions">
-      <button id="exportBackup">バックアップ書き出し</button>
-      <button id="importBackup">バックアップ読込</button>
-      <input id="backupFileInput" type="file" accept="application/json,.json" style="display:none">
+      <button id="exportBackup">完全バックアップ書き出し</button>
+      <button id="importBackup">完全バックアップ読込</button>
+      <input id="backupFileInput" type="file" accept="application/zip,.zip,application/json,.json" style="display:none">
     </div>
   </div>
 </div>
@@ -7883,7 +7883,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.29",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.88",backupType:"complete",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
@@ -7891,17 +7891,101 @@ function buildBackupObject(){
       savedSections,deletedSections,sectionOrder,
       savedProducts,recentProducts,
       finishSavedProducts,finishFullProducts,finishRecentProducts,finishSavedItems,finishRecentItems,finishChoices,unitChoices
-    }
+    },
+    extras:{photoStageOverrides:photoStageOverrides||{}}
   };
 }
+function zipU16(n){const b=new Uint8Array(2),v=new DataView(b.buffer);v.setUint16(0,n,true);return b}
+function zipU32(n){const b=new Uint8Array(4),v=new DataView(b.buffer);v.setUint32(0,n>>>0,true);return b}
+function zipConcatBytes(parts){
+  const len=parts.reduce((n,p)=>n+p.byteLength,0),out=new Uint8Array(len);let o=0;
+  parts.forEach(p=>{out.set(p,o);o+=p.byteLength});return out;
+}
+const ZIP_CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);t[n]=c>>>0}return t})();
+async function crc32Blob(blob){
+  let crc=0xffffffff;const chunk=4*1024*1024;
+  for(let off=0;off<blob.size;off+=chunk){
+    const a=new Uint8Array(await blob.slice(off,Math.min(blob.size,off+chunk)).arrayBuffer());
+    for(let i=0;i<a.length;i++)crc=ZIP_CRC_TABLE[(crc^a[i])&255]^(crc>>>8);
+  }
+  return (crc^0xffffffff)>>>0;
+}
+function zipDosDateTime(date=new Date()){
+  const y=Math.max(1980,date.getFullYear()),d=((y-1980)<<9)|((date.getMonth()+1)<<5)|date.getDate();
+  const t=(date.getHours()<<11)|(date.getMinutes()<<5)|(date.getSeconds()>>1);
+  return {date:d&0xffff,time:t&0xffff};
+}
+async function buildStoreZip(entries){
+  const enc=new TextEncoder(),parts=[],central=[];let offset=0;const dt=zipDosDateTime(new Date());
+  for(const ent of entries){
+    const nameBytes=enc.encode(ent.name),blob=ent.blob instanceof Blob?ent.blob:new Blob([ent.blob]);
+    if(blob.size>=0xffffffff||offset>=0xffffffff)throw new Error("BACKUP_TOO_LARGE");
+    const crc=await crc32Blob(blob),size=blob.size;
+    const local=zipConcatBytes([
+      zipU32(0x04034b50),zipU16(20),zipU16(0x0800),zipU16(0),zipU16(dt.time),zipU16(dt.date),
+      zipU32(crc),zipU32(size),zipU32(size),zipU16(nameBytes.length),zipU16(0),nameBytes
+    ]);
+    parts.push(local,blob);
+    const cent=zipConcatBytes([
+      zipU32(0x02014b50),zipU16(20),zipU16(20),zipU16(0x0800),zipU16(0),zipU16(dt.time),zipU16(dt.date),
+      zipU32(crc),zipU32(size),zipU32(size),zipU16(nameBytes.length),zipU16(0),zipU16(0),zipU16(0),zipU16(0),zipU32(0),zipU32(offset),nameBytes
+    ]);
+    central.push(cent);offset+=local.byteLength+size;
+  }
+  const centralSize=central.reduce((n,b)=>n+b.byteLength,0),centralOffset=offset;
+  if(centralOffset>=0xffffffff||centralSize>=0xffffffff||entries.length>=65535)throw new Error("BACKUP_TOO_LARGE");
+  parts.push(...central,zipConcatBytes([zipU32(0x06054b50),zipU16(0),zipU16(0),zipU16(entries.length),zipU16(entries.length),zipU32(centralSize),zipU32(centralOffset),zipU16(0)]));
+  return new Blob(parts,{type:"application/zip"});
+}
+function safeBackupExt(mime,name,fallback="bin"){
+  const n=String(name||"").toLowerCase(),m=String(mime||"").toLowerCase();
+  const hit=n.match(/\.([a-z0-9]{1,8})$/);if(hit)return hit[1];
+  if(m.includes("pdf"))return "pdf";if(m.includes("png"))return "png";if(m.includes("jpeg")||m.includes("jpg"))return "jpg";
+  if(m.includes("heic"))return "heic";if(m.includes("webp"))return "webp";if(m.includes("quicktime"))return "mov";
+  if(m.startsWith("video/"))return (m.split('/')[1]||"mp4").replace(/[^a-z0-9]/g,"")||"mp4";
+  return fallback;
+}
+async function dbAllRecords(storeName){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(storeName,"readonly"),req=tx.objectStore(storeName).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);
+    tx.oncomplete=()=>db.close();tx.onerror=()=>{try{db.close()}catch{}};
+  });
+}
+async function buildCompleteBackupEntries(){
+  const base=buildBackupObject(),photos=await dbAllRecords(PHOTO_STORE),memoFiles=await dbAllRecords(MEMO_FILE_STORE),entries=[];
+  const photoMeta=[];
+  for(const rec of photos){
+    const meta={...rec};delete meta.blob;delete meta.thumbBlob;
+    if(rec.blob instanceof Blob){const ext=safeBackupExt(rec.mimeType||rec.blob.type,rec.fileName,rec.mediaType==="video"?"mp4":"jpg");meta.blobPath=`media/photos/${rec.id}.${ext}`;entries.push({name:meta.blobPath,blob:rec.blob})}
+    if(rec.thumbBlob instanceof Blob){meta.thumbBlobPath=`media/photo-thumbs/${rec.id}.jpg`;entries.push({name:meta.thumbBlobPath,blob:rec.thumbBlob})}
+    photoMeta.push(meta);
+  }
+  const memoMeta=[];
+  for(const rec of memoFiles){
+    const meta={...rec};delete meta.blob;
+    if(rec.blob instanceof Blob){const ext=safeBackupExt(rec.mimeType||rec.blob.type,rec.fileName,rec.isPdf?"pdf":"jpg");meta.blobPath=`media/drawings/${rec.id}.${ext}`;entries.push({name:meta.blobPath,blob:rec.blob})}
+    memoMeta.push(meta);
+  }
+  const manifest={format:"gencho-complete-backup",formatVersion:1,appData:base,indexedDB:{photos:photoMeta,memoFiles:memoMeta}};
+  entries.unshift({name:"backup.json",blob:new Blob([JSON.stringify(manifest,null,2)],{type:"application/json"})});
+  return entries;
+}
 async function exportBackup(){
-  const data=JSON.stringify(buildBackupObject(),null,2);
-  const name=`現調バックアップ_${new Date().toISOString().slice(0,10)}.json`;
-  const file=new File([data],name,{type:"application/json"});
+  const btn=$("#exportBackup"),old=btn?.textContent;
+  if(btn){btn.disabled=true;btn.textContent="完全バックアップ作成中…"}
   try{
-    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"現調バックアップ"});return}
-  }catch(e){if(e?.name==="AbortError")return}
-  const url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const entries=await buildCompleteBackupEntries(),zipBlob=await buildStoreZip(entries);
+    const now=new Date(),yyyy=now.getFullYear(),mm=String(now.getMonth()+1).padStart(2,"0"),dd=String(now.getDate()).padStart(2,"0");
+    const name=`${yyyy}-${mm}-${dd}_現調_完全バックアップ.zip`,file=new File([zipBlob],name,{type:"application/zip"});
+    try{
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"現調 完全バックアップ"});return}
+    }catch(e){if(e?.name==="AbortError")return;console.warn(e)}
+    const url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  }catch(e){
+    console.error(e);alert(e?.message==="BACKUP_TOO_LARGE"?"バックアップ容量が大きすぎます。動画を分けて保存してください。":"完全バックアップの作成に失敗しました");
+  }finally{if(btn){btn.disabled=false;btn.textContent=old||"完全バックアップ書き出し"}}
 }
 function importBackupData(obj){
   if(!obj||!Array.isArray(obj.sites)||!obj.sites.length)throw new Error("invalid backup");
@@ -7922,6 +8006,9 @@ function importBackupData(obj){
   finishRecentItems=Array.isArray(m.finishRecentItems)?m.finishRecentItems:[];
   finishChoices=(Array.isArray(m.finishChoices)&&m.finishChoices.length?m.finishChoices:DEFAULT_FINISH_CHOICES).map(x=>normalizeFinishChoice({...x}));
   unitChoices=Array.isArray(m.unitChoices)&&m.unitChoices.length?m.unitChoices:[...DEFAULT_UNITS];saveUnitChoices();
+  if(obj.extras?.photoStageOverrides&&typeof obj.extras.photoStageOverrides==="object"){
+    photoStageOverrides=obj.extras.photoStageOverrides;savePhotoStageOverrides(photoStageOverrides);
+  }
   saveFinishChoices();
   saveList(FINISH_PRODUCT_MASTER_KEY,finishSavedProducts);saveList(FINISH_FULL_PRODUCT_MASTER_KEY,finishFullProducts);saveList(FINISH_RECENT_PRODUCT_KEY,finishRecentProducts);
   saveList(FINISH_ITEM_MASTER_KEY,finishSavedItems);saveList(FINISH_RECENT_ITEM_KEY,finishRecentItems);
@@ -7931,6 +8018,61 @@ function importBackupData(obj){
   state=sites.find(s=>s.id===obj.currentSiteId)||sites[0];ensureFinishRooms(state);currentSiteId=state.id;activeRoom=state.rooms[0]?.id||null;
   localStorage.setItem(SITES_KEY,JSON.stringify(sites));localStorage.setItem(CURRENT_SITE_KEY,state.id);localStorage.setItem(KEY,JSON.stringify(state));
   renderRoomChoices();renderSectionChoices();render();renderSiteList();
+}
+async function readZipLocalEntries(file){
+  const dec=new TextDecoder(),out=new Map();let off=0;
+  while(off+4<=file.size){
+    const sigView=new DataView(await file.slice(off,Math.min(file.size,off+30)).arrayBuffer());
+    if(sigView.byteLength<4)break;
+    const sig=sigView.getUint32(0,true);
+    if(sig===0x02014b50||sig===0x06054b50)break;
+    if(sig!==0x04034b50||sigView.byteLength<30)throw new Error("invalid zip");
+    const flags=sigView.getUint16(6,true),method=sigView.getUint16(8,true),compSize=sigView.getUint32(18,true),uncompSize=sigView.getUint32(22,true),nameLen=sigView.getUint16(26,true),extraLen=sigView.getUint16(28,true);
+    if(flags&0x0008)throw new Error("unsupported zip");
+    if(method!==0)throw new Error("compressed zip unsupported");
+    const head=30+nameLen+extraLen,nameBytes=new Uint8Array(await file.slice(off+30,off+30+nameLen).arrayBuffer()),name=dec.decode(nameBytes),dataStart=off+head,dataEnd=dataStart+compSize;
+    if(dataEnd>file.size||compSize!==uncompSize)throw new Error("invalid zip data");
+    out.set(name,file.slice(dataStart,dataEnd));
+    off=dataEnd;
+  }
+  return out;
+}
+function mimeFromBackupMeta(meta,path){
+  if(meta?.mimeType)return meta.mimeType;const p=String(path||"").toLowerCase();
+  if(p.endsWith('.pdf'))return 'application/pdf';if(p.endsWith('.png'))return 'image/png';if(p.endsWith('.jpg')||p.endsWith('.jpeg'))return 'image/jpeg';if(p.endsWith('.mov'))return 'video/quicktime';if(p.endsWith('.mp4'))return 'video/mp4';return 'application/octet-stream';
+}
+async function replaceMediaDatabase(photoRecords,memoRecords){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction([PHOTO_STORE,MEMO_FILE_STORE],"readwrite"),ps=tx.objectStore(PHOTO_STORE),ms=tx.objectStore(MEMO_FILE_STORE);
+    ps.clear();ms.clear();
+    (photoRecords||[]).forEach(r=>ps.put(r));(memoRecords||[]).forEach(r=>ms.put(r));
+    tx.oncomplete=()=>{db.close();resolve(true)};
+    tx.onerror=()=>{const e=tx.error||new Error("restore media failed");db.close();reject(e)};
+    tx.onabort=()=>{const e=tx.error||new Error("restore media aborted");db.close();reject(e)};
+  });
+}
+async function importCompleteBackupZip(file){
+  const entries=await readZipLocalEntries(file),metaBlob=entries.get("backup.json");if(!metaBlob)throw new Error("backup.json missing");
+  const manifest=JSON.parse(await metaBlob.text());
+  if(manifest?.format!=="gencho-complete-backup"||!manifest.appData)throw new Error("invalid complete backup");
+  const photos=[];
+  for(const meta of manifest.indexedDB?.photos||[]){
+    const rec={...meta};delete rec.blobPath;delete rec.thumbBlobPath;
+    if(meta.blobPath){const b=entries.get(meta.blobPath);if(!b)throw new Error(`missing ${meta.blobPath}`);rec.blob=b.slice(0,b.size,mimeFromBackupMeta(meta,meta.blobPath))}
+    if(meta.thumbBlobPath){const b=entries.get(meta.thumbBlobPath);if(!b)throw new Error(`missing ${meta.thumbBlobPath}`);rec.thumbBlob=b.slice(0,b.size,"image/jpeg")}
+    photos.push(rec);
+  }
+  const memoFiles=[];
+  for(const meta of manifest.indexedDB?.memoFiles||[]){
+    const rec={...meta};delete rec.blobPath;
+    if(meta.blobPath){const b=entries.get(meta.blobPath);if(!b)throw new Error(`missing ${meta.blobPath}`);rec.blob=b.slice(0,b.size,mimeFromBackupMeta(meta,meta.blobPath))}
+    memoFiles.push(rec);
+  }
+  if(!Array.isArray(manifest.appData.sites)||!manifest.appData.sites.length)throw new Error("invalid sites");
+  await replaceMediaDatabase(photos,memoFiles);
+  importBackupData(manifest.appData);
+  return {photos:photos.length,memoFiles:memoFiles.length};
 }
 
 function render(){ensureAreaCalc(state);ensureGlueChecks(state);ensureSwitchCounts(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="switch"){renderSwitchPage()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="area"){renderAreaPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
@@ -8206,12 +8348,16 @@ $("#exportBackup").onclick=exportBackup;
 $("#importBackup").onclick=()=>$("#backupFileInput").click();
 $("#backupFileInput").onchange=async e=>{
   const file=e.target.files?.[0];if(!file)return;
+  const btn=$("#importBackup"),old=btn?.textContent;
   try{
-    const obj=JSON.parse(await file.text());
-    if(!confirm("バックアップを読み込むと、現在の現場一覧・登録候補をバックアップ内容で置き換えます。続けますか？")){e.target.value="";return}
-    importBackupData(obj);alert("バックアップを読み込みました");
+    const isZip=String(file.name||"").toLowerCase().endsWith(".zip")||file.type==="application/zip";
+    const msg=isZip?"完全バックアップを読み込むと、現在の全現場・写真・動画・図面・登録候補をバックアップ内容で置き換えます。続けますか？":"旧バックアップを読み込むと、現在の現場一覧・登録候補をバックアップ内容で置き換えます。写真・動画・図面は旧形式には含まれません。続けますか？";
+    if(!confirm(msg)){e.target.value="";return}
+    if(btn){btn.disabled=true;btn.textContent="バックアップ復元中…"}
+    if(isZip){const r=await importCompleteBackupZip(file);alert(`完全バックアップを復元しました\n写真・動画 ${r.photos}件 / 図面・添付 ${r.memoFiles}件`)}
+    else{const obj=JSON.parse(await file.text());importBackupData(obj);alert("旧バックアップを読み込みました（写真・動画・図面は含まれません）")}
   }catch(err){console.error(err);alert("このバックアップは読み込めませんでした")}
-  e.target.value="";
+  finally{if(btn){btn.disabled=false;btn.textContent=old||"完全バックアップ読込"}e.target.value=""}
 };
 
 
