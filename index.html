@@ -1808,9 +1808,26 @@ header .room-actions .site-list-btn{
 .curtain-name{min-height:34px}
 .curtain-name .title-nowrap{white-space:nowrap}
 
+
+/* v2.4.77 カーテンカード省スペース調整 */
+.curtain-card{grid-template-columns:minmax(0,1fr) 44px!important;gap:6px!important;padding:9px!important;min-height:178px!important}
+.curtain-qty{gap:4px!important}
+.curtain-qty button{flex:0 0 43px!important;min-height:43px!important;border-radius:8px!important;font-size:16px!important;padding:0!important}
+.curtain-qty-box{padding:4px 1px!important;border-radius:8px!important}
+.curtain-qty-box span{font-size:8px!important}
+.curtain-qty-box strong{font-size:17px!important}
+.curtain-card-top{gap:4px!important}
+.curtain-card-tools{gap:3px!important}
+.curtain-card-tools button{font-size:9px!important;padding:4px 5px!important}
+.curtain-card-tools .curtain-drag{font-size:13px!important;padding:2px 5px!important}
+.curtain-card-tools .curtain-delete{font-size:12px!important;padding:2px 5px!important}
+.curtain-name{font-size:12.5px!important;line-height:1.22!important;min-height:31px!important}
+.curtain-img-wrap{height:82px!important}
+.curtain-img-wrap img{max-height:78px!important}
+
 </style>
 </head>
-<body data-build="v2.4.76">
+<body data-build="v2.4.77">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
