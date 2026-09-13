@@ -2021,7 +2021,7 @@ header .room-actions .site-list-btn{
     <div class="site-backup-actions">
       <button id="exportBackup">完全バックアップ書き出し</button>
       <button id="importBackup">完全バックアップ読込</button>
-      <input id="backupFileInput" type="file" accept="application/zip,.zip,application/json,.json" style="display:none">
+      <input id="backupFileInput" type="file" style="display:none">
     </div>
   </div>
 </div>
@@ -8348,6 +8348,8 @@ $("#exportBackup").onclick=exportBackup;
 $("#importBackup").onclick=()=>$("#backupFileInput").click();
 $("#backupFileInput").onchange=async e=>{
   const file=e.target.files?.[0];if(!file)return;
+  const lowerName=String(file.name||"").toLowerCase();
+  if(!(lowerName.endsWith(".zip")||lowerName.endsWith(".json"))){alert("完全バックアップはZIPまたはJSONファイルを選んでください");e.target.value="";return;}
   const btn=$("#importBackup"),old=btn?.textContent;
   try{
     const isZip=String(file.name||"").toLowerCase().endsWith(".zip")||file.type==="application/zip";
