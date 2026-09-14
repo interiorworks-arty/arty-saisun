@@ -2955,6 +2955,7 @@ function persistSites(){
   localStorage.setItem(KEY,JSON.stringify(state));
 }
 function save(){
+  saveCalcBucketsToSite();
   const inp=$("#siteName"),dateInp=$("#siteDate");
   const currentId=String(state?.id||"");
   if(inp&&String(inp.dataset.siteId||"")===currentId)state.siteName=inp.value.trim();
@@ -2965,6 +2966,7 @@ function switchSite(id){
   save();
   const next=sites.find(s=>s.id===id);if(!next)return;
   state=next;currentSiteId=next.id;activeRoom=state.rooms[0]?.id||null;
+  calcBucketLoadedSiteId=null;loadCalcBucketsForSite(state);
   clearPhotoSelection();
 
   const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");
@@ -2980,6 +2982,7 @@ function switchSite(id){
 function createNewSite(name=""){
   save();
   const s=makeSite(name);sites.push(s);state=s;currentSiteId=s.id;activeRoom=null;activeWorkPage="wall";
+  calcBucketLoadedSiteId=null;loadCalcBucketsForSite(state);
   persistSites();render();return s;
 }
 
@@ -6509,11 +6512,29 @@ const CALC_BUCKET_COLORS=[
   {bg:"#e2dddd",border:"#b9a9a9"}
 ];
 const calcRoomBuckets=Array.from({length:CALC_BUCKET_MAX},()=>({sections:new Set()}));
-let activeCalcBucket=0;
+let activeCalcBucket=0,calcBucketLoadedSiteId=null;
+function loadCalcBucketsForSite(siteObj=state){
+  const sid=String(siteObj?.id||"");
+  if(calcBucketLoadedSiteId===sid)return;
+  calcRoomBuckets.forEach(b=>b.sections.clear());
+  const saved=Array.isArray(siteObj?.calcBuckets)?siteObj.calcBuckets:[];
+  saved.slice(0,CALC_BUCKET_MAX).forEach((arr,i)=>{
+    if(Array.isArray(arr))arr.forEach(k=>calcRoomBuckets[i].sections.add(String(k)));
+  });
+  activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(siteObj?.activeCalcBucket)||0));
+  calcBucketLoadedSiteId=sid;
+}
+function saveCalcBucketsToSite(){
+  if(!state)return;
+  state.calcBuckets=calcRoomBuckets.map(b=>[...b.sections]);
+  state.activeCalcBucket=activeCalcBucket;
+}
+function persistCalcBuckets(){saveCalcBucketsToSite();persistSites()}
 function roomSectionKey(r,s){return `${r.id||r.name}|${s.id||s.name}`}
 function bucketColor(index){return CALC_BUCKET_COLORS[index%CALC_BUCKET_COLORS.length]}
 function bucketStyle(index){const c=bucketColor(index);return `--bucket-bg:${c.bg};--bucket-border:${c.border};`}
 function roomSelectionSnapshot(siteObj=state){
+  if(siteObj===state)loadCalcBucketsForSite(siteObj);
   const rooms=siteObj.rooms||[];
   const validSections=new Set();
   rooms.forEach(r=>(r.sections||[]).forEach(s=>validSections.add(roomSectionKey(r,s))));
@@ -6549,7 +6570,7 @@ function roomBucketTotals(bucketIndex,siteObj=state){
   return {none,withR,roomCount:roomIds.size,sectionCount,count:sectionCount};
 }
 function roomSelectionTotals(siteObj=state){return roomBucketTotals(activeCalcBucket,siteObj)}
-function setActiveCalcBucket(index){activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(index)||0));buildCalc()}
+function setActiveCalcBucket(index){activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(index)||0));saveCalcBucketsToSite();persistSites();buildCalc()}
 function toggleRoomSelection(roomId){
   const room=(state.rooms||[]).find(r=>String(r.id)===String(roomId));if(!room)return;
   const bucket=calcRoomBuckets[activeCalcBucket];
@@ -6558,17 +6579,17 @@ function toggleRoomSelection(roomId){
   const unassignedKeys=candidates.map(s=>roomSectionKey(room,s)).filter(k=>getSectionAssignedBucket(k)===-1);
   if(unassignedKeys.length){unassignedKeys.forEach(k=>bucket.sections.add(k));}
   else if(activeKeys.length){activeKeys.forEach(k=>bucket.sections.delete(k));}
-  buildCalc();
+  persistCalcBuckets();buildCalc();
 }
 function toggleRoomSectionSelection(key){
   const assigned=getSectionAssignedBucket(key),bucket=calcRoomBuckets[activeCalcBucket];
   if(assigned===activeCalcBucket)bucket.sections.delete(key);
   else if(assigned===-1)bucket.sections.add(key);
   // 他の計算に入っている区分は移動しない。元の計算で解除してから選ぶ。
-  buildCalc();
+  persistCalcBuckets();buildCalc();
 }
-function clearRoomSelection(){calcRoomBuckets[activeCalcBucket].sections.clear();buildCalc()}
-function clearAllRoomSelections(){calcRoomBuckets.forEach(bucket=>bucket.sections.clear());buildCalc()}
+function clearRoomSelection(){calcRoomBuckets[activeCalcBucket].sections.clear();persistCalcBuckets();buildCalc()}
+function clearAllRoomSelections(){calcRoomBuckets.forEach(bucket=>bucket.sections.clear());persistCalcBuckets();buildCalc()}
 
 const calcSectionSelection=new Set();
 
@@ -7041,6 +7062,8 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   roundedRect(ctx,56,56,width-112,height-112,28,"#fff");
 
   let y=128;
+  const pdfBreaks=[];
+  const markPdfBreak=()=>{const v=Math.round(y);if(v>120&&!pdfBreaks.includes(v))pdfBreaks.push(v)};
   ctx.fillStyle="#8f8882";
   ctx.font='600 25px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
   ctx.fillText(siteObj.siteName||"現場名未入力",pad+25,y);
@@ -7054,6 +7077,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   ctx.strokeStyle="#ddd7d2";ctx.lineWidth=2;
   ctx.beginPath();ctx.moveTo(pad+25,y);ctx.lineTo(width-pad-25,y);ctx.stroke();
   y+=45;
+  markPdfBreak();
 
   if(mode==="room"&&bucketSummaries.length){
     ctx.fillStyle="#5e5751";
@@ -7077,6 +7101,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
     y+=bucketSummaryRows*(cardH+16)+8;
     ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad+25,y);ctx.lineTo(width-pad-25,y);ctx.stroke();
     y+=34;
+    markPdfBreak();
   }
 
   rows.forEach(row=>{
@@ -7116,6 +7141,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         ctx.textAlign="right";ctx.fillText(fmt(s.withR),width-pad-45,y);ctx.textAlign="left";
       }
       y+=subH;
+      markPdfBreak();
     });
 
     ctx.fillStyle="#665f59";
@@ -7124,6 +7150,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
     y+=34;
     ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
     y+=34;
+    markPdfBreak();
   });
 
   const total=siteTotals(siteObj);
@@ -7131,14 +7158,27 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   ctx.fillStyle="#766f69";ctx.font='700 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText("現場合計",pad+50,y+34);
   ctx.fillStyle="#272522";ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
   ctx.fillStyle="#766f69";ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
+  y+=126;markPdfBreak();
+  c._pdfBreaks=pdfBreaks;
   return c;
 }
 async function canvasToPdfJpegs(canvas){
   const pageRatio=841.89/595.28;
   const sliceH=Math.max(1,Math.floor(canvas.width*pageRatio));
+  const breaks=Array.isArray(canvas._pdfBreaks)?canvas._pdfBreaks.filter(v=>Number.isFinite(v)&&v>0&&v<canvas.height).sort((a,b)=>a-b):[];
   const out=[];
-  for(let sy=0;sy<canvas.height;sy+=sliceH){
-    const h=Math.min(sliceH,canvas.height-sy),page=document.createElement("canvas");page.width=canvas.width;page.height=h;const x=page.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,page.width,page.height);x.drawImage(canvas,0,sy,canvas.width,h,0,0,canvas.width,h);out.push(await canvasToJpegInfo(page));
+  let sy=0;
+  while(sy<canvas.height){
+    const naturalEnd=Math.min(canvas.height,sy+sliceH);
+    let end=naturalEnd;
+    if(naturalEnd<canvas.height&&breaks.length){
+      const minUseful=sy+Math.floor(sliceH*0.45);
+      const candidates=breaks.filter(v=>v>minUseful&&v<=naturalEnd);
+      if(candidates.length)end=candidates[candidates.length-1];
+    }
+    if(end<=sy)end=naturalEnd;
+    const h=end-sy,page=document.createElement("canvas");page.width=canvas.width;page.height=h;const x=page.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,page.width,page.height);x.drawImage(canvas,0,sy,canvas.width,h,0,0,canvas.width,h);out.push(await canvasToJpegInfo(page));
+    sy=end;
   }
   return out;
 }
