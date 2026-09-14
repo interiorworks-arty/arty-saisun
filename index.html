@@ -6991,10 +6991,13 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         withR:t.withR,
         subs:(r.sections||[]).map(s=>{
           const x=secTotals(s,siteObj);
-          return (!x.none&&!x.withR)?null:{
+          if(!x.none&&!x.withR)return null;
+          const key=roomSectionKey(r,s),bucket=getSectionAssignedBucket(key);
+          return {
             label:`${s.name}${effectiveWallProduct(s,siteObj)?"　"+effectiveWallProduct(s,siteObj):""}${effectiveWallRepeatV(s,siteObj)?"　↕"+effectiveWallRepeatV(s,siteObj):""}${effectiveWallRepeatH(s,siteObj)?"　↔"+effectiveWallRepeatH(s,siteObj):""}`,
             none:x.none,
-            withR:x.withR
+            withR:x.withR,
+            bucket
           };
         }).filter(Boolean)
       });
@@ -7005,11 +7008,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
         title:p,
         none:x.none,
         withR:x.withR,
-        subs:x.items.map(i=>({
-          label:`${i.room}　${i.section}`,
-          none:i.none,
-          withR:i.withR
-        }))
+        subs:x.items.map(i=>({label:`${i.room}　${i.section}`,none:i.none,withR:i.withR}))
       });
     });
   }else{
@@ -7027,10 +7026,13 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
     });
   }
 
+  const bucketSummaries=mode==="room"?calcRoomBuckets.map((_,i)=>({i,...roomBucketTotals(i,siteObj)})).filter(x=>x.count):[];
+  const bucketSummaryRows=bucketSummaries.length?Math.ceil(bucketSummaries.length/5):0;
+  const bucketSummaryH=bucketSummaryRows?bucketSummaryRows*92+20:0;
   const subCount=rows.reduce((n,r)=>n+r.subs.length,0);
   const rowBase=118;
-  const subH=36;
-  const height=Math.max(900,290+rows.length*rowBase+subCount*subH+190);
+  const subH=mode==="room"?48:36;
+  const height=Math.max(900,290+bucketSummaryH+rows.length*rowBase+subCount*subH+190);
 
   const c=document.createElement("canvas");
   const ctx=c.getContext("2d");
@@ -7053,46 +7055,82 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
   ctx.beginPath();ctx.moveTo(pad+25,y);ctx.lineTo(width-pad-25,y);ctx.stroke();
   y+=45;
 
+  if(mode==="room"&&bucketSummaries.length){
+    ctx.fillStyle="#5e5751";
+    ctx.font='800 23px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.fillText("色分け計算合計",pad+35,y);
+    y+=26;
+    const gap=12,cols=5,cardW=(inner-70-gap*(cols-1))/cols,cardH=76;
+    bucketSummaries.forEach((b,idx)=>{
+      const row=Math.floor(idx/cols),col=idx%cols;
+      const x=pad+35+col*(cardW+gap),cy=y+row*(cardH+16);
+      const bc=bucketColor(b.i);
+      roundedRect(ctx,x,cy,cardW,cardH,15,bc.bg);
+      ctx.strokeStyle=bc.border;ctx.lineWidth=3;ctx.stroke();
+      ctx.fillStyle="#393532";ctx.font='800 24px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(CALC_BUCKET_LABELS[b.i],x+14,cy+27);
+      ctx.font='800 23px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(fmt(b.withR),x+48,cy+27);
+      ctx.fillStyle="#6c655f";ctx.font='600 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.fillText(`↕なし ${fmt(b.none)} / ${b.roomCount}部屋・${b.sectionCount}区分`,x+14,cy+55);
+    });
+    y+=bucketSummaryRows*(cardH+16)+8;
+    ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad+25,y);ctx.lineTo(width-pad-25,y);ctx.stroke();
+    y+=34;
+  }
+
   rows.forEach(row=>{
     ctx.fillStyle="#272522";
     ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     ctx.fillText(row.title,pad+35,y);
-    ctx.textAlign="right";
-    ctx.fillText(fmt(row.withR),width-pad-35,y);
-    ctx.textAlign="left";
+    if(mode==="room"){
+      const used=[...new Set(row.subs.map(s=>s.bucket).filter(b=>b>=0))];
+      let bx=pad+300;
+      used.forEach(b=>{
+        const bc=bucketColor(b);
+        roundedRect(ctx,bx,y-26,38,32,10,bc.bg);
+        ctx.strokeStyle=bc.border;ctx.lineWidth=2;ctx.stroke();
+        ctx.fillStyle="#3f3a36";ctx.font='800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        ctx.fillText(CALC_BUCKET_LABELS[b],bx+8,y-4);bx+=46;
+      });
+    }
+    ctx.fillStyle="#272522";ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+    ctx.textAlign="right";ctx.fillText(fmt(row.withR),width-pad-35,y);ctx.textAlign="left";
     y+=39;
 
     row.subs.forEach(s=>{
-      ctx.fillStyle="#766f69";
-      ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-      ctx.fillText(`${s.label}：${fmt(s.withR)}`,pad+35,y);
-      y+=36;
+      const hasBucket=mode==="room"&&Number.isInteger(s.bucket)&&s.bucket>=0;
+      if(hasBucket){
+        const bc=bucketColor(s.bucket);
+        roundedRect(ctx,pad+28,y-25,inner-56,39,10,bc.bg);
+        ctx.strokeStyle=bc.border;ctx.lineWidth=2;ctx.stroke();
+        ctx.fillStyle="#3f3a36";
+        ctx.font='700 19px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        ctx.fillText(`${CALC_BUCKET_LABELS[s.bucket]}  ${s.label}`,pad+42,y);
+      }else{
+        ctx.fillStyle="#766f69";
+        ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+        ctx.fillText(`${s.label}：${fmt(s.withR)}`,pad+35,y);
+      }
+      if(hasBucket){
+        ctx.textAlign="right";ctx.fillText(fmt(s.withR),width-pad-45,y);ctx.textAlign="left";
+      }
+      y+=subH;
     });
 
     ctx.fillStyle="#665f59";
     ctx.font='700 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     ctx.fillText(`リピートなし ${fmt(row.none)} ／ リピートあり ${fmt(row.withR)}`,pad+35,y);
     y+=34;
-
-    ctx.strokeStyle="#eee6e1";
-    ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
+    ctx.strokeStyle="#eee6e1";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad+35,y);ctx.lineTo(width-pad-35,y);ctx.stroke();
     y+=34;
   });
 
   const total=siteTotals(siteObj);
   roundedRect(ctx,pad+25,y,inner-50,112,20,"#efebe8");
-  ctx.fillStyle="#766f69";
-  ctx.font='700 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText("現場合計",pad+50,y+34);
-
-  ctx.fillStyle="#272522";
-  ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
-  ctx.fillStyle="#766f69";
-  ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
-  ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
-
+  ctx.fillStyle="#766f69";ctx.font='700 21px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText("現場合計",pad+50,y+34);
+  ctx.fillStyle="#272522";ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(`リピートあり ${fmt(total.withR)}`,pad+50,y+78);
+  ctx.fillStyle="#766f69";ctx.font='600 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillText(`リピートなし ${fmt(total.none)}`,pad+50,y+104);
   return c;
 }
 async function canvasToPdfJpegs(canvas){

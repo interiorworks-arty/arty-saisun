@@ -1,4 +1,4 @@
-const CACHE="gencho-v2492-room-section-mix";
+const CACHE="gencho-v2495-calc-export-colors";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{
