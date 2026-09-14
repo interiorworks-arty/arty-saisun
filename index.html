@@ -6477,43 +6477,72 @@ function sectionGroups(siteObj=state){
   return order.filter(name=>map.has(name)).map(name=>[name,map.get(name)]);
 }
 
-const calcRoomSelection=new Set();
-const calcRoomSectionSelection=new Set();
+const CALC_BUCKET_MAX=10;
+const CALC_BUCKET_COLORS=[
+  {bg:"#ded6d0",border:"#bcaea4"},
+  {bg:"#d8e7df",border:"#9fbaa8"},
+  {bg:"#dde1f2",border:"#a9b2d5"},
+  {bg:"#f3e0cf",border:"#d0ae86"},
+  {bg:"#e6d9ef",border:"#b7a0cb"},
+  {bg:"#d9ecec",border:"#9fcbcb"},
+  {bg:"#f0d7de",border:"#c8a0ac"},
+  {bg:"#e8e4d2",border:"#c1b58b"},
+  {bg:"#d7e0ea",border:"#9db0c4"},
+  {bg:"#efe5d7",border:"#c8b095"}
+];
+const calcRoomBuckets=Array.from({length:CALC_BUCKET_MAX},()=>({rooms:new Set(),sections:new Set()}));
+let activeCalcBucket=0;
 function roomSectionKey(r,s){return `${r.id||r.name}|${s.id||s.name}`}
+function bucketColor(index){return CALC_BUCKET_COLORS[index%CALC_BUCKET_COLORS.length]}
+function bucketStyle(index){const c=bucketColor(index);return `--bucket-bg:${c.bg};--bucket-border:${c.border};background:${c.bg};border-color:${c.border};`}
 function roomSelectionSnapshot(siteObj=state){
   const rooms=siteObj.rooms||[];
-  const validRooms=new Set(rooms.map(r=>String(r.id)));
+  const validRooms=new Set(rooms.map(r=>String(r.id||r.name)));
   const validSections=new Set();
   rooms.forEach(r=>(r.sections||[]).forEach(s=>validSections.add(roomSectionKey(r,s))));
-  [...calcRoomSelection].forEach(k=>{if(!validRooms.has(String(k)))calcRoomSelection.delete(k)});
-  [...calcRoomSectionSelection].forEach(k=>{if(!validSections.has(k))calcRoomSectionSelection.delete(k)});
+  calcRoomBuckets.forEach(bucket=>{
+    [...bucket.rooms].forEach(k=>{if(!validRooms.has(String(k)))bucket.rooms.delete(k)});
+    [...bucket.sections].forEach(k=>{if(!validSections.has(k))bucket.sections.delete(k)});
+  });
   return rooms;
 }
-function roomSelectionTotals(siteObj=state){
+function roomBucketTotals(bucketIndex,siteObj=state){
+  const bucket=calcRoomBuckets[bucketIndex];
   let none=0,withR=0,roomCount=0,sectionCount=0;
   roomSelectionSnapshot(siteObj).forEach(r=>{
-    const rk=String(r.id);
-    if(calcRoomSelection.has(rk)){
+    const rk=String(r.id||r.name);
+    if(bucket.rooms.has(rk)){
       const t=roomTotals(r);none+=t.none;withR+=t.withR;roomCount++;
       return;
     }
     (r.sections||[]).forEach(s=>{
       const sk=roomSectionKey(r,s);
-      if(calcRoomSectionSelection.has(sk)){const t=secTotals(s,siteObj);none+=t.none;withR+=t.withR;sectionCount++}
+      if(bucket.sections.has(sk)){const t=secTotals(s,siteObj);none+=t.none;withR+=t.withR;sectionCount++}
     });
   });
   return {none,withR,roomCount,sectionCount,count:roomCount+sectionCount};
 }
+function roomSelectionTotals(siteObj=state){return roomBucketTotals(activeCalcBucket,siteObj)}
+function roomIdFromSectionKey(key){return String(key||"").split("|")[0]}
+function removeRoomFromAllBuckets(roomId){const rk=String(roomId);calcRoomBuckets.forEach(bucket=>bucket.rooms.delete(rk))}
+function removeSectionFromAllBuckets(key){calcRoomBuckets.forEach(bucket=>bucket.sections.delete(key))}
+function removeSectionsOfRoomFromAllBuckets(roomId){const rk=String(roomId);calcRoomBuckets.forEach(bucket=>{[...bucket.sections].forEach(k=>{if(roomIdFromSectionKey(k)===rk)bucket.sections.delete(k)})})}
+function getRoomAssignedBucket(roomId){const rk=String(roomId);for(let i=0;i<calcRoomBuckets.length;i++)if(calcRoomBuckets[i].rooms.has(rk))return i;return -1}
+function getSectionAssignedBucket(key){for(let i=0;i<calcRoomBuckets.length;i++)if(calcRoomBuckets[i].sections.has(key))return i;return -1}
+function setActiveCalcBucket(index){activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(index)||0));buildCalc()}
 function toggleRoomSelection(roomId){
-  const k=String(roomId);
-  if(calcRoomSelection.has(k))calcRoomSelection.delete(k);else calcRoomSelection.add(k);
-  buildCalc();
+  const rk=String(roomId),current=getRoomAssignedBucket(rk),bucket=calcRoomBuckets[activeCalcBucket];
+  if(current===activeCalcBucket){bucket.rooms.delete(rk);buildCalc();return}
+  removeRoomFromAllBuckets(rk);removeSectionsOfRoomFromAllBuckets(rk);bucket.rooms.add(rk);buildCalc();
 }
 function toggleRoomSectionSelection(key){
-  if(calcRoomSectionSelection.has(key))calcRoomSectionSelection.delete(key);else calcRoomSectionSelection.add(key);
-  buildCalc();
+  const bucket=calcRoomBuckets[activeCalcBucket],roomId=roomIdFromSectionKey(key),current=getSectionAssignedBucket(key);
+  removeRoomFromAllBuckets(roomId);
+  if(current===activeCalcBucket){bucket.sections.delete(key);buildCalc();return}
+  removeSectionFromAllBuckets(key);bucket.sections.add(key);buildCalc();
 }
-function clearRoomSelection(){calcRoomSelection.clear();calcRoomSectionSelection.clear();buildCalc()}
+function clearRoomSelection(){const bucket=calcRoomBuckets[activeCalcBucket];bucket.rooms.clear();bucket.sections.clear();buildCalc()}
+function clearAllRoomSelections(){calcRoomBuckets.forEach(bucket=>{bucket.rooms.clear();bucket.sections.clear()});buildCalc()}
 
 const calcSectionSelection=new Set();
 
@@ -6547,14 +6576,21 @@ function clearSectionSelection(){calcSectionSelection.clear();buildCalc()}
 function buildCalc(){
   let html="";
   if(calcMode==="room"){
+    const bucketButtons=calcRoomBuckets.map((bucket,idx)=>{
+      const t=roomBucketTotals(idx,state);
+      const info=[];if(t.roomCount)info.push(`${t.roomCount}部屋`);if(t.sectionCount)info.push(`${t.sectionCount}区分`);
+      return `<button type="button" class="calc-bucket-btn${idx===activeCalcBucket?" active":""}${t.count?" has-selection":""}" data-calc-bucket="${idx}" style="${bucketStyle(idx)}"><strong>計算${idx+1}</strong><span>${fmt(t.withR)}</span><small>${info.join("＋")||"未選択"}</small></button>`;
+    }).join("");
+    html+=`<div class="calc-bucket-panel"><div class="calc-bucket-grid">${bucketButtons}</div><div class="calc-bucket-help">上の「計算1〜10」を切り替えて、それぞれ別々に部屋・区分を選択できます。</div></div>`;
     roomSelectionSnapshot(state).forEach(r=>{
-      let rt=roomTotals(r),sel=calcRoomSelection.has(String(r.id));
-      html+=`<div class="calc-item calc-room-item-select${sel?" selected":""}"><button type="button" class="calc-title" data-calc-room-id="${esc(String(r.id))}"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></button>`;
+      let rt=roomTotals(r),roomBucket=getRoomAssignedBucket(String(r.id||r.name));
+      const roomSelected=roomBucket>-1;
+      html+=`<div class="calc-item calc-room-item-select"><button type="button" class="calc-title${roomSelected?" calc-room-chip-selected":""}" ${roomSelected?`style="${bucketStyle(roomBucket)}"`:""} data-calc-room-id="${esc(String(r.id))}"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></button>`;
       r.sections.forEach(s=>{
         let t=secTotals(s,state);if(!t.none&&!t.withR)return;
-        const sk=roomSectionKey(r,s),sectionSel=calcRoomSectionSelection.has(sk);
+        const sk=roomSectionKey(r,s),sectionBucket=getSectionAssignedBucket(sk),sectionSel=sectionBucket>-1;
         const meta=[effectiveWallProduct(s,state),effectiveWallRepeatV(s,state)?`↕︎${effectiveWallRepeatV(s,state)}`:"",effectiveWallRepeatH(s,state)?`↔︎${effectiveWallRepeatH(s,state)}`:""].filter(Boolean).join("　");
-        html+=`<div class="calc-sub"><button type="button" class="calc-room-section-select${sectionSel?" selected":""}" data-calc-room-section-key="${esc(sk)}"><div class="section-row"><b>${esc(s.name)}${meta?"　"+esc(meta):""}</b><strong>${fmt(t.withR)}</strong></div><div class="section-sub">リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}</div></button>`;
+        html+=`<div class="calc-sub"><button type="button" class="calc-room-section-select${sectionSel?" calc-room-chip-selected":""}" ${sectionSel?`style="${bucketStyle(sectionBucket)}"`:""} data-calc-room-section-key="${esc(sk)}"><div class="section-row"><b>${esc(s.name)}${meta?"　"+esc(meta):""}</b><strong>${fmt(t.withR)}</strong></div><div class="section-sub">リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}${sectionSel?`　/　計算${sectionBucket+1}`:""}</div></button>`;
         let ds=s.measures.map(m=>{
           let c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";
           let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;
@@ -6567,7 +6603,7 @@ function buildCalc(){
     });
     const rt=roomSelectionTotals(state);
     const pieces=[];if(rt.roomCount)pieces.push(`${rt.roomCount}部屋`);if(rt.sectionCount)pieces.push(`${rt.sectionCount}区分`);
-    html+=`<div class="calc-selection-bar${rt.count?" has-selection":""}"><div><span>選択合計</span><strong>${fmt(rt.withR)}</strong><small>リピートなし ${fmt(rt.none)}${pieces.length?"　/　"+pieces.join("＋"):""}</small></div><button type="button" id="clearRoomSelection" ${rt.count?"":"disabled"}>クリア</button></div>`;
+    html+=`<div class="calc-selection-bar${rt.count?" has-selection":""}" style="${bucketStyle(activeCalcBucket)}"><div><span>計算${activeCalcBucket+1} 合計</span><strong>${fmt(rt.withR)}</strong><small>リピートなし ${fmt(rt.none)}${pieces.length?"　/　"+pieces.join("＋"):""}</small></div><div style="display:flex;gap:8px;align-items:center"><button type="button" id="clearRoomSelection" ${rt.count?"":"disabled"}>この計算をクリア</button><button type="button" id="clearAllRoomSelections">全部クリア</button></div></div>`;
   }else if(calcMode==="product"){
     let g={};
     state.rooms.forEach(r=>r.sections.forEach(s=>{
@@ -6606,9 +6642,11 @@ function buildCalc(){
   calcContent.innerHTML=html;
   calcContent.classList.toggle("calc-content-section-select",calcMode==="section"||calcMode==="room");
   if(calcMode==="room"){
+    calcContent.querySelectorAll("[data-calc-bucket]").forEach(btn=>{btn.onclick=()=>setActiveCalcBucket(btn.dataset.calcBucket)});
     calcContent.querySelectorAll("[data-calc-room-id]").forEach(btn=>{btn.onclick=()=>toggleRoomSelection(btn.dataset.calcRoomId)});
     calcContent.querySelectorAll("[data-calc-room-section-key]").forEach(btn=>{btn.onclick=()=>toggleRoomSectionSelection(btn.dataset.calcRoomSectionKey)});
     const clear=calcContent.querySelector("#clearRoomSelection");if(clear)clear.onclick=clearRoomSelection;
+    const clearAll=calcContent.querySelector("#clearAllRoomSelections");if(clearAll)clearAll.onclick=clearAllRoomSelections;
   }
   if(calcMode==="section"){
     calcContent.querySelectorAll(".calc-section-select").forEach(btn=>{
