@@ -1244,19 +1244,36 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .calc-selection-bar button:disabled{opacity:.4}
 .calc-selection-bar.has-selection{border-color:#bfb4ac}
 
-/* v2.4.92 部屋別：部屋＋区分の混在選択合計 */
+/* v2.4.94 部屋別：①〜⑩の独立計算・重複防止 */
 .calc-room-item-select>.calc-title{
   width:100%;border:0;background:transparent;padding:7px 8px;color:inherit;
   text-align:left;border-radius:9px;touch-action:manipulation;font:inherit;
 }
-.calc-room-item-select.selected>.calc-title{background:#ded6d0}
-.calc-room-selection-note{font-size:10px;color:#8b837d;margin:2px 8px 4px}
-
+.calc-room-title-main{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+.calc-room-title-left{display:flex;align-items:center;gap:8px;min-width:0}
+.calc-room-badges{display:flex;gap:3px;flex-wrap:wrap}
+.calc-room-badge{display:inline-flex;align-items:center;justify-content:center;min-width:23px;height:23px;padding:0 4px;border-radius:7px;border:1px solid var(--bucket-border);background:var(--bucket-bg);font-size:12px;font-weight:900;color:#4b4540}
 .calc-room-section-select{display:block;width:100%;border:0;background:transparent;text-align:left;padding:6px 0;border-radius:8px;color:inherit;font:inherit;touch-action:manipulation}
-.calc-room-section-select.selected{background:#ded6d0;padding-left:8px;padding-right:8px}
+.calc-room-section-select.assigned{padding-left:8px;padding-right:8px;border-left:6px solid var(--bucket-border);background:var(--bucket-bg)}
 .calc-room-section-select .section-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .calc-room-section-select .section-row strong{font-size:15px}
 .calc-room-section-select .section-sub{font-size:12px;color:#756e68;margin-top:2px}
+.calc-bucket-panel{margin:0 0 10px}
+.calc-bucket-grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px}
+.calc-bucket-btn{border:1px solid #d5cdc7;border-radius:10px;background:#f4f1ee;min-height:44px;padding:4px 2px;font-size:22px;font-weight:900;color:#5c554f;touch-action:manipulation}
+.calc-bucket-btn.active{outline:3px solid #6c625a;outline-offset:1px}
+.calc-bucket-btn.has-selection{background:var(--bucket-bg);border-color:var(--bucket-border)}
+.calc-bucket-help{font-size:10px;color:#8b837d;margin:7px 2px 0}
+.calc-selection-bar.calc-bucket-total{border-color:var(--bucket-border);background:var(--bucket-bg)}
+.calc-selection-bar.calc-bucket-total .calc-bucket-total-label{display:flex;align-items:baseline;gap:10px}
+.calc-selection-bar.calc-bucket-total .calc-bucket-total-label b{font-size:24px}
+.calc-selection-bar.calc-bucket-total .calc-bucket-total-label span{font-size:13px;color:#665f59}
+.calc-selection-actions{display:flex;gap:8px;align-items:center}
+@media(max-width:700px){
+  .calc-bucket-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .calc-selection-bar.calc-bucket-total{align-items:flex-start}
+  .calc-selection-actions{flex-direction:column;align-items:stretch}
+}
 
 /* v2.4.91 床・シート：施工数量の式入力 */
 .finish-area-calc-result{
@@ -6478,71 +6495,80 @@ function sectionGroups(siteObj=state){
 }
 
 const CALC_BUCKET_MAX=10;
+const CALC_BUCKET_LABELS=["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
 const CALC_BUCKET_COLORS=[
-  {bg:"#ded6d0",border:"#bcaea4"},
-  {bg:"#d8e7df",border:"#9fbaa8"},
-  {bg:"#dde1f2",border:"#a9b2d5"},
-  {bg:"#f3e0cf",border:"#d0ae86"},
-  {bg:"#e6d9ef",border:"#b7a0cb"},
-  {bg:"#d9ecec",border:"#9fcbcb"},
-  {bg:"#f0d7de",border:"#c8a0ac"},
-  {bg:"#e8e4d2",border:"#c1b58b"},
-  {bg:"#d7e0ea",border:"#9db0c4"},
-  {bg:"#efe5d7",border:"#c8b095"}
+  {bg:"#dcebe3",border:"#9dbdac"},
+  {bg:"#dde3f2",border:"#a5b1d4"},
+  {bg:"#f3e1cf",border:"#d1ad83"},
+  {bg:"#eadcf1",border:"#baa2ca"},
+  {bg:"#d9ecec",border:"#9fc9c9"},
+  {bg:"#f1dbe1",border:"#caa5af"},
+  {bg:"#ebe6d4",border:"#c1b58b"},
+  {bg:"#d9e2eb",border:"#9fb2c4"},
+  {bg:"#efe4d7",border:"#c8b096"},
+  {bg:"#e2dddd",border:"#b9a9a9"}
 ];
-const calcRoomBuckets=Array.from({length:CALC_BUCKET_MAX},()=>({rooms:new Set(),sections:new Set()}));
+const calcRoomBuckets=Array.from({length:CALC_BUCKET_MAX},()=>({sections:new Set()}));
 let activeCalcBucket=0;
 function roomSectionKey(r,s){return `${r.id||r.name}|${s.id||s.name}`}
 function bucketColor(index){return CALC_BUCKET_COLORS[index%CALC_BUCKET_COLORS.length]}
-function bucketStyle(index){const c=bucketColor(index);return `--bucket-bg:${c.bg};--bucket-border:${c.border};background:${c.bg};border-color:${c.border};`}
+function bucketStyle(index){const c=bucketColor(index);return `--bucket-bg:${c.bg};--bucket-border:${c.border};`}
 function roomSelectionSnapshot(siteObj=state){
   const rooms=siteObj.rooms||[];
-  const validRooms=new Set(rooms.map(r=>String(r.id||r.name)));
   const validSections=new Set();
   rooms.forEach(r=>(r.sections||[]).forEach(s=>validSections.add(roomSectionKey(r,s))));
-  calcRoomBuckets.forEach(bucket=>{
-    [...bucket.rooms].forEach(k=>{if(!validRooms.has(String(k)))bucket.rooms.delete(k)});
-    [...bucket.sections].forEach(k=>{if(!validSections.has(k))bucket.sections.delete(k)});
-  });
+  calcRoomBuckets.forEach(bucket=>[...bucket.sections].forEach(k=>{if(!validSections.has(k))bucket.sections.delete(k)}));
   return rooms;
+}
+function getSectionAssignedBucket(key){
+  for(let i=0;i<calcRoomBuckets.length;i++)if(calcRoomBuckets[i].sections.has(key))return i;
+  return -1;
+}
+function selectedSectionsForRoom(r){
+  const out=[];
+  (r.sections||[]).forEach(s=>{
+    const t=secTotals(s,state);if(!t.none&&!t.withR)return;
+    const key=roomSectionKey(r,s),bucket=getSectionAssignedBucket(key);
+    if(bucket>-1)out.push({key,bucket,s});
+  });
+  return out;
 }
 function roomBucketTotals(bucketIndex,siteObj=state){
   const bucket=calcRoomBuckets[bucketIndex];
-  let none=0,withR=0,roomCount=0,sectionCount=0;
+  let none=0,withR=0,sectionCount=0;
+  const roomIds=new Set();
   roomSelectionSnapshot(siteObj).forEach(r=>{
-    const rk=String(r.id||r.name);
-    if(bucket.rooms.has(rk)){
-      const t=roomTotals(r);none+=t.none;withR+=t.withR;roomCount++;
-      return;
-    }
     (r.sections||[]).forEach(s=>{
-      const sk=roomSectionKey(r,s);
-      if(bucket.sections.has(sk)){const t=secTotals(s,siteObj);none+=t.none;withR+=t.withR;sectionCount++}
+      const t=secTotals(s,siteObj);if(!t.none&&!t.withR)return;
+      const key=roomSectionKey(r,s);
+      if(bucket.sections.has(key)){
+        none+=t.none;withR+=t.withR;sectionCount++;roomIds.add(String(r.id||r.name));
+      }
     });
   });
-  return {none,withR,roomCount,sectionCount,count:roomCount+sectionCount};
+  return {none,withR,roomCount:roomIds.size,sectionCount,count:sectionCount};
 }
 function roomSelectionTotals(siteObj=state){return roomBucketTotals(activeCalcBucket,siteObj)}
-function roomIdFromSectionKey(key){return String(key||"").split("|")[0]}
-function removeRoomFromAllBuckets(roomId){const rk=String(roomId);calcRoomBuckets.forEach(bucket=>bucket.rooms.delete(rk))}
-function removeSectionFromAllBuckets(key){calcRoomBuckets.forEach(bucket=>bucket.sections.delete(key))}
-function removeSectionsOfRoomFromAllBuckets(roomId){const rk=String(roomId);calcRoomBuckets.forEach(bucket=>{[...bucket.sections].forEach(k=>{if(roomIdFromSectionKey(k)===rk)bucket.sections.delete(k)})})}
-function getRoomAssignedBucket(roomId){const rk=String(roomId);for(let i=0;i<calcRoomBuckets.length;i++)if(calcRoomBuckets[i].rooms.has(rk))return i;return -1}
-function getSectionAssignedBucket(key){for(let i=0;i<calcRoomBuckets.length;i++)if(calcRoomBuckets[i].sections.has(key))return i;return -1}
 function setActiveCalcBucket(index){activeCalcBucket=Math.max(0,Math.min(CALC_BUCKET_MAX-1,Number(index)||0));buildCalc()}
 function toggleRoomSelection(roomId){
-  const rk=String(roomId),current=getRoomAssignedBucket(rk),bucket=calcRoomBuckets[activeCalcBucket];
-  if(current===activeCalcBucket){bucket.rooms.delete(rk);buildCalc();return}
-  removeRoomFromAllBuckets(rk);removeSectionsOfRoomFromAllBuckets(rk);bucket.rooms.add(rk);buildCalc();
+  const room=(state.rooms||[]).find(r=>String(r.id)===String(roomId));if(!room)return;
+  const bucket=calcRoomBuckets[activeCalcBucket];
+  const candidates=(room.sections||[]).filter(s=>{const t=secTotals(s,state);return !!(t.none||t.withR)});
+  const activeKeys=candidates.map(s=>roomSectionKey(room,s)).filter(k=>bucket.sections.has(k));
+  const unassignedKeys=candidates.map(s=>roomSectionKey(room,s)).filter(k=>getSectionAssignedBucket(k)===-1);
+  if(unassignedKeys.length){unassignedKeys.forEach(k=>bucket.sections.add(k));}
+  else if(activeKeys.length){activeKeys.forEach(k=>bucket.sections.delete(k));}
+  buildCalc();
 }
 function toggleRoomSectionSelection(key){
-  const bucket=calcRoomBuckets[activeCalcBucket],roomId=roomIdFromSectionKey(key),current=getSectionAssignedBucket(key);
-  removeRoomFromAllBuckets(roomId);
-  if(current===activeCalcBucket){bucket.sections.delete(key);buildCalc();return}
-  removeSectionFromAllBuckets(key);bucket.sections.add(key);buildCalc();
+  const assigned=getSectionAssignedBucket(key),bucket=calcRoomBuckets[activeCalcBucket];
+  if(assigned===activeCalcBucket)bucket.sections.delete(key);
+  else if(assigned===-1)bucket.sections.add(key);
+  // 他の計算に入っている区分は移動しない。元の計算で解除してから選ぶ。
+  buildCalc();
 }
-function clearRoomSelection(){const bucket=calcRoomBuckets[activeCalcBucket];bucket.rooms.clear();bucket.sections.clear();buildCalc()}
-function clearAllRoomSelections(){calcRoomBuckets.forEach(bucket=>{bucket.rooms.clear();bucket.sections.clear()});buildCalc()}
+function clearRoomSelection(){calcRoomBuckets[activeCalcBucket].sections.clear();buildCalc()}
+function clearAllRoomSelections(){calcRoomBuckets.forEach(bucket=>bucket.sections.clear());buildCalc()}
 
 const calcSectionSelection=new Set();
 
@@ -6578,22 +6604,22 @@ function buildCalc(){
   if(calcMode==="room"){
     const bucketButtons=calcRoomBuckets.map((bucket,idx)=>{
       const t=roomBucketTotals(idx,state);
-      const info=[];if(t.roomCount)info.push(`${t.roomCount}部屋`);if(t.sectionCount)info.push(`${t.sectionCount}区分`);
-      return `<button type="button" class="calc-bucket-btn${idx===activeCalcBucket?" active":""}${t.count?" has-selection":""}" data-calc-bucket="${idx}" style="${bucketStyle(idx)}"><strong>計算${idx+1}</strong><span>${fmt(t.withR)}</span><small>${info.join("＋")||"未選択"}</small></button>`;
+      return `<button type="button" class="calc-bucket-btn${idx===activeCalcBucket?" active":""}${t.count?" has-selection":""}" data-calc-bucket="${idx}" style="${bucketStyle(idx)}" aria-label="計算${idx+1}">${CALC_BUCKET_LABELS[idx]}</button>`;
     }).join("");
-    html+=`<div class="calc-bucket-panel"><div class="calc-bucket-grid">${bucketButtons}</div><div class="calc-bucket-help">上の「計算1〜10」を切り替えて、それぞれ別々に部屋・区分を選択できます。</div></div>`;
+    html+=`<div class="calc-bucket-panel"><div class="calc-bucket-grid">${bucketButtons}</div><div class="calc-bucket-help">色が付いている区分は選択済みです。別の計算で選択済みの区分は重複加算しません。</div></div>`;
     roomSelectionSnapshot(state).forEach(r=>{
-      let rt=roomTotals(r),roomBucket=getRoomAssignedBucket(String(r.id||r.name));
-      const roomSelected=roomBucket>-1;
-      html+=`<div class="calc-item calc-room-item-select"><button type="button" class="calc-title${roomSelected?" calc-room-chip-selected":""}" ${roomSelected?`style="${bucketStyle(roomBucket)}"`:""} data-calc-room-id="${esc(String(r.id))}"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></button>`;
+      const rt=roomTotals(r);
+      const used=[...new Set(selectedSectionsForRoom(r).map(x=>x.bucket))].sort((a,b)=>a-b);
+      const badges=used.map(i=>`<span class="calc-room-badge" style="${bucketStyle(i)}">${CALC_BUCKET_LABELS[i]}</span>`).join("");
+      html+=`<div class="calc-item calc-room-item-select"><button type="button" class="calc-title" data-calc-room-id="${esc(String(r.id))}"><span class="calc-room-title-main"><span class="calc-room-title-left"><b>${esc(r.name)}</b><span class="calc-room-badges">${badges}</span></span><strong>${fmt(rt.withR)}</strong></span></button>`;
       r.sections.forEach(s=>{
-        let t=secTotals(s,state);if(!t.none&&!t.withR)return;
-        const sk=roomSectionKey(r,s),sectionBucket=getSectionAssignedBucket(sk),sectionSel=sectionBucket>-1;
+        const t=secTotals(s,state);if(!t.none&&!t.withR)return;
+        const sk=roomSectionKey(r,s),sectionBucket=getSectionAssignedBucket(sk),assigned=sectionBucket>-1;
         const meta=[effectiveWallProduct(s,state),effectiveWallRepeatV(s,state)?`↕︎${effectiveWallRepeatV(s,state)}`:"",effectiveWallRepeatH(s,state)?`↔︎${effectiveWallRepeatH(s,state)}`:""].filter(Boolean).join("　");
-        html+=`<div class="calc-sub"><button type="button" class="calc-room-section-select${sectionSel?" calc-room-chip-selected":""}" ${sectionSel?`style="${bucketStyle(sectionBucket)}"`:""} data-calc-room-section-key="${esc(sk)}"><div class="section-row"><b>${esc(s.name)}${meta?"　"+esc(meta):""}</b><strong>${fmt(t.withR)}</strong></div><div class="section-sub">リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}${sectionSel?`　/　計算${sectionBucket+1}`:""}</div></button>`;
-        let ds=s.measures.map(m=>{
-          let c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";
-          let detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;
+        html+=`<div class="calc-sub"><button type="button" class="calc-room-section-select${assigned?" assigned":""}" ${assigned?`style="${bucketStyle(sectionBucket)}"`:""} data-calc-room-section-key="${esc(sk)}"><div class="section-row"><b>${esc(s.name)}${meta?"　"+esc(meta):""}</b><strong>${fmt(t.withR)}</strong></div><div class="section-sub">リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}${assigned?`　/　${CALC_BUCKET_LABELS[sectionBucket]}選択済み`:""}</div></button>`;
+        const ds=s.measures.map(m=>{
+          const c=calc(m.value,effectiveWallRepeatV(s,state));if(!c)return"";
+          const detail=c.r?(c.star?`${c.len}+${c.r}=${c.each}`:`${c.len}→${c.each}`):`${c.len}`;
           return`${esc(m.value)}　${detail} × ${c.qty} = ${fmt(c.withM)}`;
         }).filter(Boolean);
         if(ds.length)html+=`<details><summary>計算詳細</summary>${ds.join("<br>")}</details>`;
@@ -6602,8 +6628,7 @@ function buildCalc(){
       html+="</div>";
     });
     const rt=roomSelectionTotals(state);
-    const pieces=[];if(rt.roomCount)pieces.push(`${rt.roomCount}部屋`);if(rt.sectionCount)pieces.push(`${rt.sectionCount}区分`);
-    html+=`<div class="calc-selection-bar${rt.count?" has-selection":""}" style="${bucketStyle(activeCalcBucket)}"><div><span>計算${activeCalcBucket+1} 合計</span><strong>${fmt(rt.withR)}</strong><small>リピートなし ${fmt(rt.none)}${pieces.length?"　/　"+pieces.join("＋"):""}</small></div><div style="display:flex;gap:8px;align-items:center"><button type="button" id="clearRoomSelection" ${rt.count?"":"disabled"}>この計算をクリア</button><button type="button" id="clearAllRoomSelections">全部クリア</button></div></div>`;
+    html+=`<div class="calc-selection-bar calc-bucket-total${rt.count?" has-selection":""}" style="${bucketStyle(activeCalcBucket)}"><div><div class="calc-bucket-total-label"><b>${CALC_BUCKET_LABELS[activeCalcBucket]}</b><span>合計</span><strong>${fmt(rt.withR)}</strong></div><small>リピートなし ${fmt(rt.none)}　/　${rt.roomCount}部屋・${rt.sectionCount}区分</small></div><div class="calc-selection-actions"><button type="button" id="clearRoomSelection" ${rt.count?"":"disabled"}>この計算をクリア</button><button type="button" id="clearAllRoomSelections">全部クリア</button></div></div>`;
   }else if(calcMode==="product"){
     let g={};
     state.rooms.forEach(r=>r.sections.forEach(s=>{
