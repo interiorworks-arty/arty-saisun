@@ -1244,6 +1244,19 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .calc-selection-bar button:disabled{opacity:.4}
 .calc-selection-bar.has-selection{border-color:#bfb4ac}
 
+/* v2.4.91 部屋別：複数部屋タップ合計 */
+.calc-room-item-select>.calc-title{
+  width:100%;border:0;background:transparent;padding:7px 8px;color:inherit;
+  text-align:left;border-radius:9px;touch-action:manipulation;font:inherit;
+}
+.calc-room-item-select.selected>.calc-title{background:#ded6d0}
+.calc-room-selection-note{font-size:10px;color:#8b837d;margin:2px 8px 4px}
+
+/* v2.4.91 床・シート：施工数量の式入力 */
+.finish-area-calc-result{
+  margin-top:5px;min-height:17px;font-size:12px;font-weight:900;color:#665f59;
+}
+.finish-area-calc-result:empty{display:none}
 
 .cut-result{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:left}.cut-difference{font-size:18px;font-weight:750;color:#8b837d;white-space:nowrap;min-height:24px;font-variant-numeric:tabular-nums;text-align:center}.line-result{text-align:right}
 @media(max-width:620px){
@@ -3200,15 +3213,40 @@ function renderFinishSuggestions(box,item,kind="product"){
 function finishNumberButton(value,cls,placeholder=""){
   return `<button type="button" class="finish-num-button ${cls}">${esc(value||placeholder)}</button>`;
 }
+function finishAreaFormulaValue(item){
+  const raw=String(item.areaFormula??item.area??"").trim();
+  return raw;
+}
+function finishAreaFormulaResult(raw){
+  let exp=String(raw||"").trim();if(!exp)return NaN;
+  exp=exp.replace(/[×xX]/g,"*").replace(/[÷]/g,"/").replace(/[＋]/g,"+").replace(/[−ー]/g,"-");
+  if(!/^[0-9+\-*/().\s]+$/.test(exp))return NaN;
+  try{const val=Function('"use strict";return ('+exp+')')();return Number.isFinite(val)?val:NaN}catch{return NaN}
+}
+function finishAreaHasOperator(raw){
+  const s=String(raw||"").replace(/^\s*[+\-]?\s*/,"");
+  return /[+\-*/()]/.test(s);
+}
+function finishAreaField(item){
+  const raw=finishAreaFormulaValue(item);
+  const val=finishAreaFormulaResult(raw);
+  const result=finishAreaHasOperator(raw)&&Number.isFinite(val)?`＝ ${finishFmtNumber(val)}㎡`:"";
+  return finishField("施工数量（㎡）",finishNumberButton(raw,"area finish-area-calc","数量")+`<div class="finish-area-calc-result">${esc(result)}</div>`);
+}
+function syncFinishAreaFormula(item){
+  const raw=String(item.areaFormula||"").trim();
+  const val=finishAreaFormulaResult(raw);
+  item.area=Number.isFinite(val)?String(Math.round(val*10000)/10000):"";
+}
 function renderFinishMaterial(r,item){
   const d=document.createElement("div");d.className="finish-card";
   const kind=item.kind||item.type;
   let fields="";
 
   if(kind==="CF"){
-    fields=finishField("施工数量（㎡）",finishNumberButton(item.area,"area","数量"));
+    fields=finishAreaField(item);
   }else if(kind==="フロアタイル"){
-    fields=finishField("施工数量（㎡）",finishNumberButton(item.area,"area","数量"))
+    fields=finishAreaField(item)
       +finishField("販売単位",`<select class="finish-mode-select mode"><option value="case"${item.saleMode!=="loose"?" selected":""}>ケース</option><option value="loose"${item.saleMode==="loose"?" selected":""}>ばら売り</option></select>`);
     if(item.saleMode==="loose"){
       fields+=finishField("必要枚数",finishNumberButton(item.pieces,"pieces","枚数"))
@@ -3222,7 +3260,7 @@ function renderFinishMaterial(r,item){
       +finishField("1ケース（m）",finishNumberButton(item.caseMeters,"case-meters","m/ケース"))
       +`<div class="finish-auto">必要ケース：<span class="base-case-result">${finishBaseCases(item)||"—"}</span> ケース</div>`;
   }else if(kind==="リアテック"||kind==="ダイノック"){
-    fields=finishField("施工数量（㎡）",finishNumberButton(item.area,"area","数量"));
+    fields=finishAreaField(item);
   }else{
     fields=finishField("数量",finishNumberButton(item.qty,"qty","数量"))
       +finishField("単位",`<button type="button" class="finish-unit-button unit">${esc(item.unit||"単位")}</button>`);
@@ -3294,7 +3332,21 @@ function renderFinishMaterial(r,item){
     b.dataset.placeholder=b.textContent;
     bindTapOnly(b,e=>showGenericNumberKeypad(b,item,key,label,()=>{refresh()},e));
   };
-  num(".area","area","施工数量");
+  {
+    const b=d.querySelector(".area");
+    if(b){
+      if(item.areaFormula==null)item.areaFormula=String(item.area||"");
+      const refreshArea=()=>{
+        syncFinishAreaFormula(item);
+        const raw=finishAreaFormulaValue(item),val=finishAreaFormulaResult(raw);
+        const out=d.querySelector(".finish-area-calc-result");
+        if(out)out.textContent=finishAreaHasOperator(raw)&&Number.isFinite(val)?`＝ ${finishFmtNumber(val)}㎡`:"";
+        const caseOut=d.querySelector(".case-result");if(caseOut)caseOut.textContent=finishCases(item)||"—";
+      };
+      b.dataset.placeholder="数量";
+      bindTapOnly(b,e=>showFormulaKeypad(b,item,"areaFormula","施工数量（㎡）",()=>{refreshArea()}));
+    }
+  }
   num(".qty","qty","数量",()=>{const x=d.querySelector(".base-case-result");if(x)x.textContent=finishBaseCases(item)||"—"});
   num(".pieces","pieces","必要枚数");
   num(".case-sqm","caseSqm","1ケース㎡",()=>{const x=d.querySelector(".case-result");if(x)x.textContent=finishCases(item)||"—"});
@@ -6419,6 +6471,26 @@ function sectionGroups(siteObj=state){
   return order.filter(name=>map.has(name)).map(name=>[name,map.get(name)]);
 }
 
+const calcRoomSelection=new Set();
+function roomSelectionSnapshot(siteObj=state){
+  const valid=new Set((siteObj.rooms||[]).map(r=>String(r.id)));
+  [...calcRoomSelection].forEach(k=>{if(!valid.has(String(k)))calcRoomSelection.delete(k)});
+  return siteObj.rooms||[];
+}
+function roomSelectionTotals(siteObj=state){
+  let none=0,withR=0,count=0;
+  roomSelectionSnapshot(siteObj).forEach(r=>{
+    if(calcRoomSelection.has(String(r.id))){const t=roomTotals(r);none+=t.none;withR+=t.withR;count++}
+  });
+  return {none,withR,count};
+}
+function toggleRoomSelection(roomId){
+  const k=String(roomId);
+  if(calcRoomSelection.has(k))calcRoomSelection.delete(k);else calcRoomSelection.add(k);
+  buildCalc();
+}
+function clearRoomSelection(){calcRoomSelection.clear();buildCalc()}
+
 const calcSectionSelection=new Set();
 
 function sectionSelectionSnapshot(siteObj=state){
@@ -6451,9 +6523,9 @@ function clearSectionSelection(){calcSectionSelection.clear();buildCalc()}
 function buildCalc(){
   let html="";
   if(calcMode==="room"){
-    state.rooms.forEach(r=>{
-      let rt=roomTotals(r);
-      html+=`<div class="calc-item"><div class="calc-title"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></div>`;
+    roomSelectionSnapshot(state).forEach(r=>{
+      let rt=roomTotals(r),sel=calcRoomSelection.has(String(r.id));
+      html+=`<div class="calc-item calc-room-item-select${sel?" selected":""}"><button type="button" class="calc-title" data-calc-room-id="${esc(String(r.id))}"><span>${esc(r.name)}</span><span>${fmt(rt.withR)}</span></button>`;
       r.sections.forEach(s=>{
         let t=secTotals(s,state);if(!t.none&&!t.withR)return;
         html+=`<div class="calc-sub"><b>${esc(s.name)}</b>${effectiveWallProduct(s,state)?"　"+esc(effectiveWallProduct(s,state)):""}${effectiveWallRepeatV(s,state)?"　↕︎"+esc(effectiveWallRepeatV(s,state)):""}${effectiveWallRepeatH(s,state)?"　↔︎"+esc(effectiveWallRepeatH(s,state)):""}<br>リピートなし ${fmt(t.none)} ／ リピートあり ${fmt(t.withR)}`;
@@ -6467,6 +6539,8 @@ function buildCalc(){
       });
       html+="</div>";
     });
+    const rt=roomSelectionTotals(state);
+    html+=`<div class="calc-selection-bar${rt.count?" has-selection":""}"><div><span>選択部屋 合計</span><strong>${fmt(rt.withR)}</strong><small>リピートなし ${fmt(rt.none)}　/　${rt.count}部屋選択</small></div><button type="button" id="clearRoomSelection" ${rt.count?"":"disabled"}>クリア</button></div>`;
   }else if(calcMode==="product"){
     let g={};
     state.rooms.forEach(r=>r.sections.forEach(s=>{
@@ -6503,7 +6577,11 @@ function buildCalc(){
   html+=`<div class="calc-item"><div>現場合計</div><div class="grand">リピートあり ${fmt(gw)}</div><div class="calc-sub">リピートなし ${fmt(gn)}</div></div>`;
   const calcContent=$("#calcContent");
   calcContent.innerHTML=html;
-  calcContent.classList.toggle("calc-content-section-select",calcMode==="section");
+  calcContent.classList.toggle("calc-content-section-select",calcMode==="section"||calcMode==="room");
+  if(calcMode==="room"){
+    calcContent.querySelectorAll("[data-calc-room-id]").forEach(btn=>{btn.onclick=()=>toggleRoomSelection(btn.dataset.calcRoomId)});
+    const clear=calcContent.querySelector("#clearRoomSelection");if(clear)clear.onclick=clearRoomSelection;
+  }
   if(calcMode==="section"){
     calcContent.querySelectorAll(".calc-section-select").forEach(btn=>{
       btn.onclick=()=>toggleSectionSelection(btn.dataset.sectionName);
@@ -7883,7 +7961,7 @@ function setSiteFilter(f){
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.90",backupType:"complete",exportedAt:new Date().toISOString(),
+    app:"現調",version:"2.4.91",backupType:"complete",exportedAt:new Date().toISOString(),
     sites,
     currentSiteId:state.id,
     masters:{
