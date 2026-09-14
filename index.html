@@ -7109,7 +7109,7 @@ function buildCalcSummaryCanvas(mode="room",siteObj=state){
     ctx.font='800 29px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
     ctx.fillText(row.title,pad+35,y);
     if(mode==="room"){
-      const used=[...new Set(row.subs.map(s=>s.bucket).filter(b=>b>=0))];
+      const used=[...new Set(row.subs.map(s=>s.bucket).filter(b=>b>=0))].sort((a,b)=>a-b);
       let bx=pad+300;
       used.forEach(b=>{
         const bc=bucketColor(b);
