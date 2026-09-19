@@ -1,4 +1,4 @@
-const CACHE="gencho-v2496-calc-persist-pdfbreaks";
+const CACHE="gencho-v2496-calc-persist-pdfbreaks-v2.4.98";
 const ASSETS=["./manifest.webmanifest","./icon.svg","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install",event=>{

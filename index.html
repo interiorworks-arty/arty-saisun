@@ -259,6 +259,18 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 .order-empty{background:#fff;border-radius:16px;padding:18px;color:#8b837d}
 .order-page-note{font-size:11px;color:#8b837d;margin:0 2px 2px}
 
+/* v2.4.98 発注：まとめ／カテゴリ別出力 */
+.order-export-tools{margin:0 0 12px;padding:10px;background:#f3efec;border:1px solid #e3dcd6;border-radius:13px}
+.order-export-title{font-size:12px;font-weight:900;color:#6e665f;margin:0 0 7px}
+.order-export-targets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:8px}
+.order-export-target{border:0;border-radius:9px;background:#e8e3df;color:#5a524d;padding:8px 3px;font-size:11px;font-weight:900;white-space:nowrap;touch-action:manipulation}
+.order-export-target.active{background:var(--accent);color:#fff}
+.order-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.order-export-actions button{border:0;border-radius:10px;padding:10px;font-weight:900;background:#e6e0dc;color:#4e4742}
+.order-export-actions .pdf{background:var(--accent);color:#fff}
+.order-export-hint{font-size:10px;color:#8a817a;margin-top:6px;line-height:1.45}
+@media(max-width:560px){.order-export-targets{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}.order-export-target{font-size:10px;padding:8px 1px}}
+
 
 
 
@@ -4253,9 +4265,20 @@ function collectOrderData(siteObj=state){
 
   return groups;
 }
+let orderExportTarget="all";
 function renderOrderPage(){
   const area=$("#orderPageArea");if(!area)return;
-  area.innerHTML='<div class="order-page-note">左が入力値、右が実際に発注する数値です。右側だけ変更できます。</div>';
+  const orderTargetLabels={all:"まとめて",wall:"クロス",floor:"床",sheet:"シート",other:"その他"};
+  area.innerHTML=`<div class="order-page-note">左が入力値、右が実際に発注する数値です。右側だけ変更できます。</div>
+    <div class="order-export-tools">
+      <div class="order-export-title">発注書を出力</div>
+      <div class="order-export-targets">${Object.entries(orderTargetLabels).map(([k,v])=>`<button type="button" class="order-export-target${orderExportTarget===k?" active":""}" data-order-export-target="${k}">${v}</button>`).join("")}</div>
+      <div class="order-export-actions"><button type="button" id="orderExportImage">画像</button><button type="button" id="orderExportPdf" class="pdf">PDF</button></div>
+      <div class="order-export-hint">「まとめて」は今まで通り4カテゴリをまとめて出力。クロス・床・シート・その他は、そのカテゴリだけを出力します。</div>
+    </div>`;
+  area.querySelectorAll("[data-order-export-target]").forEach(btn=>btn.onclick=()=>{orderExportTarget=btn.dataset.orderExportTarget;renderOrderPage()});
+  area.querySelector("#orderExportImage").onclick=()=>exportOrderCategoryAsImage(orderExportTarget);
+  area.querySelector("#orderExportPdf").onclick=()=>exportOrderCategoryAsPdf(orderExportTarget);
   const wrap=document.createElement("div");wrap.className="order-page";
   const data=collectOrderData(state);
   const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
@@ -7454,16 +7477,19 @@ function orderExportSegments(item){
   }
   return out;
 }
-function buildOrderExportCanvases(siteObj=state){
+function buildOrderExportCanvases(siteObj=state,onlyKey=null){
   const data=collectOrderData(siteObj);
-  const defs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
+  const allDefs=[["wall","クロス"],["floor","床"],["sheet","シート"],["other","その他"]];
+  const defs=onlyKey?allDefs.filter(([key])=>key===onlyKey):allDefs;
+  const onlyLabel=onlyKey?(allDefs.find(([key])=>key===onlyKey)?.[1]||""):"";
+  const exportHeading=onlyLabel?`${onlyLabel} 発注一覧`:"発注一覧";
   const pageH=1700, bottomLimit=1600;
   const pages=[];
   let base=null,c=null,ctx=null,pad=70,width=1240,y=0,left=0,right=0,contentW=0,pageNo=0;
 
   const newPage=()=>{
     pageNo++;
-    base=exportCanvasBase("発注一覧",pageNo>1?`${pageNo}ページ`:"",pageH);
+    base=exportCanvasBase(exportHeading,pageNo>1?`${pageNo}ページ`:"",pageH);
     ({c,ctx,pad,width}=base);
     y=base.y;
     left=pad+26;right=width-pad-26;contentW=right-left;
@@ -7580,6 +7606,8 @@ function buildOrderExportCanvases(siteObj=state){
     y+=cardH+18;
   };
 
+  const hasAny=defs.some(([key])=>(data[key]||[]).length);
+  if(!hasAny)return [];
   newPage();
 
   defs.forEach(([key,label])=>{
@@ -7600,10 +7628,46 @@ function buildOrderExportCanvases(siteObj=state){
 
   return pages;
 }
-function buildOrderExportCanvas(siteObj=state){
-  const pages=buildOrderExportCanvases(siteObj);
+function buildOrderExportCanvas(siteObj=state,onlyKey=null){
+  const pages=buildOrderExportCanvases(siteObj,onlyKey);
   return pages.length===1?pages[0]:combineCanvasesVertically(pages);
 }
+const ORDER_EXPORT_LABELS={all:"発注一覧",wall:"クロス発注",floor:"床発注",sheet:"シート発注",other:"その他発注"};
+function orderExportCanvasesForTarget(target,siteObj=state){
+  const key=target&&target!=="all"?target:null;
+  return buildOrderExportCanvases(siteObj,key);
+}
+async function exportOrderCategoryAsImage(target="all"){
+  try{
+    save();
+    const canvases=orderExportCanvasesForTarget(target,state);
+    if(!canvases.length){alert(`${ORDER_EXPORT_LABELS[target]||"発注"}に出力できるデータがありません`);return}
+    const canvas=combineCanvasesVertically(canvases);
+    const label=ORDER_EXPORT_LABELS[target]||"発注一覧";
+    const file=await canvasToPngFile(canvas,`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(label)}.png`);
+    await shareOrDownloadFile(file,`${state.siteName||"現調"} ${label}`);
+  }catch(e){console.error(e);alert("発注画像の作成に失敗しました")}
+}
+async function exportOrderCategoryAsPdf(target="all"){
+  try{
+    save();
+    const canvases=orderExportCanvasesForTarget(target,state);
+    if(!canvases.length){alert(`${ORDER_EXPORT_LABELS[target]||"発注"}に出力できるデータがありません`);return}
+    const images=[];
+    for(const canvas of canvases){
+      try{
+        if(canvas._appA4Page)images.push(await canvasToJpegInfo(canvas));
+        else images.push(...await canvasToPdfJpegs(canvas));
+      }catch(err){console.error("order PDF convert",err)}
+    }
+    if(!images.length){alert("PDFに変換できる発注データがありません");return}
+    const blob=makePdfFromJpegs(images);
+    const label=ORDER_EXPORT_LABELS[target]||"発注一覧";
+    const file=new File([blob],`${sanitizeFilename(state.siteName||"現調")}_${sanitizeFilename(label)}.pdf`,{type:"application/pdf"});
+    openExportPdfPreview(file,images,`${state.siteName||"現調"} ${label} PDF`);
+  }catch(e){console.error(e);alert("発注PDFの作成に失敗しました")}
+}
+
 function combineCanvasesVertically(canvases){
   const valid=canvases.filter(Boolean);if(!valid.length)return null;
   const width=Math.max(...valid.map(c=>c.width)),gap=24;
