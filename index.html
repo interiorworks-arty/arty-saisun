@@ -1888,8 +1888,8 @@ header .room-actions .site-list-btn{
 
 
 
-/* v2.4.100 メニュー再整理：内装/造作/設備/現場資料/共通 */
-.work-category-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:10px 0 7px}
+/* v2.4.101 見積・請求メニュー受け皿追加 */
+.work-category-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin:10px 0 7px}
 .work-category-tabs button{border:1px solid #d8d0ca;border-radius:12px;background:#f1ede9;color:#625a54;padding:11px 5px;font-size:12px;font-weight:900;line-height:1.15;touch-action:manipulation}
 .work-category-tabs button.active{background:#6f665f;color:#fff;border-color:#6f665f;box-shadow:0 2px 7px rgba(0,0,0,.12)}
 .work-page-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important;margin-top:0!important}
@@ -1921,7 +1921,7 @@ header .room-actions .site-list-btn{
 @media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body data-build="v2.4.100">
+<body data-build="v2.4.101">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1932,6 +1932,7 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-category="equip">設備工事</button>
   <button type="button" data-work-category="docs">現場資料</button>
   <button type="button" data-work-category="tools">共通ツール</button>
+  <button type="button" data-work-category="estimate">見積・請求</button>
 </div>
 <div class="work-page-tabs">
   <button type="button" data-work-page="wall" class="active">クロス</button>
@@ -1949,6 +1950,7 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-page="photo">写真</button>
   <button type="button" data-work-page="drawing">図面</button>
   <button type="button" data-work-page="area">面積計算</button>
+  <button type="button" data-work-page="estimate">見積・請求</button>
 </div>
 <div id="wallWorkPage" class="work-page active">
   <div class="wall-common-product">
@@ -1990,6 +1992,12 @@ header .room-actions .site-list-btn{
 </div>
 <div id="orderWorkPage" class="work-page">
   <div id="orderPageArea"></div>
+</div>
+<div id="estimateWorkPage" class="work-page">
+  <div class="carpentry-page">
+    <div class="carpentry-head"><h2>見積・請求</h2><p>見積アプリ統合用の受け皿です。</p></div>
+    <div class="carpentry-placeholder"><h3>準備中</h3><p>まずは現在の見積・請求アプリを、今まで通り使える状態のままここへ統合します。<br>2画面表示・数量コピーなどの連携機能は、その後に追加していきます。</p></div>
+  </div>
 </div>
 </section>
 <section id="calcView" class="calc-view">
@@ -6125,9 +6133,10 @@ const WORK_CATEGORY_PAGES={
   carpentry:["carpentry-ceiling","carpentry-wall","carpentry-floor"],
   equip:["switch","curtain"],
   docs:["memo","photo","drawing"],
-  tools:["area"]
+  tools:["area"],
+  estimate:["estimate"]
 };
-const WORK_CATEGORY_LABELS={finish:"内装仕上げ",carpentry:"造作工事",equip:"設備工事",docs:"現場資料",tools:"共通ツール"};
+const WORK_CATEGORY_LABELS={finish:"内装仕上げ",carpentry:"造作工事",equip:"設備工事",docs:"現場資料",tools:"共通ツール",estimate:"見積・請求"};
 let activeWorkCategory="finish";
 const activeCarpentryTypeByPage={
   "carpentry-ceiling":"ceiling-lgs",
@@ -6205,6 +6214,7 @@ function setWorkPage(page){
   $("#areaWorkPage").classList.toggle("active",page==="area");
   $("#glueWorkPage").classList.toggle("active",page==="glue");
   $("#orderWorkPage").classList.toggle("active",page==="order");
+  $("#estimateWorkPage").classList.toggle("active",page==="estimate");
   renderWorkCategoryTabs();
   hideMeasureKeypad();hideProductKeypad();
   if(page==="wall"){renderTabs();renderRoom()}
