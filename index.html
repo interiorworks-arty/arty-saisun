@@ -1921,7 +1921,7 @@ header .room-actions .site-list-btn{
 @media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body data-build="v2.4.102">
+<body data-build="v2.4.103">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1983,12 +1983,6 @@ header .room-actions .site-list-btn{
 </div>
 <div id="orderWorkPage" class="work-page">
   <div id="orderPageArea"></div>
-</div>
-<div id="estimateWorkPage" class="work-page">
-  <div class="carpentry-page">
-    <div class="carpentry-head"><h2>見積・請求</h2><p>見積アプリ統合用の受け皿です。</p></div>
-    <div class="carpentry-placeholder"><h3>準備中</h3><p>まずは現在の見積・請求アプリを、今まで通り使える状態のままここへ統合します。<br>2画面表示・数量コピーなどの連携機能は、その後に追加していきます。</p></div>
-  </div>
 </div>
 </section>
 <section id="calcView" class="calc-view">
@@ -6164,7 +6158,12 @@ function renderWorkCategoryTabs(){
   if(box){
     box.classList.remove("category-count-1","category-count-2","category-count-3","category-count-5","category-count-6");
     box.classList.add(`category-count-${pages.length}`);
-    box.querySelectorAll("[data-work-page]").forEach(btn=>btn.classList.toggle("category-hidden",!pages.includes(btn.dataset.workPage)));
+    box.querySelectorAll("[data-work-page]").forEach(btn=>{
+      const show=pages.includes(btn.dataset.workPage);
+      btn.classList.toggle("category-hidden",!show);
+      btn.hidden=!show;
+      btn.style.display=show?"":"none";
+    });
   }
 }
 function bindWorkCategoryTabs(){
@@ -6190,18 +6189,16 @@ function setWorkPage(page){
   activeWorkPage=page;
   activeWorkCategory=categoryForWorkPage(page);
   document.querySelectorAll("[data-work-page]").forEach(b=>b.classList.toggle("active",b.dataset.workPage===page));
-  $("#wallWorkPage").classList.toggle("active",page==="wall");
-  $("#finishWorkPage").classList.toggle("active",["floor","sheet","other"].includes(page));
-  $("#carpentryWorkPage").classList.toggle("active",page.startsWith("carpentry-"));
-  $("#switchWorkPage").classList.toggle("active",page==="switch");
-  $("#photoWorkPage").classList.toggle("active",page==="photo");
-  $("#curtainWorkPage").classList.toggle("active",page==="curtain");
-  $("#memoWorkPage").classList.toggle("active",page==="memo");
-  $("#drawingWorkPage").classList.toggle("active",page==="drawing");
-  $("#areaWorkPage").classList.toggle("active",page==="area");
-  $("#glueWorkPage").classList.toggle("active",page==="glue");
-  $("#orderWorkPage").classList.toggle("active",page==="order");
-  $("#estimateWorkPage").classList.toggle("active",page==="estimate");
+  const toggleWorkPage=(id,on)=>{const el=$(id);if(el)el.classList.toggle("active",!!on)};
+  toggleWorkPage("#wallWorkPage",page==="wall");
+  toggleWorkPage("#finishWorkPage",["floor","sheet","other"].includes(page));
+  toggleWorkPage("#carpentryWorkPage",page.startsWith("carpentry-"));
+  toggleWorkPage("#photoWorkPage",page==="photo");
+  toggleWorkPage("#memoWorkPage",page==="memo");
+  toggleWorkPage("#drawingWorkPage",page==="drawing");
+  toggleWorkPage("#areaWorkPage",page==="area");
+  toggleWorkPage("#glueWorkPage",page==="glue");
+  toggleWorkPage("#orderWorkPage",page==="order");
   renderWorkCategoryTabs();
   hideMeasureKeypad();hideProductKeypad();
   if(page==="wall"){renderTabs();renderRoom()}
