@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="104" fill="#f5f3f0"/><text x="256" y="300" text-anchor="middle" font-family="Arial,sans-serif" font-size="170" font-weight="800" fill="#272522">現調</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#f5f3f0"/>
+  <path d="M96 214 256 86l160 128v210H96Z" fill="none" stroke="#665f59" stroke-width="28" stroke-linejoin="round"/>
+  <path d="M160 424V278h192v146M256 278v146M160 350h192" fill="none" stroke="#665f59" stroke-width="22" stroke-linejoin="round"/>
+</svg>

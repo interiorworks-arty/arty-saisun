@@ -1886,13 +1886,49 @@ header .room-actions .site-list-btn{
 .curtain-card[data-curtain-product="ceilingDouble"] .curtain-img-wrap img{transform:scale(1.04)}
 .curtain-card[data-curtain-product="rail"] .curtain-img-wrap img,.curtain-card[data-curtain-product="railJoint"] .curtain-img-wrap img,.curtain-card[data-curtain-product="railOrder"] .curtain-img-wrap img{transform:scale(1.03)}
 
+
+
+/* v2.4.99 メニューカテゴリ整理 + 造作工事ナビ */
+.work-category-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:10px 0 7px}
+.work-category-tabs button{border:1px solid #d8d0ca;border-radius:12px;background:#f1ede9;color:#625a54;padding:11px 5px;font-size:12px;font-weight:900;line-height:1.15;touch-action:manipulation}
+.work-category-tabs button.active{background:#6f665f;color:#fff;border-color:#6f665f;box-shadow:0 2px 7px rgba(0,0,0,.12)}
+.work-page-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important;margin-top:0!important}
+.work-page-tabs button.category-hidden{display:none!important}
+.work-page-tabs.category-count-3{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.work-page-tabs.category-count-6{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+@media(max-width:620px){
+  .work-category-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .work-category-tabs button{font-size:11px;padding:10px 3px}
+  .work-page-tabs.category-count-3{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .work-page-tabs.category-count-6{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .work-page-tabs.category-count-6 button{font-size:9.4px!important}
+}
+.carpentry-page{display:flex;flex-direction:column;gap:12px}
+.carpentry-head{background:#fff;border:1px solid #e4ddd7;border-radius:15px;padding:15px 16px}
+.carpentry-head h2{margin:0 0 5px;font-size:22px;color:#3e3834}
+.carpentry-head p{margin:0;color:#837a73;font-size:12px;font-weight:750}
+.carpentry-type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.carpentry-type-card{border:1px solid #dfd7d1;border-radius:14px;background:#fff;padding:18px 14px;text-align:left;color:#4a433e;box-shadow:0 2px 8px rgba(0,0,0,.035);touch-action:manipulation}
+.carpentry-type-card strong{display:block;font-size:16px;font-weight:900;margin-bottom:5px}
+.carpentry-type-card span{display:block;font-size:11px;color:#897f77;font-weight:750;line-height:1.45}
+.carpentry-type-card.active{border-color:#887b71;box-shadow:inset 0 0 0 2px #887b71;background:#f5f1ee}
+.carpentry-placeholder{background:#fff;border:1px solid #e4ddd7;border-radius:15px;padding:28px 18px;text-align:center;color:#7e756e}
+.carpentry-placeholder h3{margin:0 0 8px;color:#45403b;font-size:19px}
+.carpentry-placeholder p{margin:0;font-size:12px;font-weight:750;line-height:1.6}
+@media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body data-build="v2.4.84">
+<body data-build="v2.4.99">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
 <div class="site"><input id="siteName" placeholder="現場名"><input id="siteDate" class="site-date-input" type="date" aria-label="現場日付"></div>
+<div class="work-category-tabs" id="workCategoryTabs">
+  <button type="button" data-work-category="finish" class="active">内装仕上げ</button>
+  <button type="button" data-work-category="carpentry">造作工事</button>
+  <button type="button" data-work-category="docs">現場資料</button>
+  <button type="button" data-work-category="equip">発注・設備</button>
+</div>
 <div class="work-page-tabs">
   <button type="button" data-work-page="wall" class="active">クロス</button>
   <button type="button" data-work-page="floor">床</button>
@@ -1902,6 +1938,9 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-page="order">発注</button>
   <button type="button" data-work-page="glue">糊付け</button>
   <button type="button" data-work-page="area">面積計算</button>
+  <button type="button" data-work-page="carpentry-ceiling">天井</button>
+  <button type="button" data-work-page="carpentry-wall">壁</button>
+  <button type="button" data-work-page="carpentry-floor">床</button>
   <button type="button" data-work-page="photo">写真</button>
   <button type="button" data-work-page="drawing">図面</button>
   <button type="button" data-work-page="switch">電気</button>
@@ -1919,6 +1958,9 @@ header .room-actions .site-list-btn{
   </div>
   <div id="roomTabs" class="tabs"></div>
   <div id="roomArea"></div>
+</div>
+<div id="carpentryWorkPage" class="work-page">
+  <div id="carpentryPageArea"></div>
 </div>
 <div id="finishWorkPage" class="work-page">
   <div id="finishPageArea"></div>
@@ -5399,7 +5441,8 @@ async function exportPhotoRoomPdf(roomName){
 }
 
 function workPageLabel(page){
-  return page==="floor"?"床":page==="sheet"?"シート":"その他項目";
+  const labels={floor:"床",sheet:"シート",other:"その他項目",wall:"クロス",memo:"メモ",order:"発注",glue:"糊付け",area:"面積計算",photo:"写真",drawing:"図面",switch:"電気",curtain:"カーテンレール","carpentry-ceiling":"天井","carpentry-wall":"壁","carpentry-floor":"床"};
+  return labels[page]||"ページ";
 }
 function finishRoomCandidates(){
   const out=[],seen=new Set(),add=n=>{n=String(n||"").trim();if(!n||seen.has(n))return;seen.add(n);out.push(n)};
@@ -6073,11 +6116,82 @@ async function buildSwitchExportCanvases(siteObj=state){const out=[];for(const c
 async function exportSwitchCurrentImage(){try{const canvas=await buildSwitchCategoryCanvas(activeSwitchCategory,state);const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気_${sanitizeFilename(activeSwitchCategory)}］.png`;const file=await canvasToPngFile(canvas,fn);await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 ${activeSwitchCategory}`)}catch(e){console.error(e);alert("画像保存に失敗しました")}}
 async function exportSwitchAllPdf(){try{const canvases=await buildSwitchExportCanvases(state),images=[];for(const c of canvases)images.push(await canvasToJpegInfo(c));const blob=makePdfFromJpegs(images);const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気］.pdf`;const file=new File([blob],fn,{type:"application/pdf"});await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 PDF`)}catch(e){console.error(e);alert("PDF作成に失敗しました")}}
 
+const WORK_CATEGORY_PAGES={
+  finish:["wall","floor","sheet","other","glue","area"],
+  carpentry:["carpentry-ceiling","carpentry-wall","carpentry-floor"],
+  docs:["memo","photo","drawing"],
+  equip:["order","switch","curtain"]
+};
+const WORK_CATEGORY_LABELS={finish:"内装仕上げ",carpentry:"造作工事",docs:"現場資料",equip:"発注・設備"};
+let activeWorkCategory="finish";
+const activeCarpentryTypeByPage={
+  "carpentry-ceiling":"ceiling-lgs",
+  "carpentry-wall":"wall-runner-angle",
+  "carpentry-floor":"floor-wood"
+};
+const CARPENTRY_PAGE_DEFS={
+  "carpentry-ceiling":{
+    title:"天井",
+    note:"天井下地の拾い出しページ。計算機能は次の段階で追加します。",
+    types:[
+      {id:"ceiling-lgs",title:"吊り天井（LGS）",note:"LGS天井下地用"},
+      {id:"ceiling-runner-angle",title:"吊り天井（ランナー＋角スタッド）",note:"ランナーと角スタッドで組む天井下地用"}
+    ]
+  },
+  "carpentry-wall":{
+    title:"壁",
+    note:"壁下地の拾い出しページ。",
+    types:[{id:"wall-runner-angle",title:"ランナー＋角スタッド",note:"壁下地用"}]
+  },
+  "carpentry-floor":{
+    title:"床",
+    note:"床下地・置き床の拾い出しページ。",
+    types:[
+      {id:"floor-wood",title:"木下地",note:"根太・ベニヤ・ボードなどの拾い出し用"},
+      {id:"floor-raised",title:"置き床",note:"支持脚・パーチなどの拾い出し用"}
+    ]
+  }
+};
+function categoryForWorkPage(page){
+  return Object.entries(WORK_CATEGORY_PAGES).find(([,pages])=>pages.includes(page))?.[0]||"finish";
+}
+function renderWorkCategoryTabs(){
+  activeWorkCategory=categoryForWorkPage(activeWorkPage);
+  document.querySelectorAll("[data-work-category]").forEach(btn=>btn.classList.toggle("active",btn.dataset.workCategory===activeWorkCategory));
+  const pages=WORK_CATEGORY_PAGES[activeWorkCategory]||[];
+  const box=document.querySelector(".work-page-tabs");
+  if(box){
+    box.classList.remove("category-count-3","category-count-6");
+    box.classList.add(`category-count-${pages.length}`);
+    box.querySelectorAll("[data-work-page]").forEach(btn=>btn.classList.toggle("category-hidden",!pages.includes(btn.dataset.workPage)));
+  }
+}
+function bindWorkCategoryTabs(){
+  const box=document.querySelector("#workCategoryTabs");if(!box||box.dataset.bound==="1")return;
+  box.dataset.bound="1";
+  box.querySelectorAll("[data-work-category]").forEach(btn=>btn.onclick=()=>{
+    const cat=btn.dataset.workCategory,pages=WORK_CATEGORY_PAGES[cat]||[];
+    if(!pages.length)return;
+    activeWorkCategory=cat;
+    const target=pages.includes(activeWorkPage)?activeWorkPage:pages[0];
+    setWorkPage(target);
+  });
+}
+function renderCarpentryPage(){
+  const area=document.querySelector("#carpentryPageArea");if(!area)return;
+  const def=CARPENTRY_PAGE_DEFS[activeWorkPage]||CARPENTRY_PAGE_DEFS["carpentry-ceiling"];
+  const selected=activeCarpentryTypeByPage[activeWorkPage]||def.types[0]?.id;
+  area.innerHTML=`<div class="carpentry-page"><div class="carpentry-head"><h2>造作工事｜${esc(def.title)}</h2><p>${esc(def.note)}</p></div><div class="carpentry-type-grid">${def.types.map(t=>`<button type="button" class="carpentry-type-card${selected===t.id?" active":""}" data-carpentry-type="${esc(t.id)}"><strong>${esc(t.title)}</strong><span>${esc(t.note)}</span></button>`).join("")}</div><div class="carpentry-placeholder"><h3>${esc(def.types.find(t=>t.id===selected)?.title||def.title)}</h3><p>ページ枠だけ先に作成済みです。<br>寸法入力・材料数量計算はここへ追加していきます。</p></div></div>`;
+  area.querySelectorAll("[data-carpentry-type]").forEach(btn=>btn.onclick=()=>{activeCarpentryTypeByPage[activeWorkPage]=btn.dataset.carpentryType;renderCarpentryPage()});
+}
+
 function setWorkPage(page){
   activeWorkPage=page;
+  activeWorkCategory=categoryForWorkPage(page);
   document.querySelectorAll("[data-work-page]").forEach(b=>b.classList.toggle("active",b.dataset.workPage===page));
   $("#wallWorkPage").classList.toggle("active",page==="wall");
   $("#finishWorkPage").classList.toggle("active",["floor","sheet","other"].includes(page));
+  $("#carpentryWorkPage").classList.toggle("active",page.startsWith("carpentry-"));
   $("#switchWorkPage").classList.toggle("active",page==="switch");
   $("#photoWorkPage").classList.toggle("active",page==="photo");
   $("#curtainWorkPage").classList.toggle("active",page==="curtain");
@@ -6086,8 +6200,10 @@ function setWorkPage(page){
   $("#areaWorkPage").classList.toggle("active",page==="area");
   $("#glueWorkPage").classList.toggle("active",page==="glue");
   $("#orderWorkPage").classList.toggle("active",page==="order");
+  renderWorkCategoryTabs();
   hideMeasureKeypad();hideProductKeypad();
   if(page==="wall"){renderTabs();renderRoom()}
+  else if(page.startsWith("carpentry-"))renderCarpentryPage();
   else if(page==="switch")renderSwitchPage();
   else if(page==="photo")renderPhotoPage();
   else if(page==="curtain")renderCurtainPage();
@@ -8402,7 +8518,7 @@ async function importCompleteBackupZip(file){
   return {photos:photos.length,memoFiles:memoFiles.length};
 }
 
-function render(){ensureAreaCalc(state);ensureGlueChecks(state);ensureSwitchCounts(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage==="switch"){renderSwitchPage()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="area"){renderAreaPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
+function render(){ensureAreaCalc(state);ensureGlueChecks(state);ensureSwitchCounts(state);ensureWallCommonProduct(state);renderWallCommonProduct();bindWallCommonProductButton();bindWallCommonRepeatButtons();(state.rooms||[]).forEach(ensureRoomExtras);ensureFinishRooms(state);if(typeof state.memo!=="string")state.memo="";ensureMemoPages(state);ensureMemoInk(state);if(state.siteDate==null)state.siteDate="";const siteNameInput=$("#siteName"),siteDateInput=$("#siteDate");if(siteNameInput){siteNameInput.dataset.siteId=String(state.id||"");siteNameInput.value=state.siteName||""}if(siteDateInput){siteDateInput.dataset.siteId=String(state.id||"");siteDateInput.value=state.siteDate||""}if(activeWorkPage==="wall"){renderTabs();renderRoom()}else if(activeWorkPage.startsWith("carpentry-")){renderCarpentryPage()}else if(activeWorkPage==="switch"){renderSwitchPage()}else if(activeWorkPage==="photo"){renderPhotoPage()}else if(activeWorkPage==="memo"){renderMemoPage()}else if(activeWorkPage==="drawing"){renderDrawingPage()}else if(activeWorkPage==="area"){renderAreaPage()}else if(activeWorkPage==="glue"){renderGluePage()}else if(activeWorkPage==="order"){renderOrderPage()}else{renderFinishPage()}buildCalc()}
 
 
 
@@ -8775,12 +8891,12 @@ document.addEventListener("click",e=>{const pk=$("#productKeypad");if(!pk||!pk.c
 const WORK_PAGE_ORDER_KEY="gencho-work-page-order-v1";
 function applyWorkPageOrder(){
  const box=document.querySelector(".work-page-tabs");if(!box)return;
- // v2.4.71 初期並びを固定：上段6 / 下段6
- const defs=["wall","floor","sheet","other","memo","order","glue","area","photo","drawing","switch","curtain"];
+ // v2.4.99 カテゴリ別メニュー。カテゴリ内タブのみ表示
+ const defs=["wall","floor","sheet","other","glue","area","carpentry-ceiling","carpentry-wall","carpentry-floor","memo","photo","drawing","order","switch","curtain"];
  let order=defs;
  try{
    const a=JSON.parse(localStorage.getItem(WORK_PAGE_ORDER_KEY)||"null");
-   // 旧10タブ構成の保存順は、新12タブ構成では使わず希望順へリセット。
+   // 旧タブ構成の保存順は、新カテゴリ構成では使わず希望順へリセット。
    if(Array.isArray(a)&&a.length===defs.length&&defs.every(x=>a.includes(x))){
      order=[...a];
    }else{
@@ -8883,6 +8999,7 @@ function bindWorkPageTouchSortFallback(){
 }
 bindWorkPageTabs();
 bindWorkPageTouchSortFallback();
+bindWorkCategoryTabs();
 setWorkPage(activeWorkPage);
 resetMeasureKeypadBottomRight();render();if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
