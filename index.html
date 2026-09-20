@@ -1888,14 +1888,17 @@ header .room-actions .site-list-btn{
 
 
 
-/* v2.4.99 メニューカテゴリ整理 + 造作工事ナビ */
-.work-category-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:10px 0 7px}
+/* v2.4.100 メニュー再整理：内装/造作/設備/現場資料/共通 */
+.work-category-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:10px 0 7px}
 .work-category-tabs button{border:1px solid #d8d0ca;border-radius:12px;background:#f1ede9;color:#625a54;padding:11px 5px;font-size:12px;font-weight:900;line-height:1.15;touch-action:manipulation}
 .work-category-tabs button.active{background:#6f665f;color:#fff;border-color:#6f665f;box-shadow:0 2px 7px rgba(0,0,0,.12)}
 .work-page-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important;margin-top:0!important}
 .work-page-tabs button.category-hidden{display:none!important}
 .work-page-tabs.category-count-3{grid-template-columns:repeat(3,minmax(0,1fr))!important}
 .work-page-tabs.category-count-6{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+.work-page-tabs.category-count-1{grid-template-columns:repeat(1,minmax(0,1fr))!important}
+.work-page-tabs.category-count-2{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.work-page-tabs.category-count-5{grid-template-columns:repeat(5,minmax(0,1fr))!important}
 @media(max-width:620px){
   .work-category-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
   .work-category-tabs button{font-size:11px;padding:10px 3px}
@@ -1918,7 +1921,7 @@ header .room-actions .site-list-btn{
 @media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body data-build="v2.4.99">
+<body data-build="v2.4.100">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -1926,25 +1929,26 @@ header .room-actions .site-list-btn{
 <div class="work-category-tabs" id="workCategoryTabs">
   <button type="button" data-work-category="finish" class="active">内装仕上げ</button>
   <button type="button" data-work-category="carpentry">造作工事</button>
+  <button type="button" data-work-category="equip">設備工事</button>
   <button type="button" data-work-category="docs">現場資料</button>
-  <button type="button" data-work-category="equip">発注・設備</button>
+  <button type="button" data-work-category="tools">共通ツール</button>
 </div>
 <div class="work-page-tabs">
   <button type="button" data-work-page="wall" class="active">クロス</button>
   <button type="button" data-work-page="floor">床</button>
   <button type="button" data-work-page="sheet">シート</button>
   <button type="button" data-work-page="other">その他</button>
-  <button type="button" data-work-page="memo">メモ</button>
-  <button type="button" data-work-page="order">発注</button>
   <button type="button" data-work-page="glue">糊付け</button>
-  <button type="button" data-work-page="area">面積計算</button>
+  <button type="button" data-work-page="order">発注</button>
   <button type="button" data-work-page="carpentry-ceiling">天井</button>
   <button type="button" data-work-page="carpentry-wall">壁</button>
   <button type="button" data-work-page="carpentry-floor">床</button>
-  <button type="button" data-work-page="photo">写真</button>
-  <button type="button" data-work-page="drawing">図面</button>
   <button type="button" data-work-page="switch">電気</button>
   <button type="button" data-work-page="curtain">カーテンレール</button>
+  <button type="button" data-work-page="memo">メモ</button>
+  <button type="button" data-work-page="photo">写真</button>
+  <button type="button" data-work-page="drawing">図面</button>
+  <button type="button" data-work-page="area">面積計算</button>
 </div>
 <div id="wallWorkPage" class="work-page active">
   <div class="wall-common-product">
@@ -6117,12 +6121,13 @@ async function exportSwitchCurrentImage(){try{const canvas=await buildSwitchCate
 async function exportSwitchAllPdf(){try{const canvases=await buildSwitchExportCanvases(state),images=[];for(const c of canvases)images.push(await canvasToJpegInfo(c));const blob=makePdfFromJpegs(images);const fn=`${sanitizeFilename(state.siteName||"現調")}_現調アプリ［電気］.pdf`;const file=new File([blob],fn,{type:"application/pdf"});await shareOrDownloadFile(file,`${state.siteName||"現調"} 電気 PDF`)}catch(e){console.error(e);alert("PDF作成に失敗しました")}}
 
 const WORK_CATEGORY_PAGES={
-  finish:["wall","floor","sheet","other","glue","area"],
+  finish:["wall","floor","sheet","other","glue","order"],
   carpentry:["carpentry-ceiling","carpentry-wall","carpentry-floor"],
+  equip:["switch","curtain"],
   docs:["memo","photo","drawing"],
-  equip:["order","switch","curtain"]
+  tools:["area"]
 };
-const WORK_CATEGORY_LABELS={finish:"内装仕上げ",carpentry:"造作工事",docs:"現場資料",equip:"発注・設備"};
+const WORK_CATEGORY_LABELS={finish:"内装仕上げ",carpentry:"造作工事",equip:"設備工事",docs:"現場資料",tools:"共通ツール"};
 let activeWorkCategory="finish";
 const activeCarpentryTypeByPage={
   "carpentry-ceiling":"ceiling-lgs",
@@ -6161,7 +6166,7 @@ function renderWorkCategoryTabs(){
   const pages=WORK_CATEGORY_PAGES[activeWorkCategory]||[];
   const box=document.querySelector(".work-page-tabs");
   if(box){
-    box.classList.remove("category-count-3","category-count-6");
+    box.classList.remove("category-count-1","category-count-2","category-count-3","category-count-5","category-count-6");
     box.classList.add(`category-count-${pages.length}`);
     box.querySelectorAll("[data-work-page]").forEach(btn=>btn.classList.toggle("category-hidden",!pages.includes(btn.dataset.workPage)));
   }
