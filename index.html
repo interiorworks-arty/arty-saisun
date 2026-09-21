@@ -1921,7 +1921,7 @@ header .room-actions .site-list-btn{
 @media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body data-build="v2.4.103">
+<body data-build="v2.4.104">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -8306,11 +8306,20 @@ function setSiteFilter(f){
   $("#filterAll").classList.toggle("active",f==="all");
   renderSiteList();
 }
+function sanitizePublicSite(site){
+  const clean=JSON.parse(JSON.stringify(site||{}));
+  // PUBLIC版ではPRIVATE専用の設備・見積系データをバックアップへ持ち込まない。
+  Object.keys(clean).forEach(key=>{
+    if(/^(switch|curtain|estimate|invoice|quotation)/i.test(key))delete clean[key];
+  });
+  return clean;
+}
+function sanitizePublicSites(list){return (Array.isArray(list)?list:[]).map(sanitizePublicSite)}
 function buildBackupObject(){
   save();
   return {
-    app:"現調",version:"2.4.92",backupType:"complete",exportedAt:new Date().toISOString(),
-    sites,
+    app:"現調 PUBLIC",version:"2.4.104",backupType:"public-complete",exportedAt:new Date().toISOString(),
+    sites:sanitizePublicSites(sites),
     currentSiteId:state.id,
     masters:{
       savedRooms,deletedRooms,roomOrder,
@@ -8394,7 +8403,7 @@ async function buildCompleteBackupEntries(){
     if(rec.blob instanceof Blob){const ext=safeBackupExt(rec.mimeType||rec.blob.type,rec.fileName,rec.isPdf?"pdf":"jpg");meta.blobPath=`media/drawings/${rec.id}.${ext}`;entries.push({name:meta.blobPath,blob:rec.blob})}
     memoMeta.push(meta);
   }
-  const manifest={format:"gencho-complete-backup",formatVersion:1,appData:base,indexedDB:{photos:photoMeta,memoFiles:memoMeta}};
+  const manifest={format:"gencho-public-complete-backup",formatVersion:1,appData:base,indexedDB:{photos:photoMeta,memoFiles:memoMeta}};
   entries.unshift({name:"backup.json",blob:new Blob([JSON.stringify(manifest,null,2)],{type:"application/json"})});
   return entries;
 }
@@ -8404,9 +8413,9 @@ async function exportBackup(){
   try{
     const entries=await buildCompleteBackupEntries(),zipBlob=await buildStoreZip(entries);
     const now=new Date(),yyyy=now.getFullYear(),mm=String(now.getMonth()+1).padStart(2,"0"),dd=String(now.getDate()).padStart(2,"0");
-    const name=`${yyyy}-${mm}-${dd}_現調_完全バックアップ.zip`,file=new File([zipBlob],name,{type:"application/zip"});
+    const name=`${yyyy}-${mm}-${dd}_現調_PUBLIC_完全バックアップ.zip`,file=new File([zipBlob],name,{type:"application/zip"});
     try{
-      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"現調 完全バックアップ"});return}
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"現調 PUBLIC 完全バックアップ"});return}
     }catch(e){if(e?.name==="AbortError")return;console.warn(e)}
     const url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
   }catch(e){
@@ -8415,7 +8424,7 @@ async function exportBackup(){
 }
 function importBackupData(obj){
   if(!obj||!Array.isArray(obj.sites)||!obj.sites.length)throw new Error("invalid backup");
-  sites=obj.sites;
+  sites=sanitizePublicSites(obj.sites);
   const m=obj.masters||{};
   savedRooms=Array.isArray(m.savedRooms)?m.savedRooms:[];
   deletedRooms=Array.isArray(m.deletedRooms)?m.deletedRooms:[];
@@ -8486,7 +8495,7 @@ async function replaceMediaDatabase(photoRecords,memoRecords){
 async function importCompleteBackupZip(file){
   const entries=await readZipLocalEntries(file),metaBlob=entries.get("backup.json");if(!metaBlob)throw new Error("backup.json missing");
   const manifest=JSON.parse(await metaBlob.text());
-  if(manifest?.format!=="gencho-complete-backup"||!manifest.appData)throw new Error("invalid complete backup");
+  if(!["gencho-public-complete-backup","gencho-complete-backup"].includes(manifest?.format)||!manifest.appData)throw new Error("invalid complete backup");
   const photos=[];
   for(const meta of manifest.indexedDB?.photos||[]){
     const rec={...meta};delete rec.blobPath;delete rec.thumbBlobPath;
@@ -8795,7 +8804,7 @@ $("#backupFileInput").onchange=async e=>{
   const btn=$("#importBackup"),old=btn?.textContent;
   try{
     const isZip=String(file.name||"").toLowerCase().endsWith(".zip")||file.type==="application/zip";
-    const msg=isZip?"完全バックアップを読み込むと、現在の全現場・写真・動画・図面・登録候補をバックアップ内容で置き換えます。続けますか？":"旧バックアップを読み込むと、現在の現場一覧・登録候補をバックアップ内容で置き換えます。写真・動画・図面は旧形式には含まれません。続けますか？";
+    const msg=isZip?"完全バックアップを読み込むと、現在の全現場・写真・動画・図面・登録候補をバックアップ内容で置き換えます。PRIVATE版の電気・カーテン・見積系データはPUBLIC版では取り込みません。続けますか？":"旧バックアップを読み込むと、現在の現場一覧・登録候補をバックアップ内容で置き換えます。写真・動画・図面は旧形式には含まれません。続けますか？";
     if(!confirm(msg)){e.target.value="";return}
     if(btn){btn.disabled=true;btn.textContent="バックアップ復元中…"}
     if(isZip){const r=await importCompleteBackupZip(file);alert(`完全バックアップを復元しました\n写真・動画 ${r.photos}件 / 図面・添付 ${r.memoFiles}件`)}
