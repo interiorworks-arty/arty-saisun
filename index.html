@@ -1921,14 +1921,13 @@ header .room-actions .site-list-btn{
 @media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
 </head>
-<body data-build="v2.4.104">
+<body data-build="v2.4.105">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
 <div class="site"><input id="siteName" placeholder="現場名"><input id="siteDate" class="site-date-input" type="date" aria-label="現場日付"></div>
 <div class="work-category-tabs" id="workCategoryTabs">
   <button type="button" data-work-category="finish" class="active">内装仕上げ</button>
-  <button type="button" data-work-category="carpentry">造作工事</button>
   <button type="button" data-work-category="docs">現場資料</button>
   <button type="button" data-work-category="tools">共通ツール</button>
 </div>
@@ -1939,9 +1938,6 @@ header .room-actions .site-list-btn{
   <button type="button" data-work-page="other">その他</button>
   <button type="button" data-work-page="glue">糊付け</button>
   <button type="button" data-work-page="order">発注</button>
-  <button type="button" data-work-page="carpentry-ceiling">天井</button>
-  <button type="button" data-work-page="carpentry-wall">壁</button>
-  <button type="button" data-work-page="carpentry-floor">床</button>
   <button type="button" data-work-page="memo">メモ</button>
   <button type="button" data-work-page="photo">写真</button>
   <button type="button" data-work-page="drawing">図面</button>
@@ -6113,11 +6109,10 @@ async function exportSwitchAllPdf(){try{const canvases=await buildSwitchExportCa
 
 const WORK_CATEGORY_PAGES={
   finish:["wall","floor","sheet","other","glue","order"],
-  carpentry:["carpentry-ceiling","carpentry-wall","carpentry-floor"],
   docs:["memo","photo","drawing"],
   tools:["area"]
 };
-const WORK_CATEGORY_LABELS={finish:"内装仕上げ",carpentry:"造作工事",docs:"現場資料",tools:"共通ツール"};
+const WORK_CATEGORY_LABELS={finish:"内装仕上げ",docs:"現場資料",tools:"共通ツール"};
 let activeWorkCategory="finish";
 const activeCarpentryTypeByPage={
   "carpentry-ceiling":"ceiling-lgs",
@@ -8318,7 +8313,7 @@ function sanitizePublicSites(list){return (Array.isArray(list)?list:[]).map(sani
 function buildBackupObject(){
   save();
   return {
-    app:"現調 PUBLIC",version:"2.4.104",backupType:"public-complete",exportedAt:new Date().toISOString(),
+    app:"現調 PUBLIC",version:"2.4.105",backupType:"public-complete",exportedAt:new Date().toISOString(),
     sites:sanitizePublicSites(sites),
     currentSiteId:state.id,
     masters:{
