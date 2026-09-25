@@ -1,4 +1,4 @@
-const CACHE_NAME = "gencho-public-v2.4.105";
+const CACHE_NAME = "gencho-public-v2.4.106";
 const APP_SHELL = [
   "./",
   "./index.html",

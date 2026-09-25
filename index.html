@@ -280,7 +280,7 @@ input,button{font:inherit}input{border:0;border-bottom:1px solid transparent;bac
 #nativeProductInput{width:100%;box-sizing:border-box;font-size:20px;padding:14px;border:1px solid #d9d2cd;border-radius:12px;background:#fff;color:var(--ink)}
 
 .keypad-cursor-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
-.keypad-cursor-row button,.product-cursor-row button{background:#e4dfdb!important}
+.keypad-cursor-row button,.product-cursor-row button{background:#e4dfdb!important}.keypad .generic-sign-key{display:none}.keypad.generic-money-mode .generic-sign-key{display:block}.keypad.generic-money-mode [data-key="*"],.keypad.generic-money-mode [data-key="-"]{display:none}
 .edit-caret{display:inline-block;width:2px;height:1.12em;background:currentColor;vertical-align:-.12em;margin:0 1px;animation:caretBlink 1s steps(1) infinite}
 @keyframes caretBlink{50%{opacity:0}}
 .product-button.active-input,.measure-input.active-input,.repeat-button.active-input,.finish-num-button.active-input{outline:2px solid #8d837b;outline-offset:1px}
@@ -1920,8 +1920,14 @@ header .room-actions .site-list-btn{
 .carpentry-placeholder p{margin:0;font-size:12px;font-weight:750;line-height:1.6}
 @media(max-width:620px){.carpentry-type-grid{grid-template-columns:1fr}}
 </style>
+
+<style id="v0157-direct-numeric-no-native-keyboard">
+#directNumericCaret57{position:fixed;display:none;width:2px;background:#1677d2;border-radius:2px;z-index:2147483646;pointer-events:none;animation:artyCaretBlink57 1s steps(1,end) infinite}
+@keyframes artyCaretBlink57{0%,49%{opacity:1}50%,100%{opacity:0}}
+input[data-direct-keypad-active="1"]{caret-color:transparent!important;outline:2px solid #1677d2!important;outline-offset:1px!important;background:#fff!important}
+</style>
 </head>
-<body data-build="v2.4.105">
+<body data-build="v2.4.106">
 <header><div class="header-row"><div><div class="title">現調</div><div class="tag">職人もデジタル化。</div></div><div class="room-actions"><button id="currentSitePdf" class="site-list-btn pdf-action">出力</button><button id="siteListBtn" class="site-list-btn">現場一覧</button><button id="newSite" class="site-list-btn">新規</button></div></div></header>
 <main>
 <section id="editView" class="edit-view">
@@ -2028,6 +2034,7 @@ header .room-actions .site-list-btn{
     <button type="button" data-key="*">＊</button>
     <button type="button" data-key="0">0</button>
     <button type="button" data-key="-">−</button>
+    <button type="button" data-key="sign" class="generic-sign-key">±</button>
   </div>
   <div class="formula-key-row">
     <button type="button" data-key="f+">＋</button>
@@ -2130,7 +2137,7 @@ header .room-actions .site-list-btn{
       <button id="exportSelectedImage" class="image">画像</button>
       <button id="exportSelectedPdf" class="pdf">PDF</button>
     </div>
-    <div class="export-hint">選んだ内容だけを1つの画像 / PDFにまとめます</div>
+    <div class="export-hint">選んだ内容だけを1つの画像 / PDFにまとめます。入力のないページは自動で除外します</div>
     <div class="sheet-actions" style="margin-top:10px"><button id="closeExportSheet" class="cancel">キャンセル</button></div>
   </div>
 </div>
@@ -2377,7 +2384,7 @@ function registerProduct(product,repeat){
   saveList(PRODUCT_MASTER_KEY,savedProducts);saveList(RECENT_PRODUCT_KEY,recentProducts); return true;
 }
 
-let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,activeGenericEnter=null,keypadMode="measure",numberCursor=0,productCursor=0;
+let activeMeasureInput=null,activeMeasureModel=null,activeMeasureSection=null,activeMeasureList=null,activeMeasureRow=null,activeRepeatButton=null,activeRepeatSection=null,activeRepeatKey="repeat",activeGenericInput=null,activeGenericObject=null,activeGenericKey=null,activeGenericUpdate=null,activeGenericEnter=null,activeDirectNumberInput=null,keypadMode="measure",numberCursor=0,productCursor=0;
 let activeGlueQtyKey=null,activeGlueQtyTotal=0,glueQtyDraft={value:""};
 
 const KEYPAD_PREF_KEY="gencho-keypad-layout-v7";
@@ -2763,7 +2770,7 @@ function setNumberKeypadSpecial(mode){
   const kp=$("#measureKeypad");
   const star=kp?.querySelector('[data-key="*"]');
   const minus=kp?.querySelector('[data-key="-"]');
-  kp?.classList.toggle("formula-mode",mode==="formula");
+  kp?.classList.toggle("formula-mode",mode==="formula");kp?.classList.toggle("generic-money-mode",mode==="generic"||mode==="direct");
   if(star){star.textContent="＊";star.style.visibility=mode==="measure"?"visible":"hidden"}
   if(minus){minus.textContent="−";minus.style.visibility=mode==="measure"?"visible":"hidden"}
 }
@@ -2782,10 +2789,19 @@ function clearActiveNumberEditor(){
     activeGenericInput.textContent=activeGenericObject[activeGenericKey]||activeGenericInput.dataset.placeholder||"";
     activeGenericInput.classList.remove("active-input");
   }
+  if(activeDirectNumberInput){
+    activeDirectNumberInput.classList.remove("active-input");
+    try{
+      delete activeDirectNumberInput.dataset.directKeypadActive;
+      if(activeDirectNumberInput.dataset.directWasReadonly==="0")activeDirectNumberInput.removeAttribute("readonly");
+      delete activeDirectNumberInput.dataset.directWasReadonly;
+    }catch{}
+  }
+  try{hideDirectCaret57()}catch{}
   document.querySelectorAll(".measure-row.active-row").forEach(el=>el.classList.remove("active-row"));
   activeMeasureInput=null;activeMeasureModel=null;activeMeasureSection=null;activeMeasureList=null;activeMeasureRow=null;
   activeRepeatButton=null;activeRepeatSection=null;activeRepeatKey="repeat";
-  activeGenericInput=null;activeGenericObject=null;activeGenericKey=null;activeGenericUpdate=null;activeGenericEnter=null;
+  activeGenericInput=null;activeGenericObject=null;activeGenericKey=null;activeGenericUpdate=null;activeGenericEnter=null;activeDirectNumberInput=null;
 }
 function showMeasureKeypad(inp,model,sec,list,row,e=null){
   ensureMeasureKeypadDefaultBottomRight();hideProductKeypad();
@@ -2817,6 +2833,52 @@ function showGenericNumberKeypad(inp,obj,key,label="数量入力",onUpdate=null,
   $("#keypadLabel").textContent=label;
   const kp=$("#measureKeypad");
   if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
+}
+let directCaretOverlay=null;
+function ensureDirectCaretOverlay57(){
+  if(directCaretOverlay&&directCaretOverlay.isConnected)return directCaretOverlay;
+  directCaretOverlay=document.createElement("div");
+  directCaretOverlay.id="directNumericCaret57";
+  directCaretOverlay.setAttribute("aria-hidden","true");
+  document.body.appendChild(directCaretOverlay);
+  return directCaretOverlay;
+}
+function hideDirectCaret57(){const c=directCaretOverlay||document.getElementById("directNumericCaret57");if(c)c.style.display="none"}
+function positionDirectCaret57(){
+  const inp=activeDirectNumberInput;if(!inp||!inp.isConnected){hideDirectCaret57();return}
+  const v=String(inp.value||"");numberCursor=Math.max(0,Math.min(v.length,numberCursor));
+  const c=ensureDirectCaretOverlay57(),r=inp.getBoundingClientRect(),cs=getComputedStyle(inp);
+  const canvas=positionDirectCaret57._c||(positionDirectCaret57._c=document.createElement("canvas"));
+  const ctx=canvas.getContext("2d");ctx.font=cs.font||((cs.fontSize||"16px")+" "+(cs.fontFamily||"sans-serif"));
+  const prefix=v.slice(0,numberCursor),tw=ctx.measureText(v).width,pw=ctx.measureText(prefix).width;
+  const pl=parseFloat(cs.paddingLeft)||0,pr=parseFloat(cs.paddingRight)||0;
+  let startX=r.left+pl;
+  if(cs.textAlign==="right")startX=r.right-pr-tw;else if(cs.textAlign==="center")startX=r.left+(r.width-tw)/2;
+  let x=Math.max(r.left+2,Math.min(r.right-2,startX+pw));
+  const fs=parseFloat(cs.fontSize)||16,lh=parseFloat(cs.lineHeight),h=Math.max(18,Math.min(r.height-8,Number.isFinite(lh)?lh:fs*1.25));
+  c.style.display="block";c.style.left=Math.round(x)+"px";c.style.top=Math.round(r.top+(r.height-h)/2)+"px";c.style.height=Math.round(h)+"px";
+}
+function syncDirectNumberCaret(){
+  const inp=activeDirectNumberInput;if(!inp){hideDirectCaret57();return}
+  const v=String(inp.value||"");numberCursor=Math.max(0,Math.min(v.length,numberCursor));
+  try{inp.setAttribute("inputmode","none");inp.setAttribute("readonly","");inp.dataset.directKeypadActive="1"}catch{}
+  positionDirectCaret57();
+}
+function showDirectNumberKeypad(inp,label="数字入力"){
+  ensureMeasureKeypadDefaultBottomRight();hideProductKeypad();
+  if(activeDirectNumberInput&&activeDirectNumberInput!==inp){try{activeDirectNumberInput.classList.remove("active-input")}catch{}}
+  clearActiveNumberEditor();
+  keypadMode="direct";setNumberKeypadSpecial("direct");
+  activeDirectNumberInput=inp;
+  try{
+    inp.dataset.directNumber="1";
+    if(inp.dataset.directWasReadonly===undefined)inp.dataset.directWasReadonly=inp.hasAttribute("readonly")?"1":"0";
+    inp.setAttribute("readonly","");inp.setAttribute("inputmode","none");inp.dataset.directKeypadActive="1";
+  }catch{}
+  numberCursor=String(inp.value||"").length;inp.classList.add("active-input");
+  $("#keypadLabel").textContent=label;
+  const kp=$("#measureKeypad");if(kp){kp.classList.add("show");kp.setAttribute("aria-hidden","false");applyKeypadLayout()}
+  requestAnimationFrame(()=>{syncDirectNumberCaret();setTimeout(syncDirectNumberCaret,30)});
 }
 function showFormulaKeypad(inp,obj,key,label="自由計算",onUpdate=null){
   ensureMeasureKeypadDefaultBottomRight();
@@ -2911,6 +2973,17 @@ function moveToNextMeasure(){
   }
 }
 function keypadPress(key){
+  if(keypadMode==="direct"){
+    if(!activeDirectNumberInput)return;let v=String(activeDirectNumberInput.value||"");
+    if(key==="enter"){activeDirectNumberInput.dispatchEvent(new Event("change",{bubbles:true}));hideMeasureKeypad();return}
+    if(key==="left"){numberCursor=Math.max(0,numberCursor-1);syncDirectNumberCaret();return}
+    if(key==="right"){numberCursor=Math.min(v.length,numberCursor+1);syncDirectNumberCaret();return}
+    if(key==="back"){if(numberCursor>0){v=v.slice(0,numberCursor-1)+v.slice(numberCursor);numberCursor--}}
+    else if(key==="sign"){v=v.startsWith("-")?v.slice(1):"-"+v;numberCursor=v.length}
+    else if(key==="."){if(!v.includes(".")){v=v.slice(0,numberCursor)+(v?".":"0.")+v.slice(numberCursor);numberCursor+=(v?1:2)}}
+    else if(/^\d$/.test(key)){v=v.slice(0,numberCursor)+key+v.slice(numberCursor);numberCursor++}else return;
+    activeDirectNumberInput.value=v;activeDirectNumberInput.dispatchEvent(new Event("input",{bubbles:true}));syncDirectNumberCaret();return;
+  }
   if(keypadMode==="formula"){
     if(!activeGenericObject||!activeGenericKey)return;
     let v=String(activeGenericObject[activeGenericKey]||"");
@@ -4109,6 +4182,17 @@ function orderDisplayIdentity(item){
   if(product)return {name:item.type||"商品",product};
   return null;
 }
+function orderItemHasQuantity(item){
+  const kind=item.kind||item.type||"";
+  const cuts=(item.orderCuts||[]);
+  if(cuts.some(x=>(Number(x.length)||0)>0&&(Number(x.count)||0)>0))return true;
+  if(kind==="フロアタイル"){
+    if(item.saleMode==="loose")return (Number(item.pieces)||0)>0;
+    return (Number(item.area)||0)>0;
+  }
+  if(kind==="ソフト巾木")return (Number(item.qty)||0)>0;
+  return (Number(item.qty)||0)>0 || cuts.some(x=>(Number(x.length)||0)>0||(Number(x.count)||0)>0);
+}
 
 function ensureOrderOverrides(siteObj=state){
   if(!siteObj.orderOverrides||typeof siteObj.orderOverrides!=="object"||Array.isArray(siteObj.orderOverrides))siteObj.orderOverrides={};
@@ -4147,11 +4231,11 @@ function collectOrderData(siteObj=state){
   (siteObj.rooms||[]).forEach(r=>{
     const roomByProduct=new Map();
     (r.sections||[]).forEach(sec=>{
-      const product=effectiveWallProduct(sec,siteObj);
-      if(!product)return;
+      const product=String(effectiveWallProduct(sec,siteObj)||"").trim();
       const t=secTotals(sec,siteObj);
       if(!t.withR)return;
-      roomByProduct.set(product,(roomByProduct.get(product)||0)+t.withR);
+      const orderProduct=product||"品番未定";
+      roomByProduct.set(orderProduct,(roomByProduct.get(orderProduct)||0)+t.withR);
     });
     roomByProduct.forEach((roomQty,product)=>{
       if(!wallMap.has(product))wallMap.set(product,{name:product,product:"",qty:0,rooms:[],roomTotals:[]});
@@ -4176,11 +4260,15 @@ function collectOrderData(siteObj=state){
   const finishMap={floor:new Map(),sheet:new Map(),other:new Map()};
 
   (siteObj.finishRooms||[]).forEach(r=>(r.finishMaterials||[]).forEach(item=>{
-    const id=orderDisplayIdentity(item);
-    if(!id)return;
-    const page=item.page||finishPageFromKind(item.kind||item.type);
-    if(!finishMap[page])return;
     const kind=item.kind||item.type;
+    const rawId=orderDisplayIdentity(item);
+    const hasQty=orderItemHasQuantity(item);
+    const id=rawId
+      ? {name:rawId.name||kind||"商品",product:rawId.product||(hasQty?"品番未定":"")}
+      : (hasQty?{name:kind||"商品",product:"品番未定"}:null);
+    if(!id)return;
+    const page=item.page||finishPageFromKind(kind);
+    if(!finishMap[page])return;
     let mode="qty", keyExtra="", qtyNum=0, unit="", detail="", cuts=[];
 
     if(kind==="CF"||kind==="リアテック"||kind==="ダイノック"){
@@ -7493,15 +7581,46 @@ async function buildMemoExportCanvases(siteObj=state,opts={}){
   const out=[];
   const allFiles=await memoDbAllForSite(siteObj.id);
 
+  const makeMemoPage=(title,continued=false)=>{
+    const subtitle=continued?`${title||"メモ"}（続き）`:(title||"");
+    const base=exportCanvasBase("メモ",subtitle,1700);
+    base.c._appA4Page=true;
+    return base;
+  };
+
   for(const pg of (siteObj.memoPages||[])){
     const memo=String(pg.text||"").trim();
     if(memo){
-      const base=exportCanvasBase("メモ",pg.title||"",Math.max(900,350+Math.max(1,memo.length/28)*36));
-      const {c,ctx,pad,width}=base;let y=base.y;
-      ctx.font='600 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';ctx.fillStyle="#4d4742";
-      for(const para of memo.split("\n")){
-        const lines=wrapCanvasText(ctx,para||" ",width-pad*2-90);
-        lines.forEach(line=>{ctx.fillText(line,pad+45,y);y+=34});y+=8;
+      let base=makeMemoPage(pg.title||"",false);
+      let {c,ctx,pad,width}=base;
+      let y=base.y;
+      const left=pad+35;
+      const maxW=width-pad*2-70;
+      const bottom=1570;
+      const lineH=43;
+      let continued=false;
+      ctx.fillStyle="#3f3a36";
+      ctx.font='650 27px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+
+      const pushPage=()=>{
+        out.push(c);
+        continued=true;
+        base=makeMemoPage(pg.title||"",true);
+        ({c,ctx,pad,width}=base);
+        y=base.y;
+        ctx.fillStyle="#3f3a36";
+        ctx.font='650 27px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif';
+      };
+
+      for(const paraRaw of memo.split("\n")){
+        const para=String(paraRaw||"");
+        const lines=para?wrapCanvasText(ctx,para,maxW):[""];
+        for(const line of lines){
+          if(y+lineH>bottom)pushPage();
+          if(line)ctx.fillText(line,left,y);
+          y+=lineH;
+        }
+        y+=6;
       }
       out.push(c);
     }
@@ -8313,7 +8432,7 @@ function sanitizePublicSites(list){return (Array.isArray(list)?list:[]).map(sani
 function buildBackupObject(){
   save();
   return {
-    app:"現調 PUBLIC",version:"2.4.105",backupType:"public-complete",exportedAt:new Date().toISOString(),
+    app:"現調 PUBLIC",version:"2.4.106",backupType:"public-complete",exportedAt:new Date().toISOString(),
     sites:sanitizePublicSites(sites),
     currentSiteId:state.id,
     masters:{
@@ -8824,7 +8943,7 @@ document.addEventListener("click",e=>{
   const kp=$("#measureKeypad");
   if(!kp)return;
   if($("#glueQtySheet")?.classList.contains("show"))return;
-  if(kp.contains(e.target) || e.target.classList?.contains("measure-input") || e.target.closest?.(".area-num-btn,.area-free-input"))return;
+  if(kp.contains(e.target) || e.target.classList?.contains("measure-input") || e.target.closest?.('.area-num-btn,.area-free-input,[data-direct-number="1"]'))return;
   if(e.target.closest?.(".bottom"))return;
   hideMeasureKeypad();
 });
@@ -8876,6 +8995,17 @@ document.addEventListener("click",e=>{
     resize.addEventListener("pointermove",move);resize.addEventListener("pointerup",up);resize.addEventListener("pointercancel",up);
   });
 
+  document.addEventListener("pointerdown",e=>{
+    const el=e.target.closest('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"],input[data-direct-number="1"]');
+    if(!el||el.disabled)return;
+    if(el.closest('#measureKeypad,#productKeypad')||el.classList.contains('measure-input')||el.dataset.measureInput!==undefined)return;
+    e.preventDefault();e.stopPropagation();
+    try{el.dataset.directNumber='1';el.setAttribute('readonly','');el.setAttribute('inputmode','none')}catch{}
+    const label=(el.closest('label')?.querySelector('span')?.textContent||el.closest('label')?.firstChild?.textContent||el.placeholder||'数字入力').trim();
+    showDirectNumberKeypad(el,label);
+  },true);
+  document.addEventListener("click",e=>{const el=e.target.closest('input[data-direct-number="1"]');if(el)e.preventDefault()},true);
+  window.addEventListener('scroll',()=>{if(activeDirectNumberInput)positionDirectCaret57()},{passive:true});
   window.addEventListener("resize",()=>{keepKeypadOnScreen();if(keypadLayout)saveKeypadLayout()});
 })();
 
